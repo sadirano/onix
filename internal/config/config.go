@@ -62,7 +62,10 @@ func (m *Module) ConfigJSON() string {
 	if len(m.Config) == 0 {
 		return "{}"
 	}
-	b, _ := json.Marshal(m.Config)
+	b, err := json.Marshal(m.Config)
+	if err != nil {
+		return "{}"
+	}
 	return string(b)
 }
 
