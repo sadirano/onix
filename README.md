@@ -1,5 +1,36 @@
 # Onix
 
+Modular directory navigator for Windows — jump to any project in one word.
+
+## Install
+
+```powershell
+scoop bucket add sadirano https://github.com/sadirano/onix
+scoop install onix
+```
+
+`post_install` runs `onix init` and `onix shortcuts` automatically.
+Add `~/.onix/bin/` to your PATH to activate the shortcut commands (`o`, `n`, `s`, `f`, `r`, `y`, `sg`, `ff`). Restart your terminal after install.
+
+### Manual install
+
+Download the zip from [Releases](https://github.com/sadirano/onix/releases), extract next to a folder on your PATH, then run:
+
+```
+onix init
+onix shortcuts
+```
+
+### Build from source
+
+```
+git clone https://github.com/sadirano/onix
+cd onix
+build.cmd
+```
+
+---
+
 For command usage and workflow examples, see `GUIDE.md`.
 
 ## Visual Configuration (`onix.visual.toml`)
