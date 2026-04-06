@@ -76,15 +76,25 @@ func Register(name, destination string) error {
 		text := strings.ReplaceAll(string(content), "\r\n", "\n")
 		text = strings.TrimPrefix(text, "\ufeff")
 		lines = strings.Split(text, "\n")
+		for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+			lines = lines[:len(lines)-1]
+		}
 	}
 
 	entry := fmt.Sprintf("%s=%s", name, destination)
 	replaced := false
 	out := make([]string, 0, len(lines)+1)
 
-	for _, line := range lines {
+	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		if trimmed == "" {
+			if i == len(lines)-1 {
+				continue
+			}
+			out = append(out, line)
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
 			out = append(out, line)
 			continue
 		}

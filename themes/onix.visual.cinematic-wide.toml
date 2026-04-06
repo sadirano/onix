@@ -1,0 +1,20 @@
+[fzf.destination]
+prompt = "Navigate > "
+layout = "reverse-list"
+preview = "dir /b \"{}\" 2>nul"
+preview_window = "right:50%,border-left"
+header = "Enter: open  |  Esc: manual"
+height = "70%"
+
+[fzf.sg]
+prompt = "sg > "
+layout = "default"
+color = "fg:#e6edf3,bg:#0d1117,hl:#ffa657,fg+:#ffffff,bg+:#21262d,hl+:#7ee787,pointer:#58a6ff,marker:#f2cc60,spinner:#79c0ff,header:#a5d6ff"
+preview = "bat --style=full --color=always {1} --highlight-line {2}"
+preview_window = "right:72%,border-left,+{2}/2"
+
+[fzf.ff]
+prompt = "ff > "
+layout = "default"
+preview = "bat --style=full --color=always --line-range=:300 {}"
+preview_window = "right:70%,border-left"
