@@ -6,7 +6,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/sadirano/onix/releases/download/v$version/onix-v$version-windows-amd64.zip",
-            "hash": "FILL_AFTER_FIRST_RELEASE"
+            "hash": "37e9ae275151ed69f6bff16e36fd633739bb9a1a6a9d55a7f106de3d0aa96c86"
         }
     },
     "bin": "onix.exe",
