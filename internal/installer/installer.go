@@ -193,6 +193,97 @@ And run:
 	return nil
 }
 
+// InstallShortcuts writes cmd wrappers in ~/.onix/bin/ for built-in shortcuts.
+func InstallShortcuts() error {
+	onixExe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get executable path: %w", err)
+	}
+	onixExe, err = filepath.Abs(onixExe)
+	if err != nil {
+		return fmt.Errorf("resolve executable path: %w", err)
+	}
+
+	binDir := config.BinDir()
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		return fmt.Errorf("create bin dir: %w", err)
+	}
+
+	shortcuts := map[string]string{
+		"o":  "",
+		"c":  "",
+		"s":  "-e",
+		"n":  "-n",
+		"y":  "-y",
+		"f":  "-f",
+		"r":  "-r",
+		"sg": "-sg",
+		"ff": "-ff",
+	}
+
+	names := []string{"o", "c", "s", "n", "y", "f", "r", "sg", "ff"}
+	var warnings []string
+	for _, name := range names {
+		legacyExe := filepath.Join(binDir, name+".exe")
+		if err := os.Remove(legacyExe); err != nil && !os.IsNotExist(err) {
+			warnings = append(warnings, fmt.Sprintf("%s.exe still in use: %v", name, err))
+		}
+
+		if err := createShortcutWrapper(name, shortcuts[name], onixExe, binDir); err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s.cmd skipped: %v", name, err))
+			fmt.Printf("  ! %s.cmd (skipped: %v)\n", name, err)
+			continue
+		}
+		fmt.Printf("  %s.cmd\n", name)
+	}
+	fmt.Printf("Shortcuts installed in %s\n", binDir)
+	if len(warnings) > 0 {
+		fmt.Println("Shortcut warnings:")
+		for _, w := range warnings {
+			fmt.Printf("  - %s\n", w)
+		}
+		fmt.Println("Close related shells and run `onix shortcuts` again to refresh all shortcuts.")
+	}
+
+	if err := addBinToUserPath(binDir); err != nil {
+		fmt.Printf("Warning: could not update PATH automatically: %v\n", err)
+		fmt.Printf("Add manually: %s\n", binDir)
+	}
+	return nil
+}
+
+// addBinToUserPath adds dir to the user-scoped PATH in the Windows registry.
+// Uses PowerShell's [Environment]::SetEnvironmentVariable so the change
+// persists across sessions without requiring a reboot or admin rights.
+func addBinToUserPath(dir string) error {
+	script := `
+$dir = '` + dir + `'
+$current = [Environment]::GetEnvironmentVariable("Path", "User")
+$parts = $current -split ";" | Where-Object { $_ -ne "" }
+if ($parts -contains $dir) {
+    Write-Host "PATH already contains $dir"
+} else {
+    $new = ($parts + $dir) -join ";"
+    [Environment]::SetEnvironmentVariable("Path", $new, "User")
+    Write-Host "Added to PATH: $dir"
+    Write-Host "Restart your terminal for the change to take effect."
+}
+`
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func createShortcutWrapper(name, flag, onixExe, binDir string) error {
+	extra := ""
+	if strings.TrimSpace(flag) != "" {
+		extra = " " + flag
+	}
+	content := fmt.Sprintf("@echo off\r\nsetlocal\r\n\"%s\" %%*%s\r\nset \"ONIX_EXIT=%%ERRORLEVEL%%\"\r\nendlocal & exit /b %%ONIX_EXIT%%\r\n", onixExe, extra)
+	return os.WriteFile(filepath.Join(binDir, name+".cmd"), []byte(content), 0o644)
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
@@ -218,24 +309,63 @@ func installModule(m *config.Module) error {
 
 func cloneOrUpdate(repoURL, ref, dir string) error {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-		// Already cloned — pull.
-		cmd := exec.Command("git", "-C", dir, "pull")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+		return syncRef(dir, ref)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return err
 	}
 
-	args := []string{"clone", "--depth=1"}
-	if ref != "" && ref != "main" && ref != "master" {
-		args = append(args, "--branch", ref)
+	cmd := exec.Command("git", "clone", "--depth=1", repoURL, dir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
 	}
-	args = append(args, repoURL, dir)
 
-	cmd := exec.Command("git", args...)
+	return syncRef(dir, ref)
+}
+
+func syncRef(dir, ref string) error {
+	ref = strings.TrimSpace(ref)
+	if err := runGit(dir, "fetch", "--tags", "--prune", "origin"); err != nil {
+		return err
+	}
+
+	if ref == "" {
+		return runGit(dir, "pull", "--ff-only")
+	}
+
+	if err := runGit(dir, "checkout", ref); err != nil {
+		if err2 := runGit(dir, "checkout", "-B", ref, "origin/"+ref); err2 != nil {
+			return fmt.Errorf("checkout ref %q: %w", ref, err)
+		}
+	}
+
+	branch, err := currentBranch(dir)
+	if err != nil {
+		return err
+	}
+	if branch != "HEAD" {
+		if err := runGit(dir, "pull", "--ff-only", "origin", branch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func currentBranch(dir string) (string, error) {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func runGit(dir string, args ...string) error {
+	fullArgs := append([]string{"-C", dir}, args...)
+	cmd := exec.Command("git", fullArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -260,7 +390,7 @@ func createWrapper(name string) error {
 	}
 
 	onixExe := filepath.Join(config.Dir(), "onix.exe")
-	content := fmt.Sprintf("@echo off\r\nset \"ONIX_MODULE=%s\"\r\n\"%s\" %%*\r\n", name, onixExe)
+	content := fmt.Sprintf("@echo off\r\nsetlocal\r\nset \"ONIX_MODULE=%s\"\r\n\"%s\" %%*\r\nset \"ONIX_EXIT=%%ERRORLEVEL%%\"\r\nendlocal & exit /b %%ONIX_EXIT%%\r\n", name, onixExe)
 
 	return os.WriteFile(filepath.Join(config.BinDir(), name+".cmd"), []byte(content), 0o644)
 }
