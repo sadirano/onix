@@ -1,0 +1,28 @@
+{
+    "version": "0.1.0",
+    "description": "Modular directory navigator for Windows — alias-based shell, editor, Explorer, and module dispatch.",
+    "homepage": "https://github.com/sadirano/onix",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/sadirano/onix/releases/download/v$version/onix-v$version-windows-amd64.zip",
+            "hash": "FILL_AFTER_FIRST_RELEASE"
+        }
+    },
+    "bin": "onix.exe",
+    "persist": "onix.visual.toml",
+    "post_install": [
+        "onix init",
+        "onix shortcuts"
+    ],
+    "checkver": {
+        "github": "https://github.com/sadirano/onix"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/sadirano/onix/releases/download/v$version/onix-v$version-windows-amd64.zip"
+            }
+        }
+    }
+}
