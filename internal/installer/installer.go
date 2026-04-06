@@ -73,7 +73,7 @@ func Add(repo string, cfg *config.Config) error {
 // removes its entry from config.
 func Remove(name string, cfg *config.Config) error {
 	found := false
-	kept := cfg.Modules[:0]
+	kept := make([]config.Module, 0, len(cfg.Modules))
 	for _, m := range cfg.Modules {
 		if strings.EqualFold(m.EffectiveName(), name) {
 			found = true
@@ -389,7 +389,14 @@ func createWrapper(name string) error {
 		return err
 	}
 
-	onixExe := filepath.Join(config.Dir(), "onix.exe")
+	onixExe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve onix executable: %w", err)
+	}
+	onixExe, err = filepath.Abs(onixExe)
+	if err != nil {
+		return fmt.Errorf("resolve onix executable path: %w", err)
+	}
 	content := fmt.Sprintf("@echo off\r\nsetlocal\r\nset \"ONIX_MODULE=%s\"\r\n\"%s\" %%*\r\nset \"ONIX_EXIT=%%ERRORLEVEL%%\"\r\nendlocal & exit /b %%ONIX_EXIT%%\r\n", name, onixExe)
 
 	return os.WriteFile(filepath.Join(config.BinDir(), name+".cmd"), []byte(content), 0o644)
