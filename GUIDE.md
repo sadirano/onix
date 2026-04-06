@@ -1,8 +1,21 @@
-# omni / onix — the guide
+# onix — the guide
 
 Your project lives at `C:\Users\dev\projects\client-work\acme\backend\api\v2`.
 
 You type `o acme` instead.
+
+---
+
+## First-time Setup
+
+```
+onix init
+onix shortcuts
+```
+
+`init` creates `~/.onix/` and writes a starter `config.toml`.
+`shortcuts` drops `.cmd` wrappers (`o`, `n`, `s`, `f`, `r`, `y`, `sg`, `ff`) into `~/.onix/bin/`.
+Add `~/.onix/bin/` to your `PATH` once and every shortcut becomes a first-class command.
 
 ---
 
@@ -17,6 +30,9 @@ o -a acme -d C:\Users\dev\projects\client-work\acme\backend\api\v2
 That writes `acme=C:\Users\dev\projects\client-work\acme\backend\api\v2` to `~/.omni/.env`.
 Run `o` with no arguments to open that file in your editor if you ever want to edit it by hand.
 
+> The alias file is shared with omni — switching between them doesn't break anything.
+> Override the path with `ONIX_ENV` or `alias_file` in `~/.onix/config.toml`.
+
 ---
 
 ## Jump Into a Directory
@@ -26,7 +42,7 @@ Run `o` with no arguments to open that file in your editor if you ever want to e
 cd C:\Users\dev\projects\client-work\acme\backend\api\v2
 ```
 
-**With omni:**
+**With onix:**
 ```
 o acme
 ```
@@ -40,12 +56,18 @@ Need to land in a subdirectory?
 cd C:\Users\dev\projects\client-work\acme\backend\api\v2\src\handlers
 ```
 
-**With omni:**
+**With onix:**
 ```
 o acme -s src\handlers
 ```
 
 The `-s` flag appends a subpath to the resolved alias before opening the shell.
+
+### Unknown alias — interactive pick
+
+If you type an alias that hasn't been registered yet, onix opens an fzf directory picker
+pre-seeded with your query (uses Everything's `es` if installed, drive-walk otherwise).
+Pick a folder, press Enter — the alias is registered automatically. No separate `-a` step needed.
 
 ---
 
@@ -53,7 +75,7 @@ The `-s` flag appends a subpath to the resolved alias before opening the shell.
 
 **Manual:** Win+R, paste the full path, press Enter. Or click through six folders in Explorer.
 
-**With omni:**
+**With onix:**
 ```
 o acme -e
 ```
@@ -73,7 +95,7 @@ cd C:\Users\dev\projects\client-work\acme\backend\api\v2
 nvim .
 ```
 
-**With omni:**
+**With onix:**
 ```
 o acme -n
 ```
@@ -98,7 +120,7 @@ cd C:\Users\dev\projects\client-work\acme\backend\api\v2
 nvim src\handlers\auth.go
 ```
 
-**With omni:**
+**With onix:**
 ```
 o acme -f src\handlers\auth.go
 ```
@@ -119,7 +141,7 @@ git pull
 cd C:\wherever\you\were
 ```
 
-**With omni:**
+**With onix:**
 ```
 o acme -r "git pull"
 ```
@@ -158,7 +180,7 @@ nvim +47 -- src\handlers\auth.go
 
 Four steps. You're the bridge between ripgrep and your editor.
 
-**With omni:**
+**With onix:**
 ```
 sg acme handleAuthRequest
 ```
@@ -181,7 +203,7 @@ dir /s /b *migration*
 
 Then manually open what you find.
 
-**With omni:**
+**With onix:**
 ```
 o acme -ff migration
 ```
@@ -233,12 +255,33 @@ o
 o -a acme -d C:\Users\dev\projects\client-work\acme\v3
 ```
 
-Aliases live in `~/.omni/.env` as plain `KEY=VALUE` pairs. Both omni and onix read from the
-same file — switching between them doesn't break anything.
+Aliases live in `~/.omni/.env` as plain `KEY=VALUE` pairs.
 
 ---
 
-## Extending with Modules (onix)
+## Visual Themes
+
+onix ships with several fzf themes that control colours, layout, and preview position for
+`sg`, `ff`, and the destination picker.
+
+```
+# Interactive picker (fzf if available, numbered prompt otherwise)
+onix theme
+
+# List themes available next to the exe
+onix themes list
+
+# Apply one directly
+onix theme onix.visual.cinematic-wide.toml
+onix theme classic-omni
+```
+
+Fine-grained tweaks live in `onix.visual.toml` (auto-created next to `onix.exe`).
+See `README.md` for the full key reference.
+
+---
+
+## Extending with Modules
 
 omni packed everything into a single PowerShell script. onix separates concerns: the core
 binary handles alias resolution and dispatch, and capabilities are added as independent Go
@@ -246,7 +289,7 @@ modules installed from GitHub.
 
 **Install a module:**
 ```
-onix add sadirano/onix-sg
+onix add sadirano/onix-img
 onix install
 ```
 
@@ -257,8 +300,8 @@ directory to your PATH once and every installed module becomes a first-class com
 ```
 ONIX_TARGET         = C:\Users\dev\projects\client-work\acme\backend\api\v2
 ONIX_ALIAS          = acme
-ONIX_MODULE         = sg
-ONIX_MODULE_CONFIG  = {"default_flags":"--type go"}
+ONIX_MODULE         = img
+ONIX_MODULE_CONFIG  = {"default_subdir":"assets/screenshots/{today}"}
 ```
 
 A module is just a Go binary that reads `ONIX_TARGET` and acts on it. The directory
@@ -267,21 +310,79 @@ resolution is already done before your module runs.
 **Declaring modules is declarative**, lazy.nvim-style, in `~/.onix/config.toml`:
 ```toml
 [[module]]
-name    = "sg"
-repo    = "sadirano/onix-sg"
+name    = "img"
+repo    = "sadirano/onix-img"
 ref     = "main"
 enabled = true
 
 [module.config]
-default_flags = "--type go"
+default_subdir = "assets/screenshots/{today}"
+```
+
+### Example: `img` — clipboard image saver
+
+Save whatever is on your clipboard directly into a project, named and organised automatically.
+
+```
+img acme ui-auth-flow
+```
+
+What happens:
+1. onix resolves `acme` → `C:\Users\dev\projects\client-work\acme\backend\api\v2`
+2. The `img` module reads its own `img.env` to check if `acme` has a registered default
+   image subdirectory (e.g. `assets\screenshots`).
+3. The `ONIX_MODULE_CONFIG` JSON provides a `default_subdir` template as a fallback.
+4. Variables in the path are expanded at runtime:
+   - `{today}` → `2026-04-06`
+   - `{time}`  → `14-30-25`
+5. The clipboard image is written to the resolved path as `ui-auth-flow.png`
+   (or `ui-auth-flow-{time}.png` if the module is configured to de-duplicate by time).
+
+`img.env` lives next to the module binary and stores per-alias overrides:
+```
+# img.env
+acme=assets\screenshots\{today}
+mysite=docs\images
+```
+
+If no entry exists for the alias, `default_subdir` from `ONIX_MODULE_CONFIG` is used.
+If that's also empty, the image lands directly in `ONIX_TARGET`.
+
+**More examples:**
+```
+img acme dark-mode-toggle          # → acme\assets\screenshots\2026-04-06\dark-mode-toggle.png
+img acme ui-flow -s reviews        # -s overrides the subdir for this one call
+img mysite hero-banner             # → mysite\docs\images\hero-banner.png
 ```
 
 **Module lifecycle:**
 ```
 onix list              # see all declared modules and their install status
 onix update            # pull latest and rebuild all
-onix update sg         # update one module
-onix remove sg         # uninstall and remove from config
+onix update img        # update one module
+onix remove img        # uninstall and remove from config
+```
+
+---
+
+## Environment Variables
+
+| Variable          | Effect                                                    |
+|-------------------|-----------------------------------------------------------|
+| `ONIX_DEBUG=1`    | Print trace lines to stderr on every invocation           |
+| `ONIX_TIMING=1`   | Print phase timings to stderr                             |
+| `ONIX_ENV`        | Override alias file path (highest precedence)             |
+| `ONIX_ALIAS_FILE` | Override alias file path (second precedence)              |
+| `OMNI_ENV`        | omni-compatible alias file override                       |
+| `EDITOR`          | Preferred editor (fallback: `OMNI_EDITOR`, then `nvim`)   |
+
+Config-file equivalents (in `~/.onix/config.toml` under `[settings]`):
+```toml
+[settings]
+alias_file = ""     # same as ONIX_ENV, lower precedence than env var
+editor     = ""     # same as EDITOR
+debug      = false
+timing     = false
 ```
 
 ---
@@ -296,4 +397,5 @@ f acme README.md            # open a known file from anywhere
 ff acme migration           # find a filename, open it
 y acme | clip               # resolved path to clipboard
 o acme -s internal -n       # land in a subdir and open editor in one shot
+img acme screenshot-name    # paste clipboard image into project
 ```
