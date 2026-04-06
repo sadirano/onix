@@ -1159,13 +1159,8 @@ func parseFzfExpectOutput(out []byte) (string, []string) {
 	}
 
 	key := strings.TrimSpace(lines[0])
-	start := 1
-	if key == "" && len(lines) > 0 {
-		start = 1
-	}
-
 	var selected []string
-	for i := start; i < len(lines); i++ {
+	for i := 1; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
@@ -1257,11 +1252,6 @@ func openSearchMatches(editor, dir string, matches []searchMatch) error {
 }
 
 func openFilesInEditor(editor string, files []string) error {
-	base := editorBase(editor)
-	if base == "code" || base == "code-insiders" {
-		args := append([]string{}, files...)
-		return runEditorCommand(editor, "", args...)
-	}
 	return runEditorCommand(editor, "", files...)
 }
 
