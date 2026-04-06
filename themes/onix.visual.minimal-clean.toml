@@ -1,0 +1,20 @@
+[fzf.destination]
+prompt = "> "
+layout = "reverse-list"
+preview = "dir /b \"{}\" 2>nul"
+preview_window = "hidden"
+header = ""
+height = "45%"
+
+[fzf.sg]
+prompt = "> "
+layout = "default"
+color = "hl:-1:underline,hl+:-1:underline:reverse"
+preview = ""
+preview_window = ""
+
+[fzf.ff]
+prompt = "> "
+layout = "default"
+preview = ""
+preview_window = ""

@@ -84,19 +84,37 @@ func Load() (*Config, error) {
 		return cfg, nil
 	}
 
-	if _, err := toml.DecodeFile(p, cfg); err != nil {
+	type rawModule struct {
+		Name    string         `toml:"name"`
+		Repo    string         `toml:"repo"`
+		Ref     string         `toml:"ref"`
+		Enabled *bool          `toml:"enabled"`
+		Config  map[string]any `toml:"config"`
+	}
+	type rawConfig struct {
+		Settings Settings    `toml:"settings"`
+		Modules  []rawModule `toml:"module"`
+	}
+
+	var raw rawConfig
+	if _, err := toml.DecodeFile(p, &raw); err != nil {
 		return nil, err
 	}
 
-	// Ensure Enabled defaults to true for modules that omit the field.
-	for i := range cfg.Modules {
-		if cfg.Modules[i].Repo != "" && !cfg.Modules[i].Enabled {
-			// Only false if explicitly set; TOML zero-value is false, so we
-			// default to true for newly-added modules by checking whether the
-			// field was actually decoded. We use a workaround: the installer
-			// always writes enabled=true, so this only triggers for hand-edited
-			// entries that explicitly wrote enabled=false.
+	cfg.Settings = raw.Settings
+	cfg.Modules = make([]Module, 0, len(raw.Modules))
+	for _, m := range raw.Modules {
+		enabled := true
+		if m.Enabled != nil {
+			enabled = *m.Enabled
 		}
+		cfg.Modules = append(cfg.Modules, Module{
+			Name:    m.Name,
+			Repo:    m.Repo,
+			Ref:     m.Ref,
+			Enabled: enabled,
+			Config:  m.Config,
+		})
 	}
 
 	return cfg, nil
