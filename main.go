@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	rdebug "runtime/debug"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,6 +60,12 @@ var visuals = defaultVisualConfig()
 
 type visualConfig struct {
 	FZF visualFZFConfig `toml:"fzf"`
+	RG  rgConfig        `toml:"rg"`
+}
+
+type rgConfig struct {
+	Color string `toml:"color"`
+	Case  string `toml:"case"`
 }
 
 type visualFZFConfig struct {
@@ -80,6 +87,13 @@ type visualPickerConfig struct {
 const visualConfigFileName = "onix.visual.toml"
 
 const visualConfigStarter = `# onix.visual.toml
+
+[rg]
+# color controls rg's --color flag (always, never, auto)
+color = "always"
+# case controls case sensitivity: smart, sensitive, insensitive
+case = "smart"
+
 [fzf.destination]
 prompt = "Destination > "
 layout = "reverse-list"
@@ -494,6 +508,10 @@ func resolveOnixBinaryInfo() (string, error) {
 
 func defaultVisualConfig() visualConfig {
 	return visualConfig{
+		RG: rgConfig{
+			Color: "always",
+			Case:  "smart",
+		},
 		FZF: visualFZFConfig{
 			Destination: visualPickerConfig{
 				Prompt:        "Destination > ",
@@ -558,6 +576,9 @@ func loadVisualConfig() (visualConfig, string, error) {
 
 func (v *visualConfig) applyDefaults() {
 	def := defaultVisualConfig()
+	v.RG.Color = fallbackString(v.RG.Color, def.RG.Color)
+	v.RG.Case = fallbackString(v.RG.Case, def.RG.Case)
+
 	v.FZF.Destination.Prompt = fallbackString(v.FZF.Destination.Prompt, def.FZF.Destination.Prompt)
 	v.FZF.Destination.Layout = fallbackString(v.FZF.Destination.Layout, def.FZF.Destination.Layout)
 	v.FZF.Destination.Preview = fallbackString(v.FZF.Destination.Preview, def.FZF.Destination.Preview)
@@ -912,7 +933,10 @@ func runSG(target string, extras []string, cfg *config.Config) error {
 	}
 
 	query := strings.TrimSpace(strings.Join(extras, " "))
-	rgCmd := exec.Command("rg", "--vimgrep", "--smart-case", "--color=never", query, ".")
+	rgColor := "--color=" + visuals.RG.Color
+	rgCase := rgCaseFlag(visuals.RG.Case)
+	rgArgs := []string{"--vimgrep", rgCase, rgColor, query, "."}
+	rgCmd := exec.Command("rg", rgArgs...)
 	rgCmd.Dir = target
 	rgOut, err := rgCmd.Output()
 	if err != nil {
@@ -1119,21 +1143,38 @@ func gatherFilesWithWalk(root, query string) ([]string, error) {
 	return files, nil
 }
 
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+
+func stripANSI(s string) string {
+	return ansiEscape.ReplaceAllString(s, "")
+}
+
+func rgCaseFlag(c string) string {
+	switch strings.ToLower(strings.TrimSpace(c)) {
+	case "sensitive":
+		return "--case-sensitive"
+	case "insensitive":
+		return "--ignore-case"
+	default:
+		return "--smart-case"
+	}
+}
+
 func parseVimgrepLine(line string) (searchMatch, bool) {
 	parts := strings.SplitN(line, ":", 4)
 	if len(parts) < 4 {
 		return searchMatch{}, false
 	}
-	ln, err := strconv.Atoi(parts[1])
+	ln, err := strconv.Atoi(stripANSI(parts[1]))
 	if err != nil {
 		return searchMatch{}, false
 	}
-	col, err := strconv.Atoi(parts[2])
+	col, err := strconv.Atoi(stripANSI(parts[2]))
 	if err != nil {
 		col = 1
 	}
 	return searchMatch{
-		Path: parts[0],
+		Path: stripANSI(parts[0]),
 		Line: ln,
 		Col:  col,
 		Text: parts[3],
