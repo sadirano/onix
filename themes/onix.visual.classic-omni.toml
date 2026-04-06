@@ -1,0 +1,18 @@
+[fzf.destination]
+prompt = "Destination > "
+layout = "reverse-list"
+preview = "dir /b \"{}\" 2>nul"
+preview_window = "right:40%,border-left"
+header = "Enter to confirm  |  Esc to type manually"
+height = "60%"
+
+[fzf.sg]
+prompt = "> "
+layout = "default"
+color = "hl:-1:underline,hl+:-1:underline:reverse"
+preview = "bat --color=always {1} --highlight-line {2}"
+preview_window = "up,60%,border-bottom,+{2}+3/3,~3"
+
+[fzf.ff]
+prompt = "> "
+layout = "default"
