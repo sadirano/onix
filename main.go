@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	rdebug "runtime/debug"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1143,12 +1142,6 @@ func gatherFilesWithWalk(root, query string) ([]string, error) {
 	return files, nil
 }
 
-var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-
-func stripANSI(s string) string {
-	return ansiEscape.ReplaceAllString(s, "")
-}
-
 func rgCaseFlag(c string) string {
 	switch strings.ToLower(strings.TrimSpace(c)) {
 	case "sensitive":
@@ -1165,16 +1158,16 @@ func parseVimgrepLine(line string) (searchMatch, bool) {
 	if len(parts) < 4 {
 		return searchMatch{}, false
 	}
-	ln, err := strconv.Atoi(stripANSI(parts[1]))
+	ln, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return searchMatch{}, false
 	}
-	col, err := strconv.Atoi(stripANSI(parts[2]))
+	col, err := strconv.Atoi(parts[2])
 	if err != nil {
 		col = 1
 	}
 	return searchMatch{
-		Path: stripANSI(parts[0]),
+		Path: parts[0],
 		Line: ln,
 		Col:  col,
 		Text: parts[3],
