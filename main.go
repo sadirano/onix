@@ -1218,11 +1218,19 @@ func firstCommandToken(command string) string {
 func openSearchMatches(editor, dir string, matches []searchMatch) error {
 	base := editorBase(editor)
 	if base == "code" || base == "code-insiders" {
-		args := make([]string, 0, len(matches)*2)
-		for _, m := range matches {
-			args = append(args, "-g", fmt.Sprintf("%s:%d:%d", m.Path, m.Line, m.Col))
+		for i, m := range matches {
+			gotoArg := fmt.Sprintf("%s:%d:%d", m.Path, m.Line, m.Col)
+			var err error
+			if i == 0 {
+				err = runEditorCommand(editor, dir, "-g", gotoArg)
+			} else {
+				err = runEditorCommand(editor, dir, "-r", "-g", gotoArg)
+			}
+			if err != nil {
+				return err
+			}
 		}
-		return runEditorCommand(editor, dir, args...)
+		return nil
 	}
 	if base == "nvim" || base == "vim" {
 		if len(matches) == 1 {
