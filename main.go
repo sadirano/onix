@@ -43,15 +43,16 @@ import (
 // Executables in ~/.onix/bin/ are copies of onix.exe named after each
 // shortcut; the binary detects its own name and injects the flag.
 var shortcuts = map[string]string{
-	"o":  "",
-	"c":  "",
-	"s":  "-e",
-	"n":  "-n",
-	"y":  "-y",
-	"f":  "-f",
-	"r":  "-r",
-	"sg": "-sg",
-	"ff": "-ff",
+	"o":   "",
+	"c":   "",
+	"s":   "-e",
+	"n":   "-n",
+	"y":   "-y",
+	"f":   "-f",
+	"r":   "-r",
+	"sg":  "-sg",
+	"sga": "-sga",
+	"ff":  "-ff",
 }
 
 var buildVersion = "dev"
@@ -235,19 +236,15 @@ func main() {
 	if args[0] == "-a" || args[0] == "--alias" {
 		destination := registerAlias(args)
 		if invokedAs == "o" || invokedAs == "c" {
-			if err := os.MkdirAll(destination, 0o755); err != nil {
-				fatal("create target: %v", err)
+			if !isUNCPath(destination) {
+				if err := os.MkdirAll(destination, 0o755); err != nil {
+					fatal("create target: %v", err)
+				}
 			}
-			cmd := exec.Command("cmd.exe", "/K")
-			cmd.Dir = destination
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			cmd.Stdin = os.Stdin
 			t.mark("shell spawned")
-			if err := cmd.Start(); err != nil {
+			if err := openShellAt(destination); err != nil {
 				fatal("open shell: %v", err)
 			}
-			_ = cmd.Wait()
 		}
 		return
 	}
@@ -276,6 +273,8 @@ func main() {
 			action = "r"
 		case "-sg":
 			action = "sg"
+		case "-sga":
+			action = "sga"
 		case "-ff":
 			action = "ff"
 		case "-s", "--subdir":
@@ -307,11 +306,13 @@ func main() {
 		target = filepath.Join(target, subdir)
 	}
 
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		fatal("create target: %v", err)
-	}
-	if err := os.Chdir(target); err != nil {
-		fatal("chdir: %v", err)
+	if !isUNCPath(target) {
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			fatal("create target: %v", err)
+		}
+		if err := os.Chdir(target); err != nil {
+			fatal("chdir: %v", err)
+		}
 	}
 	t.mark("chdir")
 
@@ -338,28 +339,45 @@ func main() {
 
 	case "f":
 		fArgs := extras
-		if len(fArgs) == 0 {
-			fArgs = []string{"."}
-		}
-		cmd := exec.Command(resolveEditor(cfg), fArgs...)
-		cmd.Dir = target
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		if err := cmd.Run(); err != nil {
-			fatal("open editor: %v", err)
+		if len(fArgs) == 0 || (len(fArgs) == 1 && fArgs[0] == ".") {
+			cmd := exec.Command(resolveEditor(cfg), ".")
+			cmd.Dir = target
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Stdin = os.Stdin
+			if err := cmd.Run(); err != nil {
+				fatal("open editor: %v", err)
+			}
+		} else {
+			resolved := make([]string, len(fArgs))
+			for i, arg := range fArgs {
+				if filepath.IsAbs(arg) {
+					resolved[i] = arg
+				} else {
+					resolved[i] = filepath.Join(target, arg)
+				}
+			}
+			if err := openMixedFiles(resolveEditor(cfg), resolved); err != nil {
+				fatal("%v", err)
+			}
 		}
 
 	case "r":
 		if len(extras) == 0 {
 			fatal("usage: onix <alias> -r \"<command>\"")
 		}
-		cmd := exec.Command("cmd.exe", "/C", strings.Join(extras, " "))
-		cmd.Dir = target
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		if err := cmd.Run(); err != nil {
+		var rcmd *exec.Cmd
+		if isUNCPath(target) {
+			wrapped := fmt.Sprintf(`pushd "%s" && %s`, target, strings.Join(extras, " "))
+			rcmd = exec.Command("cmd.exe", "/C", wrapped)
+		} else {
+			rcmd = exec.Command("cmd.exe", "/C", strings.Join(extras, " "))
+			rcmd.Dir = target
+		}
+		rcmd.Stdout = os.Stdout
+		rcmd.Stderr = os.Stderr
+		rcmd.Stdin = os.Stdin
+		if err := rcmd.Run(); err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ProcessState != nil {
 				os.Exit(exitErr.ProcessState.ExitCode())
 			}
@@ -371,22 +389,21 @@ func main() {
 			fatal("%v", err)
 		}
 
+	case "sga":
+		if err := runSGA(target, extras, cfg); err != nil {
+			fatal("%v", err)
+		}
+
 	case "ff":
 		if err := runFF(target, extras, cfg); err != nil {
 			fatal("%v", err)
 		}
 
 	default:
-		cmd := exec.Command("cmd.exe", "/K")
-		cmd.Dir = target
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
 		t.mark("shell spawned")
-		if err := cmd.Start(); err != nil {
+		if err := openShellAt(target); err != nil {
 			fatal("open shell: %v", err)
 		}
-		_ = cmd.Wait()
 	}
 }
 
@@ -921,21 +938,29 @@ type searchMatch struct {
 }
 
 func runSG(target string, extras []string, cfg *config.Config) error {
+	return runSGWith("rg", target, extras, cfg)
+}
+
+func runSGA(target string, extras []string, cfg *config.Config) error {
+	return runSGWith("rga", target, extras, cfg)
+}
+
+func runSGWith(rgBin, target string, extras []string, cfg *config.Config) error {
 	if len(extras) == 0 {
 		return fmt.Errorf("usage: sg <alias> <query>")
 	}
-	if _, err := exec.LookPath("rg"); err != nil {
-		return fmt.Errorf("sg requires ripgrep (rg) in PATH")
+	if _, err := exec.LookPath(rgBin); err != nil {
+		return fmt.Errorf("sg requires %s in PATH", rgBin)
 	}
 	if _, err := exec.LookPath("fzf"); err != nil {
-		return fmt.Errorf("sg requires fzf in PATH")
+		return fmt.Errorf("%s requires fzf in PATH", rgBin)
 	}
 
 	query := strings.TrimSpace(strings.Join(extras, " "))
 	rgColor := "--color=" + visuals.RG.Color
 	rgCase := rgCaseFlag(visuals.RG.Case)
 	rgArgs := []string{"--vimgrep", rgCase, rgColor, query, "."}
-	rgCmd := exec.Command("rg", rgArgs...)
+	rgCmd := exec.Command(rgBin, rgArgs...)
 	rgCmd.Dir = target
 	rgOut, err := rgCmd.Output()
 	if err != nil {
@@ -943,7 +968,7 @@ func runSG(target string, extras []string, cfg *config.Config) error {
 			fmt.Println("No matches found.")
 			return nil
 		}
-		return fmt.Errorf("run rg: %w", err)
+		return fmt.Errorf("run %s: %w", rgBin, err)
 	}
 
 	preview := resolvePreviewCommand(visuals.FZF.SG.Preview, `cmd /C type {1}`)
@@ -990,6 +1015,9 @@ func runSG(target string, extras []string, cfg *config.Config) error {
 		return nil
 	}
 
+	if rgBin == "rga" {
+		return openSearchMatchesMixed(resolveEditor(cfg), target, matches)
+	}
 	return openSearchMatches(resolveEditor(cfg), target, matches)
 }
 
@@ -1059,7 +1087,7 @@ func runFFWithEverythingStream(target, query string, cfg *config.Config) error {
 		return nil
 	}
 
-	return openFilesInEditor(resolveEditor(cfg), selected)
+	return openMixedFiles(resolveEditor(cfg), selected)
 }
 
 func runFFWithWalkFallback(target, query string, cfg *config.Config) error {
@@ -1116,7 +1144,7 @@ func runFFWithWalkFallback(target, query string, cfg *config.Config) error {
 		return nil
 	}
 
-	return openFilesInEditor(resolveEditor(cfg), selected)
+	return openMixedFiles(resolveEditor(cfg), selected)
 }
 
 func gatherFilesWithWalk(root, query string) ([]string, error) {
@@ -1320,6 +1348,100 @@ func openInExplorer(path string) error {
 func editorBase(editor string) string {
 	base := strings.ToLower(filepath.Base(strings.TrimSpace(editor)))
 	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+// isUNCPath reports whether path is a UNC network path (\\server\share\...).
+func isUNCPath(path string) bool {
+	return strings.HasPrefix(path, `\\`)
+}
+
+// openShellAt opens an interactive cmd.exe at dir. For UNC paths it uses
+// pushd to map the share to a temporary drive letter, since cmd.exe cannot
+// cd to a UNC path directly.
+func openShellAt(dir string) error {
+	var cmd *exec.Cmd
+	if isUNCPath(dir) {
+		cmd = exec.Command("cmd.exe", "/K", fmt.Sprintf(`pushd "%s"`, dir))
+	} else {
+		cmd = exec.Command("cmd.exe", "/K")
+		cmd.Dir = dir
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	_ = cmd.Wait()
+	return nil
+}
+
+// isBinaryFile reports whether path is binary by scanning the first 512 bytes
+// for null bytes — the same heuristic git uses.
+func isBinaryFile(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	buf := make([]byte, 512)
+	n, err := f.Read(buf)
+	if err != nil && n == 0 {
+		return false
+	}
+	return bytes.IndexByte(buf[:n], 0) >= 0
+}
+
+// openFileWithDefault launches path using the Windows default program association,
+// equivalent to double-clicking the file in Explorer.
+func openFileWithDefault(path string) error {
+	cmd := exec.Command("cmd.exe", "/C", "start", "", path)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return cmd.Start()
+}
+
+// openMixedFiles splits files into binary vs text, launches binary files with
+// the OS default program, and opens text files together in the editor.
+func openMixedFiles(editor string, files []string) error {
+	var textFiles []string
+	for _, f := range files {
+		if isBinaryFile(f) {
+			if err := openFileWithDefault(f); err != nil {
+				return fmt.Errorf("open default %s: %w", f, err)
+			}
+		} else {
+			textFiles = append(textFiles, f)
+		}
+	}
+	if len(textFiles) == 0 {
+		return nil
+	}
+	return openFilesInEditor(editor, textFiles)
+}
+
+// openSearchMatchesMixed is like openSearchMatches but opens binary matched
+// files (e.g. PDFs found by rga) with the OS default program instead of the
+// editor.
+func openSearchMatchesMixed(editor, dir string, matches []searchMatch) error {
+	var textMatches []searchMatch
+	seenBinary := map[string]struct{}{}
+	for _, m := range matches {
+		absPath := filepath.Join(dir, m.Path)
+		if isBinaryFile(absPath) {
+			if _, seen := seenBinary[m.Path]; !seen {
+				seenBinary[m.Path] = struct{}{}
+				if err := openFileWithDefault(absPath); err != nil {
+					return fmt.Errorf("open default %s: %w", m.Path, err)
+				}
+			}
+		} else {
+			textMatches = append(textMatches, m)
+		}
+	}
+	if len(textMatches) == 0 {
+		return nil
+	}
+	return openSearchMatches(editor, dir, textMatches)
 }
 
 func fatal(format string, a ...any) {
