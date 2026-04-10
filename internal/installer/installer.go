@@ -210,18 +210,19 @@ func InstallShortcuts() error {
 	}
 
 	shortcuts := map[string]string{
-		"o":  "",
-		"c":  "",
-		"s":  "-e",
-		"n":  "-n",
-		"y":  "-y",
-		"f":  "-f",
-		"r":  "-r",
-		"sg": "-sg",
-		"ff": "-ff",
+		"o":   "",
+		"c":   "",
+		"s":   "-e",
+		"n":   "-n",
+		"y":   "-y",
+		"f":   "-f",
+		"r":   "-r",
+		"sg":  "-sg",
+		"sga": "-sga",
+		"ff":  "-ff",
 	}
 
-	names := []string{"o", "c", "s", "n", "y", "f", "r", "sg", "ff"}
+	names := []string{"o", "c", "s", "n", "y", "f", "r", "sg", "sga", "ff"}
 	var warnings []string
 	for _, name := range names {
 		legacyExe := filepath.Join(binDir, name+".exe")
