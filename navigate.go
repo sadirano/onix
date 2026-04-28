@@ -2,11 +2,9 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -36,79 +34,9 @@ func openShellAt(dir string) error {
 	return nil
 }
 
-// selectDestination opens an fzf directory picker seeded with aliasName as
-// the initial query. Falls back to a plain text prompt if fzf is unavailable
-// or the user presses Esc.
+// selectDestination prompts the user to type a destination path for aliasName.
 func selectDestination(aliasName string) string {
-	if selected := fzfPickDir(aliasName); selected != "" {
-		return selected
-	}
 	return promptDestination(aliasName)
-}
-
-func fzfPickDir(query string) string {
-	if _, err := exec.LookPath("fzf"); err != nil {
-		return ""
-	}
-
-	var input *bytes.Buffer
-
-	// Prefer es (Everything) — results are instant.
-	if _, err := exec.LookPath("es"); err == nil {
-		if out, err := exec.Command("es", "-ad", query).Output(); err == nil && len(bytes.TrimSpace(out)) > 0 {
-			input = bytes.NewBuffer(out)
-		}
-	}
-
-	// Fallback: walk drive roots up to 3 levels deep.
-	if input == nil {
-		var buf bytes.Buffer
-		for _, drive := range availableDrives() {
-			filepath.Walk(drive, func(path string, info os.FileInfo, err error) error {
-				if err != nil || !info.IsDir() {
-					return nil
-				}
-				rel, _ := filepath.Rel(drive, path)
-				if rel == "." {
-					return nil
-				}
-				if strings.Count(rel, string(filepath.Separator)) >= 3 {
-					return filepath.SkipDir
-				}
-				buf.WriteString(path + "\n")
-				return nil
-			})
-		}
-		input = &buf
-	}
-
-	fzfArgs := []string{
-		"--prompt", "Destination > ",
-		"--query", query,
-		"--height", "100%",
-		"--layout", "reverse-list",
-		"--header", "Enter to confirm  |  Esc to type manually",
-	}
-	fzfCmd := exec.Command("fzf", fzfArgs...)
-	fzfCmd.Stdin = input
-	fzfCmd.Stderr = os.Stderr
-
-	out, err := fzfCmd.Output()
-	if err != nil {
-		return "" // Esc pressed or fzf error
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func availableDrives() []string {
-	var drives []string
-	for c := 'A'; c <= 'Z'; c++ {
-		drive := string(c) + `:\`
-		if _, err := os.Stat(drive); err == nil {
-			drives = append(drives, drive)
-		}
-	}
-	return drives
 }
 
 func promptDestination(aliasName string) string {
