@@ -341,25 +341,12 @@ func syncRef(dir, ref string) error {
 		}
 	}
 
-	branch, err := currentBranch(dir)
-	if err != nil {
-		return err
-	}
-	if branch != "HEAD" {
-		if err := runGit(dir, "pull", "--ff-only", "origin", branch); err != nil {
-			return err
-		}
+	// Pull only when on a branch; symbolic-ref fails on detached HEAD (tag/commit checkout).
+	cmd := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD")
+	if out, err := cmd.Output(); err == nil {
+		return runGit(dir, "pull", "--ff-only", "origin", strings.TrimSpace(string(out)))
 	}
 	return nil
-}
-
-func currentBranch(dir string) (string, error) {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 func runGit(dir string, args ...string) error {

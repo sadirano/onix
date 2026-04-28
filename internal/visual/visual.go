@@ -106,19 +106,7 @@ func Load(binDir string) (Config, string, error) {
 	if _, err := toml.DecodeFile(configPath, &cfg); err != nil {
 		return Default(), configPath, fmt.Errorf("decode %s: %w", configPath, err)
 	}
-	cfg.ApplyDefaults()
 	return cfg, configPath, nil
-}
-
-// ApplyDefaults fills in zero-value fields with the built-in defaults.
-func (v *Config) ApplyDefaults() {
-	def := Default()
-	v.FZF.Destination.Prompt = fallback(v.FZF.Destination.Prompt, def.FZF.Destination.Prompt)
-	v.FZF.Destination.Layout = fallback(v.FZF.Destination.Layout, def.FZF.Destination.Layout)
-	v.FZF.Destination.Preview = fallback(v.FZF.Destination.Preview, def.FZF.Destination.Preview)
-	v.FZF.Destination.PreviewWindow = fallback(v.FZF.Destination.PreviewWindow, def.FZF.Destination.PreviewWindow)
-	v.FZF.Destination.Header = fallback(v.FZF.Destination.Header, def.FZF.Destination.Header)
-	v.FZF.Destination.Height = fallback(v.FZF.Destination.Height, def.FZF.Destination.Height)
 }
 
 // AppendLayoutArg appends --layout <layout> to args unless layout is empty or "default".
@@ -327,13 +315,3 @@ func ApplyTheme(themePath, activePath string, debug bool) error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-func fallback(value, def string) string {
-	if strings.TrimSpace(value) == "" {
-		return def
-	}
-	return value
-}

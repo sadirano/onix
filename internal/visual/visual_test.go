@@ -2,26 +2,6 @@ package visual
 
 import "testing"
 
-func TestFallback(t *testing.T) {
-	tests := []struct {
-		name       string
-		value, def string
-		want       string
-	}{
-		{"value returned when set", "vim", "nvim", "vim"},
-		{"default when empty", "", "nvim", "nvim"},
-		{"default when whitespace-only", "   ", "nvim", "nvim"},
-		{"value returned even if def is empty", "vim", "", "vim"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := fallback(tt.value, tt.def); got != tt.want {
-				t.Errorf("fallback(%q, %q) = %q, want %q", tt.value, tt.def, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestAppendLayoutArg(t *testing.T) {
 	base := []string{"--ansi", "--multi"}
 	tests := []struct {
@@ -64,32 +44,20 @@ func TestDefault(t *testing.T) {
 	}
 }
 
-func TestApplyDefaults(t *testing.T) {
-	t.Run("zero config gets all defaults", func(t *testing.T) {
-		cfg := Config{}
-		cfg.ApplyDefaults()
-		def := Default()
-
-		if cfg.FZF.Destination.Prompt != def.FZF.Destination.Prompt {
-			t.Errorf("Destination.Prompt: got %q, want %q", cfg.FZF.Destination.Prompt, def.FZF.Destination.Prompt)
+func TestDefault_allFieldsSet(t *testing.T) {
+	cfg := Default()
+	d := cfg.FZF.Destination
+	fields := map[string]string{
+		"Prompt":        d.Prompt,
+		"Layout":        d.Layout,
+		"Preview":       d.Preview,
+		"PreviewWindow": d.PreviewWindow,
+		"Header":        d.Header,
+		"Height":        d.Height,
+	}
+	for name, val := range fields {
+		if val == "" {
+			t.Errorf("Default().FZF.Destination.%s is empty", name)
 		}
-		if cfg.FZF.Destination.Layout != def.FZF.Destination.Layout {
-			t.Errorf("Destination.Layout: got %q, want %q", cfg.FZF.Destination.Layout, def.FZF.Destination.Layout)
-		}
-		if cfg.FZF.Destination.Header != def.FZF.Destination.Header {
-			t.Errorf("Destination.Header: got %q, want %q", cfg.FZF.Destination.Header, def.FZF.Destination.Header)
-		}
-	})
-	t.Run("explicit values are preserved", func(t *testing.T) {
-		cfg := Config{}
-		cfg.FZF.Destination.Prompt = "go to> "
-		cfg.ApplyDefaults()
-
-		if cfg.FZF.Destination.Prompt != "go to> " {
-			t.Errorf("Destination.Prompt: got %q, want \"go to> \"", cfg.FZF.Destination.Prompt)
-		}
-		if cfg.FZF.Destination.Layout == "" {
-			t.Error("Destination.Layout should have been filled by ApplyDefaults")
-		}
-	})
+	}
 }

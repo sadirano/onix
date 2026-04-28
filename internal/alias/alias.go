@@ -13,11 +13,14 @@ const (
 	defaultFileName = ".env"
 )
 
+// aliasEnvVars is the precedence list of environment variables that can
+// override the active alias file path. OMNI_* kept for backwards compatibility.
+var aliasEnvVars = []string{"ONIX_ENV", "ONIX_ALIAS_FILE", "OMNI_ENV", "OMNI_ALIAS_FILE"}
+
 // FilePath returns the active alias file path.
 // Precedence: ONIX_ENV > ONIX_ALIAS_FILE > OMNI_ENV > ~/.omni/.env
 func FilePath() string {
-	// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
-	for _, env := range []string{"ONIX_ENV", "ONIX_ALIAS_FILE", "OMNI_ENV", "OMNI_ALIAS_FILE"} {
+	for _, env := range aliasEnvVars {
 		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
 			return v
 		}
@@ -142,7 +145,7 @@ func ApplyEnvOverride(aliasFile string) {
 	if strings.TrimSpace(aliasFile) == "" {
 		return
 	}
-	for _, env := range []string{"ONIX_ENV", "ONIX_ALIAS_FILE", "OMNI_ENV", "OMNI_ALIAS_FILE"} {
+	for _, env := range aliasEnvVars {
 		if strings.TrimSpace(os.Getenv(env)) != "" {
 			return
 		}
