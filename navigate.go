@@ -118,5 +118,7 @@ func availableDrives() []string {
 func promptDestination(aliasName string) string {
 	fmt.Printf("Destination for %q: ", aliasName)
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	// ReadString error (e.g. closed stdin) produces an empty string,
+	// which the caller treats as "no destination provided".
 	return strings.TrimSpace(line)
 }

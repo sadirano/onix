@@ -11,7 +11,12 @@ import (
 
 // Dir returns the onix home directory (~/.onix).
 func Dir() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		if h := os.Getenv("USERPROFILE"); h != "" {
+			home = h
+		}
+	}
 	return filepath.Join(home, ".onix")
 }
 
