@@ -8,7 +8,6 @@ import (
 	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/installer"
-	"github.com/sadirano/onix/internal/visual"
 )
 
 // handleManagementCommand executes a built-in onix subcommand (install, add,
@@ -66,15 +65,6 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 
 	case "shortcuts":
 		if err := installer.InstallShortcuts(); err != nil {
-			fatal("%v", err)
-		}
-
-	case "theme", "themes":
-		onixPath, err := resolveOnixBinaryInfo()
-		if err != nil {
-			fatal("resolve onix path: %v", err)
-		}
-		if err := visual.HandleThemeCommand(args[1:], filepath.Dir(onixPath), debugEnabled); err != nil {
 			fatal("%v", err)
 		}
 
@@ -164,8 +154,6 @@ Usage:
   onix remove <name>            remove a module
   onix update [name]            update one or all modules
   onix list                     list declared modules
-  onix theme [name]             pick/apply visual theme (onix.visual.*.toml)
-  onix themes list              list available visual themes
   onix init                     initialise ~/.onix/ structure
   onix help                     show this message
 

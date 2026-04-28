@@ -15,7 +15,7 @@ import (
 // never be intercepted by module dispatch, even when ONIX_MODULE is set.
 var coreCommands = []string{
 	"install", "add", "remove", "update", "list", "init", "shortcuts",
-	"theme", "themes", "help", "-h", "--help", "-a", "--alias",
+	"help", "-h", "--help", "-a", "--alias",
 }
 
 // IsCoreCommand reports whether args[0] is a built-in management command.
