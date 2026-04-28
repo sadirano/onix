@@ -3,6 +3,7 @@ package alias
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -15,6 +16,7 @@ const (
 // FilePath returns the active alias file path.
 // Precedence: ONIX_ENV > ONIX_ALIAS_FILE > OMNI_ENV > ~/.omni/.env
 func FilePath() string {
+	// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
 	for _, env := range []string{"ONIX_ENV", "ONIX_ALIAS_FILE", "OMNI_ENV", "OMNI_ALIAS_FILE"} {
 		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
 			return v
@@ -115,6 +117,37 @@ func Register(name, destination string) error {
 		data += "\r\n"
 	}
 	return os.WriteFile(file, []byte(data), 0o644)
+}
+
+// OpenInEditor opens the active alias file in the given editor.
+func OpenInEditor(editor string) error {
+	f := FilePath()
+	cmd := exec.Command(editor, f)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("open editor: %w", err)
+	}
+	_ = cmd.Wait()
+	return nil
+}
+
+// ApplyEnvOverride propagates aliasFile into ONIX_ALIAS_FILE so that child
+// processes (module binaries) inherit the same alias file path as the parent.
+// It is a no-op when aliasFile is empty or any alias-file env var is already set,
+// so an explicit env override always wins over the config file setting.
+// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
+func ApplyEnvOverride(aliasFile string) {
+	if strings.TrimSpace(aliasFile) == "" {
+		return
+	}
+	for _, env := range []string{"ONIX_ENV", "ONIX_ALIAS_FILE", "OMNI_ENV", "OMNI_ALIAS_FILE"} {
+		if strings.TrimSpace(os.Getenv(env)) != "" {
+			return
+		}
+	}
+	_ = os.Setenv("ONIX_ALIAS_FILE", aliasFile)
 }
 
 // Resolve returns the absolute path for the given alias or raw path.

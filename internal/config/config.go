@@ -137,6 +137,29 @@ func Save(cfg *Config) error {
 	return enc.Encode(cfg)
 }
 
+// IsDebugEnabled reports whether debug output is active.
+// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
+func (c *Config) IsDebugEnabled() bool {
+	return c.Settings.Debug ||
+		os.Getenv("ONIX_DEBUG") == "1" ||
+		os.Getenv("OMNI_DEBUG") == "1"
+}
+
+// ResolveEditor returns the configured editor, falling back to EDITOR env then nvim.
+// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
+func (c *Config) ResolveEditor() string {
+	if e := strings.TrimSpace(c.Settings.Editor); e != "" {
+		return e
+	}
+	if e := strings.TrimSpace(os.Getenv("EDITOR")); e != "" {
+		return e
+	}
+	if e := strings.TrimSpace(os.Getenv("OMNI_EDITOR")); e != "" {
+		return e
+	}
+	return "nvim"
+}
+
 // FindModule returns the module entry with the given name, or nil.
 func (c *Config) FindModule(name string) *Module {
 	for i := range c.Modules {
@@ -159,7 +182,8 @@ const Starter = `# ~/.onix/config.toml
 # timing     = false
 # debug      = false
 
-# Declare modules below. Example:
+# Declare modules below. onix will prompt to install them on first use.
+# Replace the repo with your preferred vendor if you have one.
 #
 # [[module]]
 # name    = "sg"
@@ -167,6 +191,15 @@ const Starter = `# ~/.onix/config.toml
 # ref     = "main"
 # enabled = true
 #
-# [module.config]
-# default_flags = "--type go"
+# [[module]]
+# name    = "sga"
+# repo    = "sadirano/onix-sg"
+# ref     = "main"
+# enabled = true
+#
+# [[module]]
+# name    = "ff"
+# repo    = "sadirano/onix-ff"
+# ref     = "main"
+# enabled = true
 `
