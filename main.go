@@ -56,17 +56,6 @@ func main() {
 	alias.ApplyEnvOverride(cfg.Settings.AliasFile)
 	debugEnabled := cfg.IsDebugEnabled()
 
-	onixPath, _ := resolveOnixBinaryInfo()
-	if onixPath != "" {
-		if loaded, vpath, verr := visual.Load(filepath.Dir(onixPath)); verr == nil {
-			activeVisuals = loaded
-			if debugEnabled && vpath != "" {
-				fmt.Fprintf(os.Stderr, "[ONIX] visual_config=%s\n", vpath)
-			}
-		} else if debugEnabled {
-			fmt.Fprintf(os.Stderr, "[ONIX] visual_config_error=%v\n", verr)
-		}
-	}
 	if debugEnabled {
 		printBuildDebugInfo()
 	}
