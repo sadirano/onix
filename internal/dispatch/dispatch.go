@@ -44,53 +44,17 @@ func IsCoreCommand(args []string) bool {
 //	ONIX_HOME          onix home directory (~/.onix)
 //	ONIX_EDITOR        resolved editor (from config, then EDITOR env, then nvim)
 func Run(moduleName, aliasName string, args []string, cfg *config.Config) error {
-	debug := cfg.IsDebugEnabled()
-
-	target, err := alias.Resolve(aliasName, debug)
+	target, err := alias.Resolve(aliasName, cfg.IsDebugEnabled())
 	if err != nil {
 		return err
 	}
-
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return fmt.Errorf("create target %q: %w", target, err)
 	}
 	if err := os.Chdir(target); err != nil {
 		return fmt.Errorf("chdir to %q: %w", target, err)
 	}
-
-	binPath := filepath.Join(config.ModulesDir(), moduleName, moduleName+".exe")
-	if _, err := os.Stat(binPath); err != nil {
-		return fmt.Errorf("module %q not found at %s — run: onix install %s", moduleName, binPath, moduleName)
-	}
-
-	mod := cfg.FindModule(moduleName)
-	modConfigJSON := "{}"
-	if mod != nil {
-		modConfigJSON = mod.ConfigJSON()
-	}
-
-	if debug {
-		fmt.Printf("[ONIX] module=%q alias=%q target=%q args=%v\n", moduleName, aliasName, target, args)
-	}
-
-	cmd := exec.Command(binPath, args...)
-	cmd.Dir = target
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	cmd.Env = append(os.Environ(),
-		"ONIX_MODULE="+moduleName,
-		"ONIX_ALIAS="+aliasName,
-		"ONIX_TARGET="+target,
-		"ONIX_MODULE_CONFIG="+modConfigJSON,
-		"ONIX_HOME="+config.Dir(),
-		"ONIX_EDITOR="+cfg.ResolveEditor(),
-	)
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start module %q: %w", moduleName, err)
-	}
-	return cmd.Wait()
+	return runModule(moduleName, moduleName, aliasName, target, args, cfg)
 }
 
 // RunResolved executes the named module with a pre-resolved target directory.
@@ -101,11 +65,16 @@ func Run(moduleName, aliasName string, args []string, cfg *config.Config) error 
 // (e.g. "onix-sg" when the action/ONIX_MODULE name is "sg"). Pass "" to use
 // moduleName for both.
 func RunResolved(moduleName, binModule, target string, args []string, cfg *config.Config) error {
-	debug := cfg.IsDebugEnabled()
-
 	if binModule == "" {
 		binModule = moduleName
 	}
+	return runModule(moduleName, binModule, "", target, args, cfg)
+}
+
+// runModule builds and executes the module command. aliasName is included in
+// the environment as ONIX_ALIAS only when non-empty.
+func runModule(moduleName, binModule, aliasName, target string, args []string, cfg *config.Config) error {
+	debug := cfg.IsDebugEnabled()
 
 	binPath := filepath.Join(config.ModulesDir(), binModule, binModule+".exe")
 	if _, err := os.Stat(binPath); err != nil {
@@ -119,7 +88,7 @@ func RunResolved(moduleName, binModule, target string, args []string, cfg *confi
 	}
 
 	if debug {
-		fmt.Printf("[ONIX] module=%q bin=%q target=%q args=%v\n", moduleName, binModule, target, args)
+		fmt.Printf("[ONIX] module=%q bin=%q alias=%q target=%q args=%v\n", moduleName, binModule, aliasName, target, args)
 	}
 
 	cmd := exec.Command(binPath, args...)
@@ -134,6 +103,9 @@ func RunResolved(moduleName, binModule, target string, args []string, cfg *confi
 		"ONIX_HOME="+config.Dir(),
 		"ONIX_EDITOR="+cfg.ResolveEditor(),
 	)
+	if aliasName != "" {
+		cmd.Env = append(cmd.Env, "ONIX_ALIAS="+aliasName)
+	}
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start module %q: %w", moduleName, err)

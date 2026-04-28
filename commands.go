@@ -125,35 +125,26 @@ func registerAlias(args []string) string {
 	return destination
 }
 
+// actionFlags maps CLI flag strings to their action names.
+var actionFlags = map[string]string{
+	"-e": "e", "-n": "n", "-y": "y", "-f": "f",
+	"-r": "r", "-sg": "sg", "-sga": "sga", "-ff": "ff",
+}
+
 // parseActionArgs extracts the action flag, optional subdir, and positional
 // extras from the tail of an alias invocation.
 // .cmd wrappers append the action flag last (e.g. `o %* -n`), so positional
 // extras appear before the flag.
 func parseActionArgs(args []string) (action, subdir string, extras []string) {
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "-e":
-			action = "e"
-		case "-n":
-			action = "n"
-		case "-y":
-			action = "y"
-		case "-f":
-			action = "f"
-		case "-r":
-			action = "r"
-		case "-sg":
-			action = "sg"
-		case "-sga":
-			action = "sga"
-		case "-ff":
-			action = "ff"
-		case "-s", "--subdir":
+		if a, ok := actionFlags[args[i]]; ok {
+			action = a
+		} else if args[i] == "-s" || args[i] == "--subdir" {
 			if i+1 < len(args) {
 				subdir = args[i+1]
 				i++
 			}
-		default:
+		} else {
 			extras = append(extras, args[i])
 		}
 	}
