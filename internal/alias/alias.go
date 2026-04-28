@@ -159,7 +159,7 @@ func Resolve(input string, debug bool) (string, error) {
 	if _, err := os.Stat(input); err == nil {
 		abs, err := filepath.Abs(input)
 		if err != nil {
-			return input, nil
+			return "", fmt.Errorf("resolve path %q: %w", input, err)
 		}
 		return abs, nil
 	}

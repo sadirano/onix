@@ -49,8 +49,14 @@ func InstallAll(cfg *config.Config) error {
 // repo is "user/repo" or "github.com/user/repo".
 func Add(repo string, cfg *config.Config) error {
 	repo = normalizeRepo(repo)
+	if !strings.Contains(repo, "/") {
+		return fmt.Errorf("invalid repo %q — expected format: user/repo or github.com/user/repo", repo)
+	}
 	parts := strings.Split(repo, "/")
 	name := parts[len(parts)-1]
+	if name == "" {
+		return fmt.Errorf("invalid repo %q — could not determine module name", repo)
+	}
 
 	if cfg.FindModule(name) != nil {
 		return fmt.Errorf("module %q already in config", name)
@@ -419,6 +425,9 @@ func EnsureInstalled(name string, cfg *config.Config) error {
 			return fmt.Errorf("module %q not installed — run: onix install %s", name, name)
 		}
 	}
+	// Note: ReadString errors (e.g. closed stdin) are intentionally ignored;
+	// an empty/failed read produces an empty string which fails the "y" check,
+	// so the prompt safely rejects non-interactive invocations.
 	return Install(name, cfg)
 }
 
