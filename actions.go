@@ -9,8 +9,6 @@ import (
 	"syscall"
 
 	"github.com/sadirano/onix/internal/config"
-	"github.com/sadirano/onix/internal/dispatch"
-	"github.com/sadirano/onix/internal/installer"
 	"github.com/sadirano/onix/internal/opener"
 )
 
@@ -74,15 +72,6 @@ func executeAction(action, target string, extras []string, cfg *config.Config, t
 			fatal("run command: %v", err)
 		}
 
-	case "sg", "sga", "ff":
-		binMod := shortcutBinaryModule(action)
-		if err := installer.EnsureInstalled(binMod, cfg); err != nil {
-			fatal("%v", err)
-		}
-		if err := dispatch.RunResolved(action, binMod, target, extras, cfg); err != nil {
-			fatal("%v", err)
-		}
-
 	default:
 		t.mark("shell spawned")
 		if err := openShellAt(target); err != nil {
@@ -91,16 +80,3 @@ func executeAction(action, target string, extras []string, cfg *config.Config, t
 	}
 }
 
-// shortcutBinaryModule maps a shortcut action name to the module directory that
-// contains its binary. Shortcuts that share a binary (e.g. sg and sga both live
-// in onix-sg) use the same entry. Falls back to "onix-"+action.
-func shortcutBinaryModule(action string) string {
-	switch action {
-	case "sg", "sga":
-		return "onix-sg"
-	case "ff":
-		return "onix-ff"
-	default:
-		return "onix-" + action
-	}
-}

@@ -28,7 +28,7 @@ import (
 //
 // Module dispatch (via wrapper):
 //
-//	ONIX_MODULE=sg onix <alias> [args...]
+//	ONIX_MODULE=mymodule onix <alias> [args...]
 
 // shortcuts maps executable basenames to their implicit action flag.
 // Executables in ~/.onix/bin/ are copies of onix.exe named after each

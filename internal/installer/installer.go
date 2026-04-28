@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
@@ -214,7 +215,11 @@ func InstallShortcuts() error {
 		return fmt.Errorf("create bin dir: %w", err)
 	}
 
-	names := []string{"o", "c", "s", "n", "y", "f", "r", "sg", "sga", "ff"}
+	names := make([]string, 0, len(config.Shortcuts))
+	for name := range config.Shortcuts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	var warnings []string
 	for _, name := range names {
 		legacyExe := filepath.Join(binDir, name+".exe")
