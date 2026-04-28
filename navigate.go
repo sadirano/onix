@@ -48,7 +48,23 @@ func selectDestination(aliasName string) string {
 	return promptDestination(aliasName)
 }
 
+var visualsLoaded bool
+
+func ensureVisuals() {
+	if visualsLoaded {
+		return
+	}
+	visualsLoaded = true
+	onixPath, _ := resolveOnixBinaryInfo()
+	if onixPath != "" {
+		if loaded, _, err := visual.Load(filepath.Dir(onixPath)); err == nil {
+			activeVisuals = loaded
+		}
+	}
+}
+
 func fzfPickDir(query string) string {
+	ensureVisuals()
 	if _, err := exec.LookPath("fzf"); err != nil {
 		return ""
 	}
