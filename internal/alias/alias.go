@@ -147,7 +147,9 @@ func ApplyEnvOverride(aliasFile string) {
 			return
 		}
 	}
-	_ = os.Setenv("ONIX_ALIAS_FILE", aliasFile)
+	if err := os.Setenv("ONIX_ALIAS_FILE", aliasFile); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not set ONIX_ALIAS_FILE: %v\n", err)
+	}
 }
 
 // Resolve returns the absolute path for the given alias or raw path.
