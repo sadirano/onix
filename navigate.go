@@ -34,11 +34,6 @@ func openShellAt(dir string) error {
 	return nil
 }
 
-// selectDestination prompts the user to type a destination path for aliasName.
-func selectDestination(aliasName string) string {
-	return promptDestination(aliasName)
-}
-
 func promptDestination(aliasName string) string {
 	fmt.Printf("Destination for %q: ", aliasName)
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')

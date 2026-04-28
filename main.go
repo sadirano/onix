@@ -112,7 +112,7 @@ func main() {
 
 	target, err := alias.Resolve(aliasName, debugEnabled)
 	if err != nil {
-		dest := selectDestination(aliasName)
+		dest := promptDestination(aliasName)
 		if dest == "" {
 			fatal("no destination provided")
 		}
