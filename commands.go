@@ -117,8 +117,7 @@ func registerAlias(args []string) string {
 
 // actionFlags maps CLI flag strings to their action names.
 var actionFlags = map[string]string{
-	"-e": "e", "-n": "n", "-y": "y", "-f": "f",
-	"-r": "r", "-sg": "sg", "-sga": "sga", "-ff": "ff",
+	"-e": "e", "-n": "n", "-y": "y", "-f": "f", "-r": "r",
 }
 
 // parseActionArgs extracts the action flag, optional subdir, and positional
@@ -158,7 +157,7 @@ Usage:
   onix help                     show this message
 
 Module invocation (via generated wrappers):
-  <module> <alias> [args...]    e.g. sg myproject foo bar
+  <module> <alias> [args...]    e.g. mymodule myproject foo bar
 
 Environment:
   ONIX_MODULE        set by .cmd wrappers to select the module

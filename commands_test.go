@@ -19,9 +19,6 @@ func TestParseActionArgs(t *testing.T) {
 		{"explorer", []string{"-e"}, "e", "", nil},
 		{"file open", []string{"-f"}, "f", "", nil},
 		{"run command", []string{"-r", "go build"}, "r", "", []string{"go build"}},
-		{"sg search", []string{"-sg"}, "sg", "", nil},
-		{"sga search", []string{"-sga"}, "sga", "", nil},
-		{"ff find", []string{"-ff"}, "ff", "", nil},
 		{"subdir short flag", []string{"-s", "cmd"}, "", "cmd", nil},
 		{"subdir long flag", []string{"--subdir", "pkg/api"}, "", "pkg/api", nil},
 		{"extras collected", []string{"foo.go", "bar.go"}, "", "", []string{"foo.go", "bar.go"}},
@@ -30,6 +27,7 @@ func TestParseActionArgs(t *testing.T) {
 		{"extras and subdir", []string{"foo.go", "-s", "sub"}, "", "sub", []string{"foo.go"}},
 		{"last action flag wins", []string{"-n", "-y"}, "y", "", nil},
 		{"subdir missing value is no-op", []string{"-s"}, "", "", nil},
+		{"unknown flag treated as extra", []string{"-sg", "foo"}, "", "", []string{"-sg", "foo"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

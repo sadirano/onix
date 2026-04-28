@@ -188,23 +188,11 @@ const Starter = `# ~/.onix/config.toml
 # debug      = false
 
 # Declare modules below. onix will prompt to install them on first use.
-# Replace the repo with your preferred vendor if you have one.
+# Run "onix add <user/repo>" to register a module, then "onix install" to build it.
 #
 # [[module]]
-# name    = "sg"
-# repo    = "sadirano/onix-sg"
-# ref     = "main"
-# enabled = true
-#
-# [[module]]
-# name    = "sga"
-# repo    = "sadirano/onix-sg"
-# ref     = "main"
-# enabled = true
-#
-# [[module]]
-# name    = "ff"
-# repo    = "sadirano/onix-ff"
+# name    = "mymodule"
+# repo    = "user/repo"
 # ref     = "main"
 # enabled = true
 `
