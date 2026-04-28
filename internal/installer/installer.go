@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -146,7 +147,7 @@ func List(cfg *config.Config) {
 			ref = "main"
 		}
 		status := "not installed"
-		if isInstalled(name) {
+		if IsInstalled(name) {
 			status = "installed"
 		}
 		if !m.Enabled {
@@ -209,19 +210,7 @@ func InstallShortcuts() error {
 		return fmt.Errorf("create bin dir: %w", err)
 	}
 
-	shortcuts := map[string]string{
-		"o":  "",
-		"c":  "",
-		"s":  "-e",
-		"n":  "-n",
-		"y":  "-y",
-		"f":  "-f",
-		"r":  "-r",
-		"sg": "-sg",
-		"ff": "-ff",
-	}
-
-	names := []string{"o", "c", "s", "n", "y", "f", "r", "sg", "ff"}
+	names := []string{"o", "c", "s", "n", "y", "f", "r", "sg", "sga", "ff"}
 	var warnings []string
 	for _, name := range names {
 		legacyExe := filepath.Join(binDir, name+".exe")
@@ -229,7 +218,7 @@ func InstallShortcuts() error {
 			warnings = append(warnings, fmt.Sprintf("%s.exe still in use: %v", name, err))
 		}
 
-		if err := createShortcutWrapper(name, shortcuts[name], onixExe, binDir); err != nil {
+		if err := createShortcutWrapper(name, config.Shortcuts[name], onixExe, binDir); err != nil {
 			warnings = append(warnings, fmt.Sprintf("%s.cmd skipped: %v", name, err))
 			fmt.Printf("  ! %s.cmd (skipped: %v)\n", name, err)
 			continue
@@ -310,6 +299,12 @@ func installModule(m *config.Module) error {
 func cloneOrUpdate(repoURL, ref, dir string) error {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 		return syncRef(dir, ref)
+	}
+
+	// Directory exists but has no .git — treat as a local module, skip clone.
+	if _, err := os.Stat(dir); err == nil {
+		fmt.Printf("  (local) %s — skipping clone\n", filepath.Base(dir))
+		return nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
@@ -402,7 +397,35 @@ func createWrapper(name string) error {
 	return os.WriteFile(filepath.Join(config.BinDir(), name+".cmd"), []byte(content), 0o644)
 }
 
-func isInstalled(name string) bool {
+// EnsureInstalled checks whether the named module is installed. If not, it
+// prompts the user to confirm installation. If the module is not yet declared
+// in config it infers the default repo as sadirano/onix-<name>.
+func EnsureInstalled(name string, cfg *config.Config) error {
+	if IsInstalled(name) {
+		return nil
+	}
+	if cfg.FindModule(name) == nil {
+		guessedRepo := "sadirano/onix-" + name
+		fmt.Printf("Module %q is not installed or declared in config.\nAdd %q and install? [y/N] ", name, guessedRepo)
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(line)) != "y" {
+			return fmt.Errorf("module %q not installed — add it with: onix add <repo>", name)
+		}
+		if err := Add(guessedRepo, cfg); err != nil {
+			return fmt.Errorf("add module %q: %w", name, err)
+		}
+	} else {
+		fmt.Printf("Module %q is declared but not installed. Install now? [y/N] ", name)
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(line)) != "y" {
+			return fmt.Errorf("module %q not installed — run: onix install %s", name, name)
+		}
+	}
+	return Install(name, cfg)
+}
+
+// IsInstalled reports whether the named module binary exists on disk.
+func IsInstalled(name string) bool {
 	bin := filepath.Join(config.ModulesDir(), name, name+".exe")
 	_, err := os.Stat(bin)
 	return err == nil
