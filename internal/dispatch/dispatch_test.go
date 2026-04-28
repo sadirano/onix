@@ -17,8 +17,6 @@ func TestIsCoreCommand(t *testing.T) {
 		{"list", []string{"list"}, true},
 		{"init", []string{"init"}, true},
 		{"shortcuts", []string{"shortcuts"}, true},
-		{"theme", []string{"theme"}, true},
-		{"themes", []string{"themes"}, true},
 		{"help", []string{"help"}, true},
 		{"-h", []string{"-h"}, true},
 		{"--help", []string{"--help"}, true},

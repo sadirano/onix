@@ -10,7 +10,6 @@ import (
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/dispatch"
 	"github.com/sadirano/onix/internal/installer"
-	"github.com/sadirano/onix/internal/visual"
 )
 
 // Onix — a modular directory navigator.
@@ -35,8 +34,6 @@ import (
 // Executables in ~/.onix/bin/ are copies of onix.exe named after each
 // shortcut; the binary detects its own name and injects the flag.
 var shortcuts = config.Shortcuts
-
-var activeVisuals = visual.Default()
 
 func main() {
 	invokedAs := execBasename()

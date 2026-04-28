@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/sadirano/onix/internal/visual"
 )
 
 // isUNCPath reports whether path is a UNC network path (\\server\share\...).
@@ -48,23 +46,7 @@ func selectDestination(aliasName string) string {
 	return promptDestination(aliasName)
 }
 
-var visualsLoaded bool
-
-func ensureVisuals() {
-	if visualsLoaded {
-		return
-	}
-	visualsLoaded = true
-	onixPath, _ := resolveOnixBinaryInfo()
-	if onixPath != "" {
-		if loaded, _, err := visual.Load(filepath.Dir(onixPath)); err == nil {
-			activeVisuals = loaded
-		}
-	}
-}
-
 func fzfPickDir(query string) string {
-	ensureVisuals()
 	if _, err := exec.LookPath("fzf"); err != nil {
 		return ""
 	}
@@ -101,13 +83,11 @@ func fzfPickDir(query string) string {
 	}
 
 	fzfArgs := []string{
-		"--prompt", activeVisuals.FZF.Destination.Prompt,
+		"--prompt", "Destination > ",
 		"--query", query,
 		"--height", "100%",
-	}
-	fzfArgs = visual.AppendLayoutArg(fzfArgs, activeVisuals.FZF.Destination.Layout)
-	if header := strings.TrimSpace(activeVisuals.FZF.Destination.Header); header != "" {
-		fzfArgs = append(fzfArgs, "--header", header)
+		"--layout", "reverse-list",
+		"--header", "Enter to confirm  |  Esc to type manually",
 	}
 	fzfCmd := exec.Command("fzf", fzfArgs...)
 	fzfCmd.Stdin = input
