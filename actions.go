@@ -57,7 +57,8 @@ func executeAction(action, target string, extras []string, cfg *config.Config, t
 		}
 		var rcmd *exec.Cmd
 		if isUNCPath(target) {
-			wrapped := fmt.Sprintf(`pushd "%s" && %s`, target, strings.Join(extras, " "))
+			escapedTarget := strings.ReplaceAll(target, `"`, `\"`)
+			wrapped := fmt.Sprintf(`pushd "%s" && %s`, escapedTarget, strings.Join(extras, " "))
 			rcmd = exec.Command("cmd.exe", "/C", wrapped)
 		} else {
 			rcmd = exec.Command("cmd.exe", "/C", strings.Join(extras, " "))

@@ -176,7 +176,6 @@ func Init() error {
 		fmt.Printf("Config already exists: %s\n", cfgPath)
 	}
 
-	home, _ := os.UserHomeDir()
 	fmt.Printf(`
 Onix initialized at %s
 
@@ -190,7 +189,6 @@ And run:
   onix install
 `, config.Dir(), config.BinDir(), cfgPath)
 
-	_ = home
 	return nil
 }
 
@@ -333,7 +331,7 @@ func syncRef(dir, ref string) error {
 
 	if err := runGit(dir, "checkout", ref); err != nil {
 		if err2 := runGit(dir, "checkout", "-B", ref, "origin/"+ref); err2 != nil {
-			return fmt.Errorf("checkout ref %q: %w", ref, err)
+			return fmt.Errorf("checkout ref %q: %w", ref, err2)
 		}
 	}
 
