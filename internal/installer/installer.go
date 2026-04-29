@@ -1,10 +1,12 @@
 package installer
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
@@ -48,8 +50,14 @@ func InstallAll(cfg *config.Config) error {
 // repo is "user/repo" or "github.com/user/repo".
 func Add(repo string, cfg *config.Config) error {
 	repo = normalizeRepo(repo)
+	if !strings.Contains(repo, "/") {
+		return fmt.Errorf("invalid repo %q — expected format: user/repo or github.com/user/repo", repo)
+	}
 	parts := strings.Split(repo, "/")
 	name := parts[len(parts)-1]
+	if name == "" {
+		return fmt.Errorf("invalid repo %q — could not determine module name", repo)
+	}
 
 	if cfg.FindModule(name) != nil {
 		return fmt.Errorf("module %q already in config", name)
@@ -146,7 +154,7 @@ func List(cfg *config.Config) {
 			ref = "main"
 		}
 		status := "not installed"
-		if isInstalled(name) {
+		if IsInstalled(name) {
 			status = "installed"
 		}
 		if !m.Enabled {
@@ -175,7 +183,6 @@ func Init() error {
 		fmt.Printf("Config already exists: %s\n", cfgPath)
 	}
 
-	home, _ := os.UserHomeDir()
 	fmt.Printf(`
 Onix initialized at %s
 
@@ -189,7 +196,6 @@ And run:
   onix install
 `, config.Dir(), config.BinDir(), cfgPath)
 
-	_ = home
 	return nil
 }
 
@@ -209,19 +215,11 @@ func InstallShortcuts() error {
 		return fmt.Errorf("create bin dir: %w", err)
 	}
 
-	shortcuts := map[string]string{
-		"o":  "",
-		"c":  "",
-		"s":  "-e",
-		"n":  "-n",
-		"y":  "-y",
-		"f":  "-f",
-		"r":  "-r",
-		"sg": "-sg",
-		"ff": "-ff",
+	names := make([]string, 0, len(config.Shortcuts))
+	for name := range config.Shortcuts {
+		names = append(names, name)
 	}
-
-	names := []string{"o", "c", "s", "n", "y", "f", "r", "sg", "ff"}
+	sort.Strings(names)
 	var warnings []string
 	for _, name := range names {
 		legacyExe := filepath.Join(binDir, name+".exe")
@@ -229,7 +227,7 @@ func InstallShortcuts() error {
 			warnings = append(warnings, fmt.Sprintf("%s.exe still in use: %v", name, err))
 		}
 
-		if err := createShortcutWrapper(name, shortcuts[name], onixExe, binDir); err != nil {
+		if err := createShortcutWrapper(name, config.Shortcuts[name], onixExe, binDir); err != nil {
 			warnings = append(warnings, fmt.Sprintf("%s.cmd skipped: %v", name, err))
 			fmt.Printf("  ! %s.cmd (skipped: %v)\n", name, err)
 			continue
@@ -312,6 +310,12 @@ func cloneOrUpdate(repoURL, ref, dir string) error {
 		return syncRef(dir, ref)
 	}
 
+	// Directory exists but has no .git — treat as a local module, skip clone.
+	if _, err := os.Stat(dir); err == nil {
+		fmt.Printf("  (local) %s — skipping clone\n", filepath.Base(dir))
+		return nil
+	}
+
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return err
 	}
@@ -338,29 +342,16 @@ func syncRef(dir, ref string) error {
 
 	if err := runGit(dir, "checkout", ref); err != nil {
 		if err2 := runGit(dir, "checkout", "-B", ref, "origin/"+ref); err2 != nil {
-			return fmt.Errorf("checkout ref %q: %w", ref, err)
+			return fmt.Errorf("checkout ref %q: %w", ref, err2)
 		}
 	}
 
-	branch, err := currentBranch(dir)
-	if err != nil {
-		return err
-	}
-	if branch != "HEAD" {
-		if err := runGit(dir, "pull", "--ff-only", "origin", branch); err != nil {
-			return err
-		}
+	// Pull only when on a branch; symbolic-ref fails on detached HEAD (tag/commit checkout).
+	cmd := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD")
+	if out, err := cmd.Output(); err == nil {
+		return runGit(dir, "pull", "--ff-only", "origin", strings.TrimSpace(string(out)))
 	}
 	return nil
-}
-
-func currentBranch(dir string) (string, error) {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 func runGit(dir string, args ...string) error {
@@ -402,7 +393,38 @@ func createWrapper(name string) error {
 	return os.WriteFile(filepath.Join(config.BinDir(), name+".cmd"), []byte(content), 0o644)
 }
 
-func isInstalled(name string) bool {
+// EnsureInstalled checks whether the named module is installed. If not, it
+// prompts the user to confirm installation. If the module is not yet declared
+// in config it infers the default repo as sadirano/onix-<name>.
+func EnsureInstalled(name string, cfg *config.Config) error {
+	if IsInstalled(name) {
+		return nil
+	}
+	if cfg.FindModule(name) == nil {
+		guessedRepo := "sadirano/onix-" + name
+		fmt.Printf("Module %q is not installed or declared in config.\nAdd %q and install? [y/N] ", name, guessedRepo)
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(line)) != "y" {
+			return fmt.Errorf("module %q not installed — add it with: onix add <repo>", name)
+		}
+		if err := Add(guessedRepo, cfg); err != nil {
+			return fmt.Errorf("add module %q: %w", name, err)
+		}
+	} else {
+		fmt.Printf("Module %q is declared but not installed. Install now? [y/N] ", name)
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(line)) != "y" {
+			return fmt.Errorf("module %q not installed — run: onix install %s", name, name)
+		}
+	}
+	// Note: ReadString errors (e.g. closed stdin) are intentionally ignored;
+	// an empty/failed read produces an empty string which fails the "y" check,
+	// so the prompt safely rejects non-interactive invocations.
+	return Install(name, cfg)
+}
+
+// IsInstalled reports whether the named module binary exists on disk.
+func IsInstalled(name string) bool {
 	bin := filepath.Join(config.ModulesDir(), name, name+".exe")
 	_, err := os.Stat(bin)
 	return err == nil

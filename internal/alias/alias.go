@@ -3,6 +3,7 @@ package alias
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -12,10 +13,14 @@ const (
 	defaultFileName = ".env"
 )
 
+// aliasEnvVars is the precedence list of environment variables that can
+// override the active alias file path. OMNI_* kept for backwards compatibility.
+var aliasEnvVars = []string{"ONIX_ENV", "ONIX_ALIAS_FILE", "OMNI_ENV", "OMNI_ALIAS_FILE"}
+
 // FilePath returns the active alias file path.
 // Precedence: ONIX_ENV > ONIX_ALIAS_FILE > OMNI_ENV > ~/.omni/.env
 func FilePath() string {
-	for _, env := range []string{"ONIX_ENV", "ONIX_ALIAS_FILE", "OMNI_ENV", "OMNI_ALIAS_FILE"} {
+	for _, env := range aliasEnvVars {
 		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
 			return v
 		}
@@ -117,6 +122,39 @@ func Register(name, destination string) error {
 	return os.WriteFile(file, []byte(data), 0o644)
 }
 
+// OpenInEditor opens the active alias file in the given editor.
+func OpenInEditor(editor string) error {
+	f := FilePath()
+	cmd := exec.Command(editor, f)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("open editor: %w", err)
+	}
+	_ = cmd.Wait()
+	return nil
+}
+
+// ApplyEnvOverride propagates aliasFile into ONIX_ALIAS_FILE so that child
+// processes (module binaries) inherit the same alias file path as the parent.
+// It is a no-op when aliasFile is empty or any alias-file env var is already set,
+// so an explicit env override always wins over the config file setting.
+// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
+func ApplyEnvOverride(aliasFile string) {
+	if strings.TrimSpace(aliasFile) == "" {
+		return
+	}
+	for _, env := range aliasEnvVars {
+		if strings.TrimSpace(os.Getenv(env)) != "" {
+			return
+		}
+	}
+	if err := os.Setenv("ONIX_ALIAS_FILE", aliasFile); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not set ONIX_ALIAS_FILE: %v\n", err)
+	}
+}
+
 // Resolve returns the absolute path for the given alias or raw path.
 // Unlike omni, it never prompts — unknown aliases are an error.
 func Resolve(input string, debug bool) (string, error) {
@@ -124,7 +162,7 @@ func Resolve(input string, debug bool) (string, error) {
 	if _, err := os.Stat(input); err == nil {
 		abs, err := filepath.Abs(input)
 		if err != nil {
-			return input, nil
+			return "", fmt.Errorf("resolve path %q: %w", input, err)
 		}
 		return abs, nil
 	}
