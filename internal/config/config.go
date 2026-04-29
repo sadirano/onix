@@ -11,7 +11,12 @@ import (
 
 // Dir returns the onix home directory (~/.onix).
 func Dir() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		if h := os.Getenv("USERPROFILE"); h != "" {
+			home = h
+		}
+	}
 	return filepath.Join(home, ".onix")
 }
 
@@ -137,6 +142,29 @@ func Save(cfg *Config) error {
 	return enc.Encode(cfg)
 }
 
+// IsDebugEnabled reports whether debug output is active.
+// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
+func (c *Config) IsDebugEnabled() bool {
+	return c.Settings.Debug ||
+		os.Getenv("ONIX_DEBUG") == "1" ||
+		os.Getenv("OMNI_DEBUG") == "1"
+}
+
+// ResolveEditor returns the configured editor, falling back to EDITOR env then nvim.
+// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
+func (c *Config) ResolveEditor() string {
+	if e := strings.TrimSpace(c.Settings.Editor); e != "" {
+		return e
+	}
+	if e := strings.TrimSpace(os.Getenv("EDITOR")); e != "" {
+		return e
+	}
+	if e := strings.TrimSpace(os.Getenv("OMNI_EDITOR")); e != "" {
+		return e
+	}
+	return "nvim"
+}
+
 // FindModule returns the module entry with the given name, or nil.
 func (c *Config) FindModule(name string) *Module {
 	for i := range c.Modules {
@@ -159,14 +187,12 @@ const Starter = `# ~/.onix/config.toml
 # timing     = false
 # debug      = false
 
-# Declare modules below. Example:
+# Declare modules below. onix will prompt to install them on first use.
+# Run "onix add <user/repo>" to register a module, then "onix install" to build it.
 #
 # [[module]]
-# name    = "sg"
-# repo    = "sadirano/onix-sg"
+# name    = "mymodule"
+# repo    = "user/repo"
 # ref     = "main"
 # enabled = true
-#
-# [module.config]
-# default_flags = "--type go"
 `
