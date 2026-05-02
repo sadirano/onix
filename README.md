@@ -1,6 +1,15 @@
 # Onix
 
-Modular directory navigator for Windows — jump to any project in one word.
+Jump to any project in one word. Open a shell, your editor, Explorer, or run a command — all from wherever you are, no `cd` required. Extends via Go modules installed straight from GitHub.
+
+```
+o acme                  # open a shell in your project
+n acme                  # open editor there
+sg acme handleAuth      # search contents → jump to line
+r acme "go test ./..."  # run a command without leaving your shell
+```
+
+For the full command reference and workflow examples, see [GUIDE.md](GUIDE.md).
 
 ## Install
 
@@ -9,8 +18,8 @@ scoop bucket add sadirano https://github.com/sadirano/onix
 scoop install onix
 ```
 
-`post_install` runs `onix init` and `onix shortcuts` automatically.
-Add `~/.onix/bin/` to your PATH to activate the shortcut commands (`o`, `n`, `s`, `f`, `r`, `y`, `sg`, `ff`). Restart your terminal after install.
+`post_install` runs `onix init` and `onix shortcuts` automatically.  
+Add `~/.onix/bin/` to your PATH to activate the shortcut commands. Restart your terminal after install.
 
 ### Manual install
 
@@ -29,71 +38,27 @@ cd onix
 build.cmd
 ```
 
----
+## Modules
 
-For command usage and workflow examples, see `GUIDE.md`.
+Onix extends via independent Go modules installed from GitHub:
 
-## Visual Configuration (`onix.visual.toml`)
-
-Onix now reads visual/fzf UI settings from a file named `onix.visual.toml` located in the **same directory as `onix.exe`**.
-
-- If the file does not exist, Onix creates it automatically with defaults.
-- This file controls prompts, previews, and preview window layout for:
-  - destination picker
-  - `sg`
-  - `ff`
-
-### Where the file is created
-
-- If you run the repo binary directly: `C:\...\onix\onix.visual.toml`
-- If you run the deployed binary: `%USERPROFILE%\.onix\onix.visual.toml`
-
-### Supported keys
-
-#### `[fzf.destination]`
-- `prompt`
-- `preview`
-- `preview_window`
-- `header`
-- `height`
-
-#### `[fzf.sg]`
-- `prompt`
-- `color`
-- `preview`
-- `preview_window`
-
-#### `[fzf.ff]`
-- `prompt`
-- `preview`
-- `preview_window`
-
-### Default file
-
-```toml
-[fzf.destination]
-prompt = "Destination > "
-preview = "dir /b \"{}\" 2>nul"
-preview_window = "right:40%,border-left"
-header = "Enter to confirm  |  Esc to type manually"
-height = "60%"
-
-[fzf.sg]
-prompt = "> "
-color = "hl:-1:underline,hl+:-1:underline:reverse"
-preview = "bat --color=always {1} --highlight-line {2}"
-preview_window = "up,60%,border-bottom,+{2}+3/3,~3"
-
-[fzf.ff]
-prompt = "> "
+```
+onix add sadirano/onix-img   # clone, build, and wire up a module
+onix list                    # see installed modules
+onix update                  # pull and rebuild all modules
+onix remove img              # uninstall
 ```
 
-### Notes for customization
+Modules receive the resolved project path and config via environment variables — no argument parsing needed in the module itself. See [GUIDE.md](GUIDE.md#extending-with-modules) for details.
 
-- `sg` uses ripgrep vimgrep format, so in previews:
-  - `{1}` = file path
-  - `{2}` = line number
-- Omni-style default for `sg` preview centering is `+{2}+3/3,~3`.
-- If `bat` is not installed, Onix falls back to plain file preview (`type`).
-- `ff` defaults to no preview (same baseline style as omni defaults); add `preview` / `preview_window` if you want it.
-- Restart the command you are running (`sg`, `ff`, etc.) to pick up changes.
+## Visual Configuration
+
+fzf UI settings (prompts, preview layout, colours) are controlled by `onix.visual.toml`, located next to `onix.exe`. The file is created automatically with defaults on first run. Switch themes interactively:
+
+```
+onix theme
+```
+
+## License
+
+MIT
