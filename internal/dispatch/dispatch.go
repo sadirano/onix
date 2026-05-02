@@ -38,12 +38,13 @@ func IsCoreCommand(args []string) bool {
 // Environment variables set for the module:
 //
 //	ONIX_MODULE        module name
+//	ONIX_ENTRY         entry point name (empty for single-entry modules)
 //	ONIX_ALIAS         the alias string the user typed
 //	ONIX_TARGET        resolved absolute target path (same as CWD)
 //	ONIX_MODULE_CONFIG JSON-encoded module config section
 //	ONIX_HOME          onix home directory (~/.onix)
 //	ONIX_EDITOR        resolved editor (from config, then EDITOR env, then nvim)
-func Run(moduleName, aliasName string, args []string, cfg *config.Config) error {
+func Run(moduleName, entryName, aliasName string, args []string, cfg *config.Config) error {
 	target, err := alias.Resolve(aliasName, cfg.IsDebugEnabled())
 	if err != nil {
 		return err
@@ -54,41 +55,45 @@ func Run(moduleName, aliasName string, args []string, cfg *config.Config) error 
 	if err := os.Chdir(target); err != nil {
 		return fmt.Errorf("chdir to %q: %w", target, err)
 	}
-	return runModule(moduleName, moduleName, aliasName, target, args, cfg)
+	return runModule(moduleName, entryName, aliasName, target, args, cfg)
 }
 
 // RunResolved executes the named module with a pre-resolved target directory.
 // Used when the caller has already resolved the alias and applied any subdirectory,
 // bypassing the alias resolution step inside Run.
 //
-// binModule overrides the directory/binary name used to locate the executable
-// (e.g. "onix-sg" when the action/ONIX_MODULE name is "sg"). Pass "" to use
-// moduleName for both.
-func RunResolved(moduleName, binModule, target string, args []string, cfg *config.Config) error {
-	if binModule == "" {
-		binModule = moduleName
-	}
-	return runModule(moduleName, binModule, "", target, args, cfg)
+// entryName is the entry point sub-command to pass to the binary. Pass "" for
+// single-entry modules.
+func RunResolved(moduleName, entryName, target string, args []string, cfg *config.Config) error {
+	return runModule(moduleName, entryName, "", target, args, cfg)
 }
 
 // runModule builds and executes the module command. aliasName is included in
 // the environment as ONIX_ALIAS only when non-empty.
-func runModule(moduleName, binModule, aliasName, target string, args []string, cfg *config.Config) error {
+func runModule(moduleName, entryName, aliasName, target string, args []string, cfg *config.Config) error {
 	debug := cfg.IsDebugEnabled()
 
-	binPath := filepath.Join(config.ModulesDir(), binModule, binModule+".exe")
-	if _, err := os.Stat(binPath); err != nil {
-		return fmt.Errorf("module %q not found at %s — run: onix install %s", binModule, binPath, binModule)
+	mod := cfg.FindModule(moduleName)
+	if mod == nil {
+		return fmt.Errorf("module %q not found in config — run: onix add <repo>", moduleName)
 	}
 
-	mod := cfg.FindModule(binModule)
-	modConfigJSON := "{}"
-	if mod != nil {
-		modConfigJSON = mod.ConfigJSON()
+	srcDir := config.ModuleDir(mod.Repo)
+	binName := config.RepoBinName(mod.Repo) + ".exe"
+	binPath := filepath.Join(srcDir, binName)
+	if _, err := os.Stat(binPath); err != nil {
+		return fmt.Errorf("module %q not found at %s — run: onix install %s", moduleName, binPath, moduleName)
+	}
+
+	modConfigJSON := mod.ConfigJSON()
+
+	// For multi-entry modules, prepend the entry name to args.
+	if entryName != "" {
+		args = append([]string{entryName}, args...)
 	}
 
 	if debug {
-		fmt.Printf("[ONIX] module=%q bin=%q alias=%q target=%q args=%v\n", moduleName, binModule, aliasName, target, args)
+		fmt.Printf("[ONIX] module=%q entry=%q alias=%q target=%q args=%v\n", moduleName, entryName, aliasName, target, args)
 	}
 
 	cmd := exec.Command(binPath, args...)
@@ -105,6 +110,9 @@ func runModule(moduleName, binModule, aliasName, target string, args []string, c
 	)
 	if aliasName != "" {
 		cmd.Env = append(cmd.Env, "ONIX_ALIAS="+aliasName)
+	}
+	if entryName != "" {
+		cmd.Env = append(cmd.Env, "ONIX_ENTRY="+entryName)
 	}
 
 	if err := cmd.Start(); err != nil {

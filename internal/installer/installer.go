@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/sadirano/onix/internal/config"
 )
 
@@ -46,15 +47,20 @@ func InstallAll(cfg *config.Config) error {
 	return nil
 }
 
-// Add appends a new [[module]] entry to config without installing it.
-// repo is "user/repo" or "github.com/user/repo".
-func Add(repo string, cfg *config.Config) error {
+// Add appends a new [[module]] entry to config and immediately installs it.
+// repo is "user/repo" or "github.com/user/repo". alias overrides the command
+// name; if empty, the repo's last segment is used.
+func Add(repo, alias string, cfg *config.Config) error {
 	repo = normalizeRepo(repo)
 	if !strings.Contains(repo, "/") {
 		return fmt.Errorf("invalid repo %q — expected format: user/repo or github.com/user/repo", repo)
 	}
-	parts := strings.Split(repo, "/")
-	name := parts[len(parts)-1]
+
+	name := alias
+	if name == "" {
+		parts := strings.Split(repo, "/")
+		name = parts[len(parts)-1]
+	}
 	if name == "" {
 		return fmt.Errorf("invalid repo %q — could not determine module name", repo)
 	}
@@ -73,18 +79,23 @@ func Add(repo string, cfg *config.Config) error {
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
-	fmt.Printf("Added %q (%s) — run `onix install %s` to build and wire it up.\n", name, repo, name)
+	fmt.Printf("Added %q (%s)\n", name, repo)
+	if err := Install(name, cfg); err != nil {
+		fmt.Printf("  ! install failed: %v\n  Retry with: onix install %s\n", err, name)
+	}
 	return nil
 }
 
 // Remove uninstalls a module: deletes its directory, its .cmd wrapper, and
 // removes its entry from config.
 func Remove(name string, cfg *config.Config) error {
+	var removedRepo string
 	found := false
 	kept := make([]config.Module, 0, len(cfg.Modules))
 	for _, m := range cfg.Modules {
 		if strings.EqualFold(m.EffectiveName(), name) {
 			found = true
+			removedRepo = m.Repo
 			continue
 		}
 		kept = append(kept, m)
@@ -99,15 +110,14 @@ func Remove(name string, cfg *config.Config) error {
 	}
 
 	// Remove binary directory.
-	modDir := filepath.Join(config.ModulesDir(), name)
+	modDir := moduleDir(removedRepo)
 	if err := os.RemoveAll(modDir); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove module dir: %w", err)
 	}
 
-	// Remove .cmd wrapper.
-	wrapper := filepath.Join(config.BinDir(), name+".cmd")
-	if err := os.Remove(wrapper); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove wrapper: %w", err)
+	// Remove .cmd wrapper(s) — handles both single and multi-entry modules.
+	if err := removeModuleWrappers(name); err != nil {
+		return fmt.Errorf("remove wrappers: %w", err)
 	}
 
 	fmt.Printf("Removed %s.\n", name)
@@ -154,7 +164,7 @@ func List(cfg *config.Config) {
 			ref = "main"
 		}
 		status := "not installed"
-		if IsInstalled(name) {
+		if IsInstalled(m.Repo) {
 			status = "installed"
 		}
 		if !m.Enabled {
@@ -289,8 +299,9 @@ func createShortcutWrapper(name, flag, onixExe, binDir string) error {
 func installModule(m *config.Module) error {
 	name := m.EffectiveName()
 	repoURL := "https://github.com/" + normalizeRepo(m.Repo)
-	srcDir := filepath.Join(config.ModulesDir(), name)
-	binPath := filepath.Join(srcDir, name+".exe")
+	srcDir := config.ModuleDir(m.Repo)
+	binName := config.RepoBinName(m.Repo) + ".exe"
+	binPath := filepath.Join(srcDir, binName)
 
 	if err := cloneOrUpdate(repoURL, m.Ref, srcDir); err != nil {
 		return err
@@ -298,16 +309,44 @@ func installModule(m *config.Module) error {
 	if err := buildGo(srcDir, binPath); err != nil {
 		return err
 	}
-	if err := createWrapper(name); err != nil {
-		return err
+
+	manifest, err := loadManifest(srcDir)
+	if err != nil {
+		return fmt.Errorf("load manifest: %w", err)
 	}
+	entries := resolveEntries(manifest, m.Entries)
+
+	if len(entries) == 0 {
+		// Single-entry path: one wrapper named after the module alias.
+		if err := checkCmdConflict(name, name, ""); err != nil {
+			return err
+		}
+		if err := createWrapper(name); err != nil {
+			return err
+		}
+	} else {
+		// Multi-entry path: one wrapper per entry.
+		for _, e := range entries {
+			cmdName := e.EffectiveCmd()
+			if err := checkCmdConflict(cmdName, name, e.Name); err != nil {
+				return err
+			}
+			if err := createEntryWrapper(name, e.Name, cmdName); err != nil {
+				return err
+			}
+		}
+	}
+
 	fmt.Printf("  ✓ %s -> %s\n", name, binPath)
 	return nil
 }
 
 func cloneOrUpdate(repoURL, ref, dir string) error {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-		return syncRef(dir, ref)
+		if err := syncRef(dir, ref); err != nil {
+			fmt.Printf("  ! could not reach remote for %s (%v) — building from cached source\n", filepath.Base(dir), err)
+		}
+		return nil
 	}
 
 	// Directory exists but has no .git — treat as a local module, skip clone.
@@ -397,17 +436,24 @@ func createWrapper(name string) error {
 // prompts the user to confirm installation. If the module is not yet declared
 // in config it infers the default repo as sadirano/onix-<name>.
 func EnsureInstalled(name string, cfg *config.Config) error {
-	if IsInstalled(name) {
+	mod := cfg.FindModule(name)
+
+	repo := "sadirano/onix-" + name
+	if mod != nil {
+		repo = mod.Repo
+	}
+
+	if IsInstalled(repo) {
 		return nil
 	}
-	if cfg.FindModule(name) == nil {
-		guessedRepo := "sadirano/onix-" + name
-		fmt.Printf("Module %q is not installed or declared in config.\nAdd %q and install? [y/N] ", name, guessedRepo)
+
+	if mod == nil {
+		fmt.Printf("Module %q is not installed or declared in config.\nAdd %q and install? [y/N] ", name, repo)
 		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 		if strings.ToLower(strings.TrimSpace(line)) != "y" {
 			return fmt.Errorf("module %q not installed — add it with: onix add <repo>", name)
 		}
-		if err := Add(guessedRepo, cfg); err != nil {
+		if err := Add(repo, "", cfg); err != nil {
 			return fmt.Errorf("add module %q: %w", name, err)
 		}
 	} else {
@@ -423,18 +469,159 @@ func EnsureInstalled(name string, cfg *config.Config) error {
 	return Install(name, cfg)
 }
 
-// IsInstalled reports whether the named module binary exists on disk.
-func IsInstalled(name string) bool {
-	bin := filepath.Join(config.ModulesDir(), name, name+".exe")
+// IsInstalled reports whether the module binary for the given repo exists on disk.
+// repo is "user/repo" (or the full GitHub URL — it will be normalized).
+func IsInstalled(repo string) bool {
+	name := repoName(repo)
+	bin := filepath.Join(moduleDir(repo), name+".exe")
 	_, err := os.Stat(bin)
 	return err == nil
 }
 
-// normalizeRepo strips any leading "github.com/" or URL scheme so the result
-// is always "user/repo".
-func normalizeRepo(repo string) string {
-	repo = strings.TrimPrefix(repo, "https://")
-	repo = strings.TrimPrefix(repo, "http://")
-	repo = strings.TrimPrefix(repo, "github.com/")
-	return repo
+// normalizeRepo delegates to config.NormalizeRepo.
+func normalizeRepo(repo string) string { return config.NormalizeRepo(repo) }
+
+// moduleDir delegates to config.ModuleDir.
+func moduleDir(repo string) string { return config.ModuleDir(repo) }
+
+// repoName delegates to config.RepoBinName.
+func repoName(repo string) string { return config.RepoBinName(repo) }
+
+// ---------------------------------------------------------------------------
+// Entry-point helpers
+// ---------------------------------------------------------------------------
+
+// manifestToml is the structure of an onix.toml manifest in a module source dir.
+type manifestToml struct {
+	Entries []config.Entry `toml:"entry"`
+}
+
+// loadManifest reads onix.toml from srcDir and returns its entry list.
+// Returns nil (not an error) when the file is absent.
+func loadManifest(srcDir string) ([]config.Entry, error) {
+	p := filepath.Join(srcDir, "onix.toml")
+	if _, err := os.Stat(p); os.IsNotExist(err) {
+		return nil, nil
+	}
+	var m manifestToml
+	if _, err := toml.DecodeFile(p, &m); err != nil {
+		return nil, err
+	}
+	return m.Entries, nil
+}
+
+// resolveEntries applies user overrides (from config) on top of the manifest.
+// If manifest is empty, returns nil (no multi-entry mode).
+// For each manifest entry, if overrides contains a matching name with a
+// non-empty Cmd, that Cmd is used; otherwise the entry's Name is used as Cmd.
+func resolveEntries(manifest []config.Entry, overrides []config.Entry) []config.Entry {
+	if len(manifest) == 0 {
+		return nil
+	}
+	overrideMap := make(map[string]string, len(overrides))
+	for _, o := range overrides {
+		if o.Cmd != "" {
+			overrideMap[o.Name] = o.Cmd
+		}
+	}
+	out := make([]config.Entry, len(manifest))
+	for i, e := range manifest {
+		cmd := e.Name
+		if ov, ok := overrideMap[e.Name]; ok {
+			cmd = ov
+		} else if e.Cmd != "" {
+			cmd = e.Cmd
+		}
+		out[i] = config.Entry{Name: e.Name, Cmd: cmd}
+	}
+	return out
+}
+
+// extractCmdVar parses a line of the form  set "VARNAME=value"  from content
+// and returns value. Returns "" when the variable is not found.
+func extractCmdVar(content, varName string) string {
+	prefix := `set "` + varName + `=`
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.HasPrefix(line, prefix) {
+			val := strings.TrimPrefix(line, prefix)
+			val = strings.TrimSuffix(val, `"`)
+			return val
+		}
+	}
+	return ""
+}
+
+// checkCmdConflict returns an error when the .cmd file at BinDir/cmdName.cmd
+// already exists and is owned by a different module/entry.
+// Returns nil when the file is absent or when it is owned by (moduleName, entryName).
+func checkCmdConflict(cmdName, moduleName, entryName string) error {
+	p := filepath.Join(config.BinDir(), cmdName+".cmd")
+	data, err := os.ReadFile(p)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read existing wrapper %s: %w", cmdName+".cmd", err)
+	}
+	content := string(data)
+	existingModule := extractCmdVar(content, "ONIX_MODULE")
+	existingEntry := extractCmdVar(content, "ONIX_ENTRY")
+	if existingModule == moduleName && existingEntry == entryName {
+		return nil // same owner — safe to overwrite
+	}
+	if existingModule != "" {
+		return fmt.Errorf("cmd %q is already owned by module %q (entry %q) — remove that module first", cmdName, existingModule, existingEntry)
+	}
+	return nil // not an onix-managed wrapper; allow overwrite
+}
+
+// createEntryWrapper writes a .cmd wrapper that sets both ONIX_MODULE and ONIX_ENTRY.
+func createEntryWrapper(moduleName, entryName, cmdName string) error {
+	if err := os.MkdirAll(config.BinDir(), 0o755); err != nil {
+		return err
+	}
+	onixExe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve onix executable: %w", err)
+	}
+	onixExe, err = filepath.Abs(onixExe)
+	if err != nil {
+		return fmt.Errorf("resolve onix executable path: %w", err)
+	}
+	content := fmt.Sprintf(
+		"@echo off\r\nsetlocal\r\nset \"ONIX_MODULE=%s\"\r\nset \"ONIX_ENTRY=%s\"\r\n\"%s\" %%*\r\nset \"ONIX_EXIT=%%ERRORLEVEL%%\"\r\nendlocal & exit /b %%ONIX_EXIT%%\r\n",
+		moduleName, entryName, onixExe,
+	)
+	return os.WriteFile(filepath.Join(config.BinDir(), cmdName+".cmd"), []byte(content), 0o644)
+}
+
+// removeModuleWrappers removes all .cmd files in BinDir whose ONIX_MODULE
+// variable matches moduleName. This handles both single-entry and multi-entry
+// modules transparently.
+func removeModuleWrappers(moduleName string) error {
+	binDir := config.BinDir()
+	entries, err := os.ReadDir(binDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, de := range entries {
+		if de.IsDir() || !strings.HasSuffix(de.Name(), ".cmd") {
+			continue
+		}
+		p := filepath.Join(binDir, de.Name())
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		if extractCmdVar(string(data), "ONIX_MODULE") == moduleName {
+			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove %s: %w", de.Name(), err)
+			}
+		}
+	}
+	return nil
 }

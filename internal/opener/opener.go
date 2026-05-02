@@ -99,7 +99,7 @@ func OpenSearchMatches(editor, dir string, matches []Match) error {
 		if len(matches) == 1 {
 			return RunEditorCommand(editor, dir, fmt.Sprintf("+%d", matches[0].Line), matches[0].Path)
 		}
-		tmp, err := os.CreateTemp("", "onix-sg-*.qf")
+		tmp, err := os.CreateTemp("", "onix-*.qf")
 		if err != nil {
 			return fmt.Errorf("create temp quickfix file: %w", err)
 		}

@@ -68,7 +68,8 @@ func main() {
 		if err := installer.EnsureInstalled(mod, cfg); err != nil {
 			fatal("%v", err)
 		}
-		if err := dispatch.Run(mod, args[0], args[1:], cfg); err != nil {
+		entry := strings.TrimSpace(os.Getenv("ONIX_ENTRY"))
+		if err := dispatch.Run(mod, entry, args[0], args[1:], cfg); err != nil {
 			fatal("%v", err)
 		}
 		t.mark("dispatch")

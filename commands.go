@@ -29,11 +29,17 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 		t.mark("install")
 
 	case "add":
-		if len(args) < 2 {
-			fatal("usage: onix add <user/repo>")
-		}
-		if err := installer.Add(args[1], cfg); err != nil {
-			fatal("%v", err)
+		switch len(args) {
+		case 2:
+			if err := installer.Add(args[1], "", cfg); err != nil {
+				fatal("%v", err)
+			}
+		case 3:
+			if err := installer.Add(args[2], args[1], cfg); err != nil {
+				fatal("%v", err)
+			}
+		default:
+			fatal("usage: onix add [<name>] <user/repo>")
 		}
 
 	case "remove":

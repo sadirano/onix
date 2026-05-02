@@ -9,6 +9,22 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// Entry describes one entry point exposed by a module binary.
+// When a module has multiple entry points, each gets its own .cmd wrapper.
+type Entry struct {
+	Name string `toml:"name"` // sub-command passed to the module binary
+	Cmd  string `toml:"cmd"`  // .cmd wrapper filename; defaults to Name
+}
+
+// EffectiveCmd returns the .cmd wrapper filename for this entry, falling back
+// to Name when Cmd is empty.
+func (e Entry) EffectiveCmd() string {
+	if e.Cmd != "" {
+		return e.Cmd
+	}
+	return e.Name
+}
+
 // Dir returns the onix home directory (~/.onix).
 func Dir() string {
 	home, err := os.UserHomeDir()
@@ -50,6 +66,7 @@ type Module struct {
 	Ref     string         `toml:"ref"`     // branch, tag, or SHA; empty = default branch
 	Enabled bool           `toml:"enabled"` // false = skip without removing
 	Config  map[string]any `toml:"config"`  // passed as ONIX_MODULE_CONFIG JSON
+	Entries []Entry        `toml:"entry"`   // optional multi-entry overrides
 }
 
 // EffectiveName returns the module name, falling back to the repo basename.
@@ -98,6 +115,7 @@ func Load() (*Config, error) {
 		Ref     string         `toml:"ref"`
 		Enabled *bool          `toml:"enabled"`
 		Config  map[string]any `toml:"config"`
+		Entries []Entry        `toml:"entry"`
 	}
 	type rawConfig struct {
 		Settings Settings    `toml:"settings"`
@@ -122,6 +140,7 @@ func Load() (*Config, error) {
 			Ref:     m.Ref,
 			Enabled: enabled,
 			Config:  m.Config,
+			Entries: m.Entries,
 		})
 	}
 
@@ -173,6 +192,27 @@ func (c *Config) FindModule(name string) *Module {
 		}
 	}
 	return nil
+}
+
+// NormalizeRepo strips URL prefixes so the result is always "user/repo".
+func NormalizeRepo(repo string) string {
+	repo = strings.TrimPrefix(repo, "https://")
+	repo = strings.TrimPrefix(repo, "http://")
+	repo = strings.TrimPrefix(repo, "github.com/")
+	return repo
+}
+
+// ModuleDir returns the source/binary directory for a module repo under ModulesDir.
+func ModuleDir(repo string) string {
+	parts := strings.Split(NormalizeRepo(repo), "/")
+	args := append([]string{ModulesDir()}, parts...)
+	return filepath.Join(args...)
+}
+
+// RepoBinName returns the binary name for a repo (last path segment).
+func RepoBinName(repo string) string {
+	parts := strings.Split(NormalizeRepo(repo), "/")
+	return parts[len(parts)-1]
 }
 
 // Starter returns the minimal config.toml content written by `onix init`.
