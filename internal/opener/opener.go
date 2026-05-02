@@ -148,7 +148,7 @@ func OpenSearchMatchesMixed(editor, dir string, matches []Match) error {
 
 // OpenInExplorer opens path in Windows Explorer with the file selected.
 func OpenInExplorer(path string) error {
-	cmd := exec.Command("cmd.exe", "/C", "start", "explorer.exe", fmt.Sprintf(`/select,%s`, path))
+	cmd := exec.Command("cmd.exe", "/C", "start", "explorer.exe", fmt.Sprintf(`/select,"%s"`, path))
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Start()
 }
