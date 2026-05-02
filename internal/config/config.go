@@ -194,11 +194,13 @@ func (c *Config) FindModule(name string) *Module {
 	return nil
 }
 
-// NormalizeRepo strips URL prefixes so the result is always "user/repo".
+// NormalizeRepo strips URL prefixes and a trailing .git suffix so the result
+// is always "user/repo".
 func NormalizeRepo(repo string) string {
 	repo = strings.TrimPrefix(repo, "https://")
 	repo = strings.TrimPrefix(repo, "http://")
 	repo = strings.TrimPrefix(repo, "github.com/")
+	repo = strings.TrimSuffix(repo, ".git")
 	return repo
 }
 

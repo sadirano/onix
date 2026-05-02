@@ -118,5 +118,11 @@ func runModule(moduleName, entryName, aliasName, target string, args []string, c
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start module %q: %w", moduleName, err)
 	}
-	return cmd.Wait()
+	if err := cmd.Wait(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		return fmt.Errorf("module %q: %w", moduleName, err)
+	}
+	return nil
 }

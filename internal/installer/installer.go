@@ -264,8 +264,10 @@ func InstallShortcuts() error {
 // Uses PowerShell's [Environment]::SetEnvironmentVariable so the change
 // persists across sessions without requiring a reboot or admin rights.
 func addBinToUserPath(dir string) error {
+	// Escape single quotes by doubling them — PowerShell single-quoted string rule.
+	escapedDir := strings.ReplaceAll(dir, `'`, `''`)
 	script := `
-$dir = '` + dir + `'
+$dir = '` + escapedDir + `'
 $current = [Environment]::GetEnvironmentVariable("Path", "User")
 $parts = $current -split ";" | Where-Object { $_ -ne "" }
 if ($parts -contains $dir) {
@@ -453,19 +455,21 @@ func EnsureInstalled(name string, cfg *config.Config) error {
 		if strings.ToLower(strings.TrimSpace(line)) != "y" {
 			return fmt.Errorf("module %q not installed — add it with: onix add <repo>", name)
 		}
+		// Add saves config, clones, builds, and wires the wrapper.
+		// If it returns nil the module is fully installed; no second Install call needed.
 		if err := Add(repo, "", cfg); err != nil {
 			return fmt.Errorf("add module %q: %w", name, err)
 		}
-	} else {
-		fmt.Printf("Module %q is declared but not installed. Install now? [y/N] ", name)
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		if strings.ToLower(strings.TrimSpace(line)) != "y" {
-			return fmt.Errorf("module %q not installed — run: onix install %s", name, name)
-		}
+		return nil
 	}
 	// Note: ReadString errors (e.g. closed stdin) are intentionally ignored;
 	// an empty/failed read produces an empty string which fails the "y" check,
 	// so the prompt safely rejects non-interactive invocations.
+	fmt.Printf("Module %q is declared but not installed. Install now? [y/N] ", name)
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	if strings.ToLower(strings.TrimSpace(line)) != "y" {
+		return fmt.Errorf("module %q not installed — run: onix install %s", name, name)
+	}
 	return Install(name, cfg)
 }
 
