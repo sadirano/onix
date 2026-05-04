@@ -26,6 +26,9 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 				fatal("%v", err)
 			}
 		}
+		if err := installer.InstallShortcuts(cfg); err != nil {
+			fatal("%v", err)
+		}
 		t.mark("install")
 
 	case "add":
@@ -35,11 +38,11 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 				fatal("%v", err)
 			}
 		case 3:
-			if err := installer.Add(args[2], args[1], cfg); err != nil {
+			if err := installer.Add(args[1], args[2], cfg); err != nil {
 				fatal("%v", err)
 			}
 		default:
-			fatal("usage: onix add [<name>] <user/repo>")
+			fatal("usage: onix add <user/repo> [name]")
 		}
 
 	case "remove":
@@ -59,6 +62,9 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 		if err := installer.Update(name, cfg); err != nil {
 			fatal("%v", err)
 		}
+		if err := installer.InstallShortcuts(cfg); err != nil {
+			fatal("%v", err)
+		}
 		t.mark("update")
 
 	case "list":
@@ -66,11 +72,6 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 
 	case "init":
 		if err := installer.Init(); err != nil {
-			fatal("%v", err)
-		}
-
-	case "shortcuts":
-		if err := installer.InstallShortcuts(); err != nil {
 			fatal("%v", err)
 		}
 
@@ -121,20 +122,12 @@ func registerAlias(args []string) string {
 	return destination
 }
 
-// actionFlags maps CLI flag strings to their action names.
-var actionFlags = map[string]string{
-	"-e": "e", "-n": "n", "-y": "y", "-f": "f", "-r": "r",
-}
-
-// parseActionArgs extracts the action flag, optional subdir, and positional
-// extras from the tail of an alias invocation.
-// .cmd wrappers append the action flag last (e.g. `o %* -n`), so positional
-// extras appear before the flag.
-func parseActionArgs(args []string) (action, subdir string, extras []string) {
+// parseExtras extracts an optional subdir (-s/--subdir) and positional extras
+// from the tail of an alias invocation. The action is now carried by the
+// ONIX_COMMAND environment variable set by the .cmd wrapper, not by a flag.
+func parseExtras(args []string) (subdir string, extras []string) {
 	for i := 0; i < len(args); i++ {
-		if a, ok := actionFlags[args[i]]; ok {
-			action = a
-		} else if args[i] == "-s" || args[i] == "--subdir" {
+		if args[i] == "-s" || args[i] == "--subdir" {
 			if i+1 < len(args) {
 				subdir = args[i+1]
 				i++
@@ -146,6 +139,20 @@ func parseActionArgs(args []string) (action, subdir string, extras []string) {
 	return
 }
 
+// resolveBuiltin maps an ONIX_COMMAND value to the builtin identifier used by
+// executeAction. Returns "shell" when cmdName is empty (direct onix invocation).
+// Calls fatal when cmdName is set but not found in config.
+func resolveBuiltin(cmdName string, cfg *config.Config) string {
+	if cmdName == "" {
+		return "shell"
+	}
+	action := cfg.FindAction(cmdName)
+	if action == nil {
+		fatal("unknown command %q — check [[action]] blocks in config", cmdName)
+	}
+	return action.Builtin
+}
+
 // printHelp writes the usage message to stdout.
 func printHelp() {
 	fmt.Print(`Onix — modular directory navigator
@@ -155,18 +162,22 @@ Usage:
   onix <alias>                  open shell in target directory
   onix -a <alias> -d <path>     register an alias
   onix install [name]           install one or all modules
-  onix add <user/repo>          declare a module in config
+  onix add <user/repo> [name]   declare a module in config
   onix remove <name>            remove a module
   onix update [name]            update one or all modules
   onix list                     list declared modules
   onix init                     initialise ~/.onix/ structure
   onix help                     show this message
 
+Action invocation (via generated wrappers):
+  <action> <alias> [args...]    e.g. editor myproject
+
 Module invocation (via generated wrappers):
   <module> <alias> [args...]    e.g. mymodule myproject foo bar
 
 Environment:
-  ONIX_MODULE        set by .cmd wrappers to select the module
+  ONIX_COMMAND       set by action .cmd wrappers
+  ONIX_MODULE        set by module .cmd wrappers
   ONIX_DEBUG=1       verbose trace
   ONIX_TIMING=1      print phase timings to stderr
   ONIX_ENV           override alias file path
@@ -178,8 +189,13 @@ Bin:     ~/.onix/bin/   ← add this to PATH
 `)
 }
 
-// fatal prints an error to stderr and exits with code 1.
+// fatal prints an error to stderr and exits with code 1 (general error).
 func fatal(format string, a ...any) {
+	fatalCode(exitErr, format, a...)
+}
+
+// fatalCode prints an error to stderr and exits with the given code.
+func fatalCode(code int, format string, a ...any) {
 	fmt.Fprintf(os.Stderr, "onix: "+format+"\n", a...)
-	os.Exit(1)
+	os.Exit(code)
 }

@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -51,7 +50,7 @@ func InstallAll(cfg *config.Config) error {
 // repo is "user/repo" or "github.com/user/repo". alias overrides the command
 // name; if empty, the repo's last segment is used.
 func Add(repo, alias string, cfg *config.Config) error {
-	repo = normalizeRepo(repo)
+	repo = config.NormalizeRepo(repo)
 	if !strings.Contains(repo, "/") {
 		return fmt.Errorf("invalid repo %q — expected format: user/repo or github.com/user/repo", repo)
 	}
@@ -81,7 +80,7 @@ func Add(repo, alias string, cfg *config.Config) error {
 	}
 	fmt.Printf("Added %q (%s)\n", name, repo)
 	if err := Install(name, cfg); err != nil {
-		fmt.Printf("  ! install failed: %v\n  Retry with: onix install %s\n", err, name)
+		return fmt.Errorf("install %s: %w (retry with: onix install %s)", name, err, name)
 	}
 	return nil
 }
@@ -110,7 +109,7 @@ func Remove(name string, cfg *config.Config) error {
 	}
 
 	// Remove binary directory.
-	modDir := moduleDir(removedRepo)
+	modDir := config.ModuleDir(removedRepo)
 	if err := os.RemoveAll(modDir); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove module dir: %w", err)
 	}
@@ -209,98 +208,13 @@ And run:
 	return nil
 }
 
-// InstallShortcuts writes cmd wrappers in ~/.onix/bin/ for built-in shortcuts.
-func InstallShortcuts() error {
-	onixExe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get executable path: %w", err)
-	}
-	onixExe, err = filepath.Abs(onixExe)
-	if err != nil {
-		return fmt.Errorf("resolve executable path: %w", err)
-	}
-
-	binDir := config.BinDir()
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		return fmt.Errorf("create bin dir: %w", err)
-	}
-
-	names := make([]string, 0, len(config.Shortcuts))
-	for name := range config.Shortcuts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	var warnings []string
-	for _, name := range names {
-		legacyExe := filepath.Join(binDir, name+".exe")
-		if err := os.Remove(legacyExe); err != nil && !os.IsNotExist(err) {
-			warnings = append(warnings, fmt.Sprintf("%s.exe still in use: %v", name, err))
-		}
-
-		if err := createShortcutWrapper(name, config.Shortcuts[name], onixExe, binDir); err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s.cmd skipped: %v", name, err))
-			fmt.Printf("  ! %s.cmd (skipped: %v)\n", name, err)
-			continue
-		}
-		fmt.Printf("  %s.cmd\n", name)
-	}
-	fmt.Printf("Shortcuts installed in %s\n", binDir)
-	if len(warnings) > 0 {
-		fmt.Println("Shortcut warnings:")
-		for _, w := range warnings {
-			fmt.Printf("  - %s\n", w)
-		}
-		fmt.Println("Close related shells and run `onix shortcuts` again to refresh all shortcuts.")
-	}
-
-	if err := addBinToUserPath(binDir); err != nil {
-		fmt.Printf("Warning: could not update PATH automatically: %v\n", err)
-		fmt.Printf("Add manually: %s\n", binDir)
-	}
-	return nil
-}
-
-// addBinToUserPath adds dir to the user-scoped PATH in the Windows registry.
-// Uses PowerShell's [Environment]::SetEnvironmentVariable so the change
-// persists across sessions without requiring a reboot or admin rights.
-func addBinToUserPath(dir string) error {
-	// Escape single quotes by doubling them — PowerShell single-quoted string rule.
-	escapedDir := strings.ReplaceAll(dir, `'`, `''`)
-	script := `
-$dir = '` + escapedDir + `'
-$current = [Environment]::GetEnvironmentVariable("Path", "User")
-$parts = $current -split ";" | Where-Object { $_ -ne "" }
-if ($parts -contains $dir) {
-    Write-Host "PATH already contains $dir"
-} else {
-    $new = ($parts + $dir) -join ";"
-    [Environment]::SetEnvironmentVariable("Path", $new, "User")
-    Write-Host "Added to PATH: $dir"
-    Write-Host "Restart your terminal for the change to take effect."
-}
-`
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func createShortcutWrapper(name, flag, onixExe, binDir string) error {
-	extra := ""
-	if strings.TrimSpace(flag) != "" {
-		extra = " " + flag
-	}
-	content := fmt.Sprintf("@echo off\r\nsetlocal\r\n\"%s\" %%*%s\r\nset \"ONIX_EXIT=%%ERRORLEVEL%%\"\r\nendlocal & exit /b %%ONIX_EXIT%%\r\n", onixExe, extra)
-	return os.WriteFile(filepath.Join(binDir, name+".cmd"), []byte(content), 0o644)
-}
-
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 
 func installModule(m *config.Module) error {
 	name := m.EffectiveName()
-	repoURL := "https://github.com/" + normalizeRepo(m.Repo)
+	repoURL := "https://github.com/" + config.NormalizeRepo(m.Repo)
 	srcDir := config.ModuleDir(m.Repo)
 	binName := config.RepoBinName(m.Repo) + ".exe"
 	binPath := filepath.Join(srcDir, binName)
@@ -339,7 +253,7 @@ func installModule(m *config.Module) error {
 		}
 	}
 
-	fmt.Printf("  ✓ %s -> %s\n", name, binPath)
+	fmt.Printf("  ok %s -> %s\n", name, binPath)
 	return nil
 }
 
@@ -416,24 +330,6 @@ func buildGo(srcDir, outPath string) error {
 	return cmd.Run()
 }
 
-func createWrapper(name string) error {
-	if err := os.MkdirAll(config.BinDir(), 0o755); err != nil {
-		return err
-	}
-
-	onixExe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolve onix executable: %w", err)
-	}
-	onixExe, err = filepath.Abs(onixExe)
-	if err != nil {
-		return fmt.Errorf("resolve onix executable path: %w", err)
-	}
-	content := fmt.Sprintf("@echo off\r\nsetlocal\r\nset \"ONIX_MODULE=%s\"\r\n\"%s\" %%*\r\nset \"ONIX_EXIT=%%ERRORLEVEL%%\"\r\nendlocal & exit /b %%ONIX_EXIT%%\r\n", name, onixExe)
-
-	return os.WriteFile(filepath.Join(config.BinDir(), name+".cmd"), []byte(content), 0o644)
-}
-
 // EnsureInstalled checks whether the named module is installed. If not, it
 // prompts the user to confirm installation. If the module is not yet declared
 // in config it infers the default repo as sadirano/onix-<name>.
@@ -476,20 +372,12 @@ func EnsureInstalled(name string, cfg *config.Config) error {
 // IsInstalled reports whether the module binary for the given repo exists on disk.
 // repo is "user/repo" (or the full GitHub URL — it will be normalized).
 func IsInstalled(repo string) bool {
-	name := repoName(repo)
-	bin := filepath.Join(moduleDir(repo), name+".exe")
+	name := config.RepoBinName(repo)
+	bin := filepath.Join(config.ModuleDir(repo), name+".exe")
 	_, err := os.Stat(bin)
 	return err == nil
 }
 
-// normalizeRepo delegates to config.NormalizeRepo.
-func normalizeRepo(repo string) string { return config.NormalizeRepo(repo) }
-
-// moduleDir delegates to config.ModuleDir.
-func moduleDir(repo string) string { return config.ModuleDir(repo) }
-
-// repoName delegates to config.RepoBinName.
-func repoName(repo string) string { return config.RepoBinName(repo) }
 
 // ---------------------------------------------------------------------------
 // Entry-point helpers
@@ -516,8 +404,6 @@ func loadManifest(srcDir string) ([]config.Entry, error) {
 
 // resolveEntries applies user overrides (from config) on top of the manifest.
 // If manifest is empty, returns nil (no multi-entry mode).
-// For each manifest entry, if overrides contains a matching name with a
-// non-empty Cmd, that Cmd is used; otherwise the entry's Name is used as Cmd.
 func resolveEntries(manifest []config.Entry, overrides []config.Entry) []config.Entry {
 	if len(manifest) == 0 {
 		return nil
@@ -539,93 +425,4 @@ func resolveEntries(manifest []config.Entry, overrides []config.Entry) []config.
 		out[i] = config.Entry{Name: e.Name, Cmd: cmd}
 	}
 	return out
-}
-
-// extractCmdVar parses a line of the form  set "VARNAME=value"  from content
-// and returns value. Returns "" when the variable is not found.
-func extractCmdVar(content, varName string) string {
-	prefix := `set "` + varName + `=`
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimRight(line, "\r")
-		if strings.HasPrefix(line, prefix) {
-			val := strings.TrimPrefix(line, prefix)
-			val = strings.TrimSuffix(val, `"`)
-			return val
-		}
-	}
-	return ""
-}
-
-// checkCmdConflict returns an error when the .cmd file at BinDir/cmdName.cmd
-// already exists and is owned by a different module/entry.
-// Returns nil when the file is absent or when it is owned by (moduleName, entryName).
-func checkCmdConflict(cmdName, moduleName, entryName string) error {
-	p := filepath.Join(config.BinDir(), cmdName+".cmd")
-	data, err := os.ReadFile(p)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("read existing wrapper %s: %w", cmdName+".cmd", err)
-	}
-	content := string(data)
-	existingModule := extractCmdVar(content, "ONIX_MODULE")
-	existingEntry := extractCmdVar(content, "ONIX_ENTRY")
-	if existingModule == moduleName && existingEntry == entryName {
-		return nil // same owner — safe to overwrite
-	}
-	if existingModule != "" {
-		return fmt.Errorf("cmd %q is already owned by module %q (entry %q) — remove that module first", cmdName, existingModule, existingEntry)
-	}
-	return nil // not an onix-managed wrapper; allow overwrite
-}
-
-// createEntryWrapper writes a .cmd wrapper that sets both ONIX_MODULE and ONIX_ENTRY.
-func createEntryWrapper(moduleName, entryName, cmdName string) error {
-	if err := os.MkdirAll(config.BinDir(), 0o755); err != nil {
-		return err
-	}
-	onixExe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolve onix executable: %w", err)
-	}
-	onixExe, err = filepath.Abs(onixExe)
-	if err != nil {
-		return fmt.Errorf("resolve onix executable path: %w", err)
-	}
-	content := fmt.Sprintf(
-		"@echo off\r\nsetlocal\r\nset \"ONIX_MODULE=%s\"\r\nset \"ONIX_ENTRY=%s\"\r\n\"%s\" %%*\r\nset \"ONIX_EXIT=%%ERRORLEVEL%%\"\r\nendlocal & exit /b %%ONIX_EXIT%%\r\n",
-		moduleName, entryName, onixExe,
-	)
-	return os.WriteFile(filepath.Join(config.BinDir(), cmdName+".cmd"), []byte(content), 0o644)
-}
-
-// removeModuleWrappers removes all .cmd files in BinDir whose ONIX_MODULE
-// variable matches moduleName. This handles both single-entry and multi-entry
-// modules transparently.
-func removeModuleWrappers(moduleName string) error {
-	binDir := config.BinDir()
-	entries, err := os.ReadDir(binDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, de := range entries {
-		if de.IsDir() || !strings.HasSuffix(de.Name(), ".cmd") {
-			continue
-		}
-		p := filepath.Join(binDir, de.Name())
-		data, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		if extractCmdVar(string(data), "ONIX_MODULE") == moduleName {
-			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove %s: %w", de.Name(), err)
-			}
-		}
-	}
-	return nil
 }

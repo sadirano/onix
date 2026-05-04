@@ -25,12 +25,35 @@ func (e Entry) EffectiveCmd() string {
 	return e.Name
 }
 
+// Action describes one named command wrapper for the onix binary itself.
+// Each action generates a .cmd wrapper in ~/.onix/bin/ that sets ONIX_COMMAND.
+type Action struct {
+	Name    string `toml:"name"`    // wrapper name (e.g. "editor") and ONIX_COMMAND value
+	Builtin string `toml:"builtin"` // which built-in behaviour to run: shell|editor|explorer|print|files|run
+}
+
+// DefaultActions are used when no [[action]] blocks are declared in config.
+var DefaultActions = []Action{
+	{Name: "shell",   Builtin: "shell"},
+	{Name: "editor",  Builtin: "editor"},
+	{Name: "explore", Builtin: "explorer"},
+	{Name: "print",   Builtin: "print"},
+	{Name: "files",   Builtin: "files"},
+	{Name: "run",     Builtin: "run"},
+}
+
 // Dir returns the onix home directory (~/.onix).
+// Panics when the home directory cannot be determined, as all subsequent
+// path operations would silently resolve relative to CWD otherwise.
 func Dir() string {
 	home, err := os.UserHomeDir()
-	if err != nil {
+	if err != nil || home == "" {
 		if h := os.Getenv("USERPROFILE"); h != "" {
 			home = h
+		} else if d, p := os.Getenv("HOMEDRIVE"), os.Getenv("HOMEPATH"); d != "" && p != "" {
+			home = d + p
+		} else {
+			panic("onix: cannot determine home directory (USERPROFILE and HOMEDRIVE/HOMEPATH are unset)")
 		}
 	}
 	return filepath.Join(home, ".onix")
@@ -53,10 +76,11 @@ func BinDir() string {
 
 // Settings holds global onix settings.
 type Settings struct {
-	AliasFile string `toml:"alias_file"` // override alias file; empty = use default
-	Editor    string `toml:"editor"`     // override editor; empty = use EDITOR env
-	Timing    bool   `toml:"timing"`     // equivalent to ONIX_TIMING=1
-	Debug     bool   `toml:"debug"`      // equivalent to ONIX_DEBUG=1
+	AliasFile  string `toml:"alias_file"`  // override alias file; empty = use default
+	Editor     string `toml:"editor"`      // override editor; empty = use EDITOR env
+	Timing     bool   `toml:"timing"`      // equivalent to ONIX_TIMING=1
+	Debug      bool   `toml:"debug"`       // equivalent to ONIX_DEBUG=1
+	DisableRun bool   `toml:"disable_run"` // set true to block the run builtin
 }
 
 // Module describes one installable module.
@@ -94,7 +118,8 @@ func (m *Module) ConfigJSON() string {
 // Config is the top-level structure for ~/.onix/config.toml.
 type Config struct {
 	Settings Settings `toml:"settings"`
-	Modules  []Module `toml:"module"` // [[module]] tables
+	Actions  []Action `toml:"action"`  // [[action]] tables
+	Modules  []Module `toml:"module"`  // [[module]] tables
 }
 
 // Load reads and parses ~/.onix/config.toml.
@@ -119,6 +144,7 @@ func Load() (*Config, error) {
 	}
 	type rawConfig struct {
 		Settings Settings    `toml:"settings"`
+		Actions  []Action    `toml:"action"`
 		Modules  []rawModule `toml:"module"`
 	}
 
@@ -128,6 +154,7 @@ func Load() (*Config, error) {
 	}
 
 	cfg.Settings = raw.Settings
+	cfg.Actions = raw.Actions
 	cfg.Modules = make([]Module, 0, len(raw.Modules))
 	for _, m := range raw.Modules {
 		enabled := true
@@ -184,6 +211,21 @@ func (c *Config) ResolveEditor() string {
 	return "nvim"
 }
 
+// FindAction returns the action with the given name, checking DefaultActions
+// when no [[action]] blocks are declared. Returns nil when not found.
+func (c *Config) FindAction(name string) *Action {
+	actions := c.Actions
+	if len(actions) == 0 {
+		actions = DefaultActions
+	}
+	for i := range actions {
+		if strings.EqualFold(actions[i].Name, name) {
+			return &actions[i]
+		}
+	}
+	return nil
+}
+
 // FindModule returns the module entry with the given name, or nil.
 func (c *Config) FindModule(name string) *Module {
 	for i := range c.Modules {
@@ -219,15 +261,23 @@ func RepoBinName(repo string) string {
 
 // Starter returns the minimal config.toml content written by `onix init`.
 const Starter = `# ~/.onix/config.toml
-# Onix module manager configuration.
-# Inspired by lazy.nvim: declare modules here, then run "onix install" to
-# download, build, and wire up the .cmd wrappers in ~/.onix/bin/.
+# Onix configuration.
 
 [settings]
-# alias_file = ""   # default: ~/.omni/.env  (omni-compatible)
-# editor     = ""   # default: $EDITOR env var, then nvim
-# timing     = false
-# debug      = false
+# alias_file   = ""     # default: ~/.omni/.env  (omni-compatible)
+# editor       = ""     # default: $EDITOR env var, then nvim
+# timing       = false
+# debug        = false
+# disable_run  = false  # set true to block the run builtin (shell execution)
+
+# Declare named command wrappers below. Run "onix shortcuts" to generate
+# .cmd files in ~/.onix/bin/ that set ONIX_COMMAND when invoked.
+# When no [[action]] blocks are declared the built-in defaults are used:
+#   shell, editor, explore, print, files, run
+#
+# [[action]]
+# name    = "editor"
+# builtin = "editor"
 
 # Declare modules below. onix will prompt to install them on first use.
 # Run "onix add <user/repo>" to register a module, then "onix install" to build it.
@@ -237,4 +287,8 @@ const Starter = `# ~/.onix/config.toml
 # repo    = "user/repo"
 # ref     = "main"
 # enabled = true
+#
+# [module.config]
+# key = "value"   # passed as ONIX_MODULE_CONFIG (JSON) — do NOT store secrets here;
+#                 # env vars are visible to all child processes
 `

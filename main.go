@@ -9,6 +9,7 @@ import (
 	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/dispatch"
+	"github.com/sadirano/onix/internal/errs"
 	"github.com/sadirano/onix/internal/installer"
 )
 
@@ -20,35 +21,35 @@ import (
 //	onix -a <alias> -d <path>     register an alias
 //	onix <alias>                  open cmd.exe in target directory (built-in default)
 //	onix install [name]           install one or all modules
-//	onix add <user/repo>          declare a new module in config
+//	onix add <user/repo> [name]   declare a new module in config
 //	onix remove <name>            remove a module
 //	onix update [name]            update one or all modules
 //	onix list                     list declared modules
 //	onix init                     set up ~/.onix/ directory structure
 //
-// Module dispatch (via wrapper):
+// Action dispatch (via .cmd wrapper that sets ONIX_COMMAND):
+//
+//	ONIX_COMMAND=editor onix <alias> [args...]
+//
+// Module dispatch (via .cmd wrapper that sets ONIX_MODULE):
 //
 //	ONIX_MODULE=mymodule onix <alias> [args...]
 
-// shortcuts maps executable basenames to their implicit action flag.
-// Executables in ~/.onix/bin/ are copies of onix.exe named after each
-// shortcut; the binary detects its own name and injects the flag.
-var shortcuts = config.Shortcuts
+// Exit codes used by onix.
+const (
+	exitOK      = 0
+	exitErr     = 1 // general error
+	exitUsage   = 2 // bad arguments / usage error
+	exitNotFound = 3 // alias or module not found
+)
 
 func main() {
-	invokedAs := execBasename()
-
-	// Named-shortcut dispatch: inject the action flag when invoked as s.exe, n.exe, etc.
-	if flag, ok := shortcuts[invokedAs]; ok && flag != "" {
-		os.Args = append(os.Args, flag)
-	}
-
 	t := newTimer()
 	defer t.report()
 
 	cfg, err := config.Load()
 	if err != nil {
-		fatal("load config: %v", err)
+		fatalCode(exitErr, "load config: %v", err)
 	}
 	alias.ApplyEnvOverride(cfg.Settings.AliasFile)
 	debugEnabled := cfg.IsDebugEnabled()
@@ -63,28 +64,34 @@ func main() {
 	if mod := strings.TrimSpace(os.Getenv("ONIX_MODULE")); mod != "" && !dispatch.IsCoreCommand(args) {
 		t.mark("config loaded")
 		if len(args) == 0 {
-			fatal("usage: %s <alias> [args...]", mod)
+			fatalCode(exitUsage, "usage: %s <alias> [args...]", mod)
 		}
 		if err := installer.EnsureInstalled(mod, cfg); err != nil {
-			fatal("%v", err)
+			fatalCode(exitNotFound, "%v", err)
 		}
 		entry := strings.TrimSpace(os.Getenv("ONIX_ENTRY"))
 		if err := dispatch.Run(mod, entry, args[0], args[1:], cfg); err != nil {
-			fatal("%v", err)
+			handleActionErr(err)
 		}
 		t.mark("dispatch")
 		return
 	}
 
-	// No args — open the alias file in the editor.
+	// Action dispatch — invoked via a .cmd wrapper that sets ONIX_COMMAND.
+	cmdName := strings.TrimSpace(os.Getenv("ONIX_COMMAND"))
+
+	// No args — open the alias file in the editor (only when not via a wrapper).
 	if len(args) == 0 {
+		if cmdName != "" {
+			fatalCode(exitUsage, "usage: %s <alias> [args...]", cmdName)
+		}
 		if err := alias.OpenInEditor(cfg.ResolveEditor()); err != nil {
-			fatal("%v", err)
+			fatalCode(exitErr, "%v", err)
 		}
 		return
 	}
 
-	// Management commands: install, add, remove, update, list, init, shortcuts, theme, help.
+	// Management commands: install, add, remove, update, list, init, help.
 	if handleManagementCommand(args, cfg, t, debugEnabled) {
 		return
 	}
@@ -92,15 +99,16 @@ func main() {
 	// Alias registration: onix -a <alias> -d <path>
 	if args[0] == "-a" || args[0] == "--alias" {
 		destination := registerAlias(args)
-		if invokedAs == "o" || invokedAs == "c" {
+		if cmdName != "" {
+			builtin := resolveBuiltin(cmdName, cfg)
 			if !isUNCPath(destination) {
 				if err := os.MkdirAll(destination, 0o755); err != nil {
-					fatal("create target: %v", err)
+					fatalCode(exitErr, "create target: %v", err)
 				}
 			}
-			t.mark("shell spawned")
-			if err := openShellAt(destination); err != nil {
-				fatal("open shell: %v", err)
+			t.mark("action after register")
+			if err := executeAction(builtin, destination, nil, cfg, t); err != nil {
+				handleActionErr(err)
 			}
 		}
 		return
@@ -109,19 +117,25 @@ func main() {
 	// Default: resolve alias, apply subdir, chdir, execute action.
 	t.mark("config loaded")
 	aliasName := args[0]
-	action, subdir, extras := parseActionArgs(args[1:])
+	subdir, extras := parseExtras(args[1:])
 
-	target, err := alias.Resolve(aliasName, debugEnabled)
-	if err != nil {
+	target, resolveErr := alias.Resolve(aliasName, debugEnabled)
+	if resolveErr != nil {
+		// UX1: alias not found — show the error and ask the user to provide a destination.
+		fmt.Fprintf(os.Stderr, "onix: %v\n", resolveErr)
 		dest := promptDestination(aliasName)
 		if dest == "" {
-			fatal("no destination provided")
+			os.Exit(exitNotFound)
 		}
-		if err := alias.Register(aliasName, dest); err != nil {
-			fatal("register alias: %v", err)
+		abs, err := filepath.Abs(dest) // C4: resolve to absolute before registering
+		if err != nil {
+			fatalCode(exitErr, "resolve path: %v", err)
 		}
-		fmt.Printf("Registered \"%s\" -> \"%s\"\n", aliasName, dest)
-		target = dest
+		if err := alias.Register(aliasName, abs); err != nil {
+			fatalCode(exitErr, "register alias: %v", err)
+		}
+		fmt.Printf("Registered \"%s\" -> \"%s\"\n", aliasName, abs)
+		target = abs
 	}
 	t.mark("alias resolved")
 
@@ -130,13 +144,25 @@ func main() {
 	}
 	if !isUNCPath(target) {
 		if err := os.MkdirAll(target, 0o755); err != nil {
-			fatal("create target: %v", err)
+			fatalCode(exitErr, "create target: %v", err)
 		}
 		if err := os.Chdir(target); err != nil {
-			fatal("chdir: %v", err)
+			fatalCode(exitErr, "chdir: %v", err)
 		}
 	}
 	t.mark("chdir")
 
-	executeAction(action, target, extras, cfg, t)
+	builtin := resolveBuiltin(cmdName, cfg)
+	if err := executeAction(builtin, target, extras, cfg, t); err != nil {
+		handleActionErr(err)
+	}
+}
+
+// handleActionErr checks whether err is an ExitError (child process exit code)
+// and exits with that code, otherwise fatals with exitErr.
+func handleActionErr(err error) {
+	if ee, ok := err.(*errs.ExitError); ok {
+		os.Exit(ee.Code)
+	}
+	fatalCode(exitErr, "%v", err)
 }
