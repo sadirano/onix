@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 )
+
 
 // isUNCPath reports whether path is a UNC network path (\\server\share\...).
 func isUNCPath(path string) bool {
@@ -36,8 +38,23 @@ func openShellAt(dir string) error {
 
 func promptDestination(aliasName string) string {
 	fmt.Printf("Destination for %q: ", aliasName)
-	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	// ReadString error (e.g. closed stdin) produces an empty string,
-	// which the caller treats as "no destination provided".
-	return strings.TrimSpace(line)
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	defer signal.Stop(sig)
+
+	type readResult struct{ line string }
+	ch := make(chan readResult, 1)
+	go func() {
+		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		ch <- readResult{line}
+	}()
+
+	select {
+	case <-sig:
+		fmt.Println() // move cursor to a clean line before the shell prompt reappears
+		return ""
+	case r := <-ch:
+		return strings.TrimSpace(r.line)
+	}
 }

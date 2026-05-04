@@ -9,12 +9,13 @@ import (
 
 	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
+	"github.com/sadirano/onix/internal/errs"
 )
 
 // coreCommands is the canonical list of built-in onix command names that must
 // never be intercepted by module dispatch, even when ONIX_MODULE is set.
 var coreCommands = []string{
-	"install", "add", "remove", "update", "list", "init", "shortcuts",
+	"install", "add", "remove", "update", "list", "init",
 	"help", "-h", "--help", "-a", "--alias",
 }
 
@@ -58,13 +59,8 @@ func Run(moduleName, entryName, aliasName string, args []string, cfg *config.Con
 	return runModule(moduleName, entryName, aliasName, target, args, cfg)
 }
 
-// RunResolved executes the named module with a pre-resolved target directory.
-// Used when the caller has already resolved the alias and applied any subdirectory,
-// bypassing the alias resolution step inside Run.
-//
-// entryName is the entry point sub-command to pass to the binary. Pass "" for
-// single-entry modules.
-func RunResolved(moduleName, entryName, target string, args []string, cfg *config.Config) error {
+// runResolved executes the named module with a pre-resolved target directory.
+func runResolved(moduleName, entryName, target string, args []string, cfg *config.Config) error {
 	return runModule(moduleName, entryName, "", target, args, cfg)
 }
 
@@ -120,7 +116,7 @@ func runModule(moduleName, entryName, aliasName, target string, args []string, c
 	}
 	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
+			return &errs.ExitError{Code: exitErr.ExitCode()}
 		}
 		return fmt.Errorf("module %q: %w", moduleName, err)
 	}

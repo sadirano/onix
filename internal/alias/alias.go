@@ -132,7 +132,9 @@ func OpenInEditor(editor string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("open editor: %w", err)
 	}
-	_ = cmd.Wait()
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("editor exited: %w", err)
+	}
 	return nil
 }
 
@@ -156,17 +158,10 @@ func ApplyEnvOverride(aliasFile string) {
 }
 
 // Resolve returns the absolute path for the given alias or raw path.
-// Unlike omni, it never prompts — unknown aliases are an error.
+// Alias file is consulted first; a raw filesystem path is only accepted when
+// no alias matches, preventing accidental navigation to a CWD subdirectory
+// that happens to share a name with an intended alias.
 func Resolve(input string, debug bool) (string, error) {
-	// Accept a raw path directly.
-	if _, err := os.Stat(input); err == nil {
-		abs, err := filepath.Abs(input)
-		if err != nil {
-			return "", fmt.Errorf("resolve path %q: %w", input, err)
-		}
-		return abs, nil
-	}
-
 	aliases, err := Load()
 	if err != nil {
 		return "", err
@@ -179,6 +174,15 @@ func Resolve(input string, debug bool) (string, error) {
 			}
 			return v, nil
 		}
+	}
+
+	// Fall back to a raw path if it exists on disk.
+	if _, err := os.Stat(input); err == nil {
+		abs, err := filepath.Abs(input)
+		if err != nil {
+			return "", fmt.Errorf("resolve path %q: %w", input, err)
+		}
+		return abs, nil
 	}
 
 	return "", fmt.Errorf("unknown alias %q — register it with: onix -a %s -d <path>", input, input)
