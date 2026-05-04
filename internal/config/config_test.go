@@ -107,6 +107,89 @@ func TestResolveEditor(t *testing.T) {
 	}
 }
 
+func TestFindAction(t *testing.T) {
+	t.Run("finds by name in declared actions", func(t *testing.T) {
+		cfg := &Config{
+			Actions: []Action{
+				{Name: "myeditor", Builtin: "editor"},
+			},
+		}
+		a := cfg.FindAction("myeditor")
+		if a == nil || a.Builtin != "editor" {
+			t.Errorf("expected editor builtin, got %v", a)
+		}
+	})
+	t.Run("case-insensitive match", func(t *testing.T) {
+		cfg := &Config{
+			Actions: []Action{
+				{Name: "Shell", Builtin: "shell"},
+			},
+		}
+		if cfg.FindAction("shell") == nil {
+			t.Error("expected case-insensitive match")
+		}
+	})
+	t.Run("falls back to DefaultActions when no actions declared", func(t *testing.T) {
+		cfg := &Config{}
+		a := cfg.FindAction("editor")
+		if a == nil || a.Builtin != "editor" {
+			t.Errorf("expected default editor action, got %v", a)
+		}
+	})
+	t.Run("all DefaultActions are findable", func(t *testing.T) {
+		cfg := &Config{}
+		for _, da := range DefaultActions {
+			if cfg.FindAction(da.Name) == nil {
+				t.Errorf("default action %q not found", da.Name)
+			}
+		}
+	})
+	t.Run("returns nil for unknown action", func(t *testing.T) {
+		cfg := &Config{}
+		if cfg.FindAction("nosuchaction") != nil {
+			t.Error("expected nil for unknown action")
+		}
+	})
+	t.Run("declared actions shadow DefaultActions", func(t *testing.T) {
+		cfg := &Config{
+			Actions: []Action{
+				{Name: "editor", Builtin: "shell"}, // override: editor now opens shell
+			},
+		}
+		a := cfg.FindAction("editor")
+		if a == nil || a.Builtin != "shell" {
+			t.Errorf("expected overridden builtin shell, got %v", a)
+		}
+	})
+}
+
+func TestActionLoadSaveRoundtrip(t *testing.T) {
+	t.Setenv("USERPROFILE", t.TempDir())
+
+	orig := &Config{
+		Actions: []Action{
+			{Name: "myshell", Builtin: "shell"},
+			{Name: "myeditor", Builtin: "editor"},
+		},
+	}
+	if err := Save(orig); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(loaded.Actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(loaded.Actions))
+	}
+	if loaded.Actions[0].Name != "myshell" || loaded.Actions[0].Builtin != "shell" {
+		t.Errorf("action[0]: got %+v", loaded.Actions[0])
+	}
+	if loaded.Actions[1].Name != "myeditor" || loaded.Actions[1].Builtin != "editor" {
+		t.Errorf("action[1]: got %+v", loaded.Actions[1])
+	}
+}
+
 func TestFindModule(t *testing.T) {
 	cfg := &Config{
 		Modules: []Module{

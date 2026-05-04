@@ -35,8 +35,8 @@ func TestNormalizeRepo(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			if got := normalizeRepo(tt.input); got != tt.want {
-				t.Errorf("normalizeRepo(%q) = %q, want %q", tt.input, got, tt.want)
+			if got := config.NormalizeRepo(tt.input); got != tt.want {
+				t.Errorf("config.NormalizeRepo(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -75,17 +75,19 @@ func TestIsInstalled_False(t *testing.T) {
 func TestAdd_NewModule(t *testing.T) {
 	homeSetup(t)
 	cfg := &config.Config{}
-	// Add saves config before attempting install; install will fail because the
-	// repo does not exist, but Add returns nil and we can verify the config entry.
-	if err := Add("user/mymod", "", cfg); err != nil {
-		t.Fatalf("Add returned error: %v", err)
+	// Add saves config before attempting install. The install will fail because
+	// the repo doesn't exist, but the config entry must still be persisted so the
+	// user can retry with `onix install mymod`.
+	err := Add("user/mymod", "", cfg)
+	if err == nil {
+		t.Fatal("expected Add to return an error when install fails, got nil")
 	}
-	saved, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
+	saved, err2 := config.Load()
+	if err2 != nil {
+		t.Fatalf("config.Load: %v", err2)
 	}
 	if saved.FindModule("mymod") == nil {
-		t.Error("expected module \"mymod\" in saved config")
+		t.Error("expected module \"mymod\" in saved config even after install failure")
 	}
 }
 
