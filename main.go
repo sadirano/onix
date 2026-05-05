@@ -114,9 +114,9 @@ func main() {
 		return
 	}
 
-	// Default: resolve alias, apply subdir, chdir, execute action.
+	// Default: resolve alias, apply sub-alias + context if present, chdir, execute action.
 	t.mark("config loaded")
-	aliasName := args[0]
+	subAlias, aliasName := parseSubAlias(args[0])
 	subdir, extras := parseExtras(args[1:])
 
 	target, resolveErr := alias.Resolve(aliasName, debugEnabled)
@@ -138,6 +138,22 @@ func main() {
 		target = abs
 	}
 	t.mark("alias resolved")
+
+	if subAlias != "" {
+		ctx, err := resolveContext(cfg)
+		if err != nil {
+			fatalCode(exitErr, "resolve context: %v", err)
+		}
+		resolved := alias.ResolveSubdir(subAlias, target)
+		if debugEnabled {
+			fmt.Printf("[ONIX] sub-alias %q → %q  context=%q\n", subAlias, resolved, ctx)
+		}
+		if ctx != "" {
+			target = filepath.Join(target, ctx, resolved)
+		} else {
+			target = filepath.Join(target, resolved)
+		}
+	}
 
 	if subdir != "" {
 		target = filepath.Join(target, subdir)

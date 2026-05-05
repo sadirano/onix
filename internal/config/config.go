@@ -32,6 +32,16 @@ type Action struct {
 	Builtin string `toml:"builtin"` // which built-in behaviour to run: shell|editor|explorer|print|files|run
 }
 
+// ContextConfig defines how to resolve the active working context at runtime.
+// When absent from config.toml the zero value is used and HasContext() returns
+// false — sub-alias navigation then works without a context layer.
+type ContextConfig struct {
+	Source string `toml:"source"` // "env" (default) | "file" | "cmd"
+	Var    string `toml:"var"`    // env:  variable name to read
+	File   string `toml:"file"`   // file: path to read (supports ~)
+	Cmd    string `toml:"cmd"`    // cmd:  command whose stdout is the context
+}
+
 // DefaultActions are used when no [[action]] blocks are declared in config.
 var DefaultActions = []Action{
 	{Name: "shell",   Builtin: "shell"},
@@ -117,9 +127,10 @@ func (m *Module) ConfigJSON() string {
 
 // Config is the top-level structure for ~/.onix/config.toml.
 type Config struct {
-	Settings Settings `toml:"settings"`
-	Actions  []Action `toml:"action"`  // [[action]] tables
-	Modules  []Module `toml:"module"`  // [[module]] tables
+	Settings Settings      `toml:"settings"`
+	Context  ContextConfig `toml:"context"` // [context] table — optional
+	Actions  []Action      `toml:"action"`  // [[action]] tables
+	Modules  []Module      `toml:"module"`  // [[module]] tables
 }
 
 // Load reads and parses ~/.onix/config.toml.
@@ -143,9 +154,10 @@ func Load() (*Config, error) {
 		Entries []Entry        `toml:"entry"`
 	}
 	type rawConfig struct {
-		Settings Settings    `toml:"settings"`
-		Actions  []Action    `toml:"action"`
-		Modules  []rawModule `toml:"module"`
+		Settings Settings      `toml:"settings"`
+		Context  ContextConfig `toml:"context"`
+		Actions  []Action      `toml:"action"`
+		Modules  []rawModule   `toml:"module"`
 	}
 
 	var raw rawConfig
@@ -154,6 +166,7 @@ func Load() (*Config, error) {
 	}
 
 	cfg.Settings = raw.Settings
+	cfg.Context = raw.Context
 	cfg.Actions = raw.Actions
 	cfg.Modules = make([]Module, 0, len(raw.Modules))
 	for _, m := range raw.Modules {
@@ -186,6 +199,12 @@ func Save(cfg *Config) error {
 	defer f.Close()
 	enc := toml.NewEncoder(f)
 	return enc.Encode(cfg)
+}
+
+// HasContext reports whether a [context] section is present in config.toml.
+// When false, sub-alias navigation builds paths without a context layer.
+func (c *Config) HasContext() bool {
+	return c.Context != (ContextConfig{})
 }
 
 // IsDebugEnabled reports whether debug output is active.
@@ -269,6 +288,15 @@ const Starter = `# ~/.onix/config.toml
 # timing       = false
 # debug        = false
 # disable_run  = false  # set true to block the run builtin (shell execution)
+
+# Context resolved at runtime for subalias@alias navigation.
+# When this section is absent, subalias@alias paths omit the context layer.
+#
+# [context]
+# source = "env"           # "env" | "file" | "cmd"
+# var    = "current_sms"   # for source=env: env var to read
+# file   = "~/.onix/ctx"   # for source=file: path to read (first line used)
+# cmd    = "git rev-parse --abbrev-ref HEAD"  # for source=cmd
 
 # Declare named command wrappers below. Run "onix shortcuts" to generate
 # .cmd files in ~/.onix/bin/ that set ONIX_COMMAND when invoked.

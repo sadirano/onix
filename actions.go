@@ -26,6 +26,11 @@ func executeAction(action, target string, extras []string, cfg *config.Config, t
 
 	case "print":
 		fmt.Println(target)
+		if c := exec.Command("clip"); c != nil {
+			c.Stdin = strings.NewReader(target)
+			_ = c.Run()
+		}
+		_ = exec.Command("setx", "ONIX_LAST", target).Run()
 		return nil
 
 	case "files":

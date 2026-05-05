@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
@@ -137,6 +138,22 @@ func parseExtras(args []string) (subdir string, extras []string) {
 		}
 	}
 	return
+}
+
+// parseSubAlias splits "sub@alias" into ("sub", "alias").
+// Returns ("", input) when no "@" is present — plain alias invocation unchanged.
+//
+// Edge cases:
+//
+//	"@alias"  → subAlias="",    aliasName="alias"  (treated as plain alias)
+//	"sub@"    → subAlias="sub", aliasName=""        (caller must handle empty alias)
+//	"a@b@c"   → subAlias="a",   aliasName="b@c"    (first @ is the separator)
+func parseSubAlias(input string) (subAlias, aliasName string) {
+	i := strings.IndexByte(input, '@')
+	if i < 0 {
+		return "", input
+	}
+	return input[:i], input[i+1:]
 }
 
 // resolveBuiltin maps an ONIX_COMMAND value to the builtin identifier used by

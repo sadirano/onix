@@ -36,6 +36,30 @@ func TestParseExtras(t *testing.T) {
 	}
 }
 
+func TestParseSubAlias(t *testing.T) {
+	tests := []struct {
+		input        string
+		wantSubAlias string
+		wantAlias    string
+	}{
+		{"an@sms", "an", "sms"},
+		{"sms", "", "sms"},
+		{"@sms", "", "sms"},
+		{"a@b@c", "a", "b@c"},
+		{"", "", ""},
+		{"sub@", "sub", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			gotSub, gotAlias := parseSubAlias(tt.input)
+			if gotSub != tt.wantSubAlias || gotAlias != tt.wantAlias {
+				t.Errorf("parseSubAlias(%q) = (%q, %q), want (%q, %q)",
+					tt.input, gotSub, gotAlias, tt.wantSubAlias, tt.wantAlias)
+			}
+		})
+	}
+}
+
 func TestResolveBuiltin(t *testing.T) {
 	t.Run("empty cmdName returns shell", func(t *testing.T) {
 		cfg := &config.Config{}
