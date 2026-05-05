@@ -36,25 +36,34 @@ func TestParseExtras(t *testing.T) {
 	}
 }
 
-func TestParseSubAlias(t *testing.T) {
+func TestParseAllSegments(t *testing.T) {
 	tests := []struct {
 		input        string
-		wantSubAlias string
+		wantSegments []string
 		wantAlias    string
 	}{
-		{"an@sms", "an", "sms"},
-		{"sms", "", "sms"},
-		{"@sms", "", "sms"},
-		{"a@b@c", "a", "b@c"},
-		{"", "", ""},
-		{"sub@", "sub", ""},
+		{"sms", nil, "sms"},
+		{"an@sms", []string{"an"}, "sms"},
+		{"task@client@place", []string{"task", "client"}, "place"},
+		{"@sms", nil, "sms"},
+		{"a@b@c", []string{"a", "b"}, "c"},
+		{"sub@", []string{"sub"}, ""},
+		{"", nil, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			gotSub, gotAlias := parseSubAlias(tt.input)
-			if gotSub != tt.wantSubAlias || gotAlias != tt.wantAlias {
-				t.Errorf("parseSubAlias(%q) = (%q, %q), want (%q, %q)",
-					tt.input, gotSub, gotAlias, tt.wantSubAlias, tt.wantAlias)
+			gotSegs, gotAlias := parseAllSegments(tt.input)
+			if gotAlias != tt.wantAlias {
+				t.Errorf("alias: got %q, want %q", gotAlias, tt.wantAlias)
+			}
+			if len(gotSegs) != len(tt.wantSegments) {
+				t.Errorf("segments: got %v, want %v", gotSegs, tt.wantSegments)
+				return
+			}
+			for i := range gotSegs {
+				if gotSegs[i] != tt.wantSegments[i] {
+					t.Errorf("segments[%d]: got %q, want %q", i, gotSegs[i], tt.wantSegments[i])
+				}
 			}
 		})
 	}

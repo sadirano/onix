@@ -7,15 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
 )
 
-// aliasContextPath returns the path of the per-alias context config file.
+// aliasContextPath returns the path of the per-segment context config file.
 func aliasContextPath(alias string) string {
 	return filepath.Join(config.Dir(), "contexts", alias)
 }
 
-// writeAliasContextConfig serialises cc into the per-alias context file using
+// writeAliasContextConfig serialises cc into the per-segment context file using
 // the same key=value format as the alias file.
 func writeAliasContextConfig(alias string, cc config.ContextConfig) error {
 	dir := filepath.Join(config.Dir(), "contexts")
@@ -32,11 +33,14 @@ func writeAliasContextConfig(alias string, cc config.ContextConfig) error {
 	default:
 		sb.WriteString("var=" + cc.Var + "\n")
 	}
+	if cc.Template != "" {
+		sb.WriteString("template=" + cc.Template + "\n")
+	}
 	return os.WriteFile(aliasContextPath(alias), []byte(sb.String()), 0o644)
 }
 
-// loadAliasContextConfig reads and parses the per-alias context config.
-// Returns (zero, false) when no config exists for the alias.
+// loadAliasContextConfig reads and parses the per-segment context config.
+// Returns (zero, false) when no config exists for the segment.
 func loadAliasContextConfig(alias string) (config.ContextConfig, bool) {
 	b, err := os.ReadFile(aliasContextPath(alias))
 	if err != nil {
@@ -62,7 +66,9 @@ func loadAliasContextConfig(alias string) (config.ContextConfig, bool) {
 		case "file":
 			cc.File = strings.TrimSpace(v)
 		case "cmd":
-			cc.Cmd = strings.TrimSpace(v)
+			cc.Cmd = v // preserve spacing — cmd values may contain = signs
+		case "template":
+			cc.Template = v
 		}
 	}
 	if cc.Source == "" {
@@ -71,7 +77,7 @@ func loadAliasContextConfig(alias string) (config.ContextConfig, bool) {
 	return cc, true
 }
 
-// clearAliasContext removes the per-alias context config.
+// clearAliasContext removes the per-segment context config.
 func clearAliasContext(alias string) error {
 	err := os.Remove(aliasContextPath(alias))
 	if os.IsNotExist(err) {
@@ -80,7 +86,7 @@ func clearAliasContext(alias string) error {
 	return err
 }
 
-// printAliasContextConfig prints the context config for alias to stdout.
+// printAliasContextConfig prints the context config for a segment to stdout.
 func printAliasContextConfig(alias string) {
 	cc, ok := loadAliasContextConfig(alias)
 	if !ok {
@@ -96,14 +102,27 @@ func printAliasContextConfig(alias string) {
 	default:
 		fmt.Printf("var=%s\n", cc.Var)
 	}
+	if cc.Template != "" {
+		fmt.Printf("template=%s\n", cc.Template)
+	}
 }
 
-// resolveContext returns the active context string for aliasName.
-// Per-alias config (set via "onix ctx") takes priority over the global
-// [context] config. Returns ("", nil) when no context is configured —
-// callers should omit the context layer from the path in that case.
-func resolveContext(aliasName string, cfg *config.Config) (string, error) {
-	if cc, ok := loadAliasContextConfig(aliasName); ok {
+// applyContextTemplate substitutes {value} in template with value.
+// Leading/trailing path separators are stripped so the result can be safely
+// joined with filepath.Join. When template is empty, value is returned as-is.
+func applyContextTemplate(template, value string) string {
+	if template == "" {
+		return value
+	}
+	result := strings.ReplaceAll(template, "{value}", value)
+	return strings.Trim(result, "/\\")
+}
+
+// resolveContext returns the active context string for a segment.
+// Checks the per-segment config file first, then falls back to the global
+// [context] section in config.toml.
+func resolveContext(segmentName string, cfg *config.Config) (string, error) {
+	if cc, ok := loadAliasContextConfig(segmentName); ok {
 		return resolveContextConfig(cc)
 	}
 	if !cfg.HasContext() {
@@ -122,6 +141,28 @@ func resolveContextConfig(cc config.ContextConfig) (string, error) {
 	default: // "env"
 		return contextFromEnv(cc.Var)
 	}
+}
+
+// applySegment resolves a single @ segment against target, returning the new
+// path segment to append. If the segment has a context config, its template is
+// applied with the resolved value. Otherwise the subdir registry is consulted.
+func applySegment(seg, target string, cfg *config.Config, debugEnabled bool) (string, error) {
+	if cc, ok := loadAliasContextConfig(seg); ok {
+		val, err := resolveContextConfig(cc)
+		if err != nil {
+			return "", fmt.Errorf("segment %q: %w", seg, err)
+		}
+		part := applyContextTemplate(cc.Template, val)
+		if debugEnabled {
+			fmt.Printf("[ONIX] segment %q → template=%q value=%q → %q\n", seg, cc.Template, val, part)
+		}
+		return part, nil
+	}
+	resolved := alias.ResolveSubdir(seg, target)
+	if debugEnabled {
+		fmt.Printf("[ONIX] segment %q → subdir=%q\n", seg, resolved)
+	}
+	return resolved, nil
 }
 
 func contextFromEnv(name string) (string, error) {

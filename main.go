@@ -114,9 +114,9 @@ func main() {
 		return
 	}
 
-	// Default: resolve alias, apply sub-alias + context if present, chdir, execute action.
+	// Default: resolve alias, walk @ segments, chdir, execute action.
 	t.mark("config loaded")
-	subAlias, aliasName := parseSubAlias(args[0])
+	segments, aliasName := parseAllSegments(args[0])
 	subdir, extras := parseExtras(args[1:])
 
 	target, resolveErr := alias.Resolve(aliasName, debugEnabled)
@@ -139,20 +139,14 @@ func main() {
 	}
 	t.mark("alias resolved")
 
-	if subAlias != "" {
-		ctx, err := resolveContext(aliasName, cfg)
+	// Walk segments right-to-left (closest to alias first) so that
+	// "task@client@place" appends client's contribution before task's.
+	for i := len(segments) - 1; i >= 0; i-- {
+		part, err := applySegment(segments[i], target, cfg, debugEnabled)
 		if err != nil {
-			fatalCode(exitErr, "resolve context: %v", err)
+			fatalCode(exitErr, "%v", err)
 		}
-		resolved := alias.ResolveSubdir(subAlias, target)
-		if debugEnabled {
-			fmt.Printf("[ONIX] sub-alias %q → %q  context=%q\n", subAlias, resolved, ctx)
-		}
-		if ctx != "" {
-			target = filepath.Join(target, ctx, resolved)
-		} else {
-			target = filepath.Join(target, resolved)
-		}
+		target = filepath.Join(target, part)
 	}
 
 	if subdir != "" {

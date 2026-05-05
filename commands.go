@@ -78,7 +78,7 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 
 	case "ctx":
 		if len(args) < 2 {
-			fatal("usage: onix ctx <alias> [env <var> | cmd <command> | file <path> | --clear]")
+			fatal("usage: onix ctx <segment> [env <var> | cmd <command> | file <path>] [template] | --clear")
 		}
 		a := args[1]
 		switch {
@@ -91,31 +91,40 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 			fmt.Printf("Context for %q cleared\n", a)
 		case args[2] == "env":
 			if len(args) < 4 {
-				fatal("usage: onix ctx <alias> env <var>")
+				fatal("usage: onix ctx <segment> env <var> [template]")
 			}
 			cc := config.ContextConfig{Source: "env", Var: args[3]}
+			if len(args) >= 5 {
+				cc.Template = args[4]
+			}
 			if err := writeAliasContextConfig(a, cc); err != nil {
 				fatal("write context: %v", err)
 			}
-			fmt.Printf("Context for %q: source=env var=%s\n", a, args[3])
+			fmt.Printf("Context for %q: source=env var=%s template=%s\n", a, cc.Var, cc.Template)
 		case args[2] == "cmd":
 			if len(args) < 4 {
-				fatal("usage: onix ctx <alias> cmd <command>")
+				fatal("usage: onix ctx <segment> cmd <command> [template]")
 			}
-			cc := config.ContextConfig{Source: "cmd", Cmd: strings.Join(args[3:], " ")}
+			cc := config.ContextConfig{Source: "cmd", Cmd: args[3]}
+			if len(args) >= 5 {
+				cc.Template = args[4]
+			}
 			if err := writeAliasContextConfig(a, cc); err != nil {
 				fatal("write context: %v", err)
 			}
-			fmt.Printf("Context for %q: source=cmd cmd=%s\n", a, cc.Cmd)
+			fmt.Printf("Context for %q: source=cmd cmd=%s template=%s\n", a, cc.Cmd, cc.Template)
 		case args[2] == "file":
 			if len(args) < 4 {
-				fatal("usage: onix ctx <alias> file <path>")
+				fatal("usage: onix ctx <segment> file <path> [template]")
 			}
 			cc := config.ContextConfig{Source: "file", File: args[3]}
+			if len(args) >= 5 {
+				cc.Template = args[4]
+			}
 			if err := writeAliasContextConfig(a, cc); err != nil {
 				fatal("write context: %v", err)
 			}
-			fmt.Printf("Context for %q: source=file file=%s\n", a, args[3])
+			fmt.Printf("Context for %q: source=file file=%s template=%s\n", a, cc.File, cc.Template)
 		default:
 			fatal("unknown context source %q — use env, cmd, or file", args[2])
 		}
@@ -184,20 +193,26 @@ func parseExtras(args []string) (subdir string, extras []string) {
 	return
 }
 
-// parseSubAlias splits "sub@alias" into ("sub", "alias").
-// Returns ("", input) when no "@" is present — plain alias invocation unchanged.
-//
-// Edge cases:
-//
-//	"@alias"  → subAlias="",    aliasName="alias"  (treated as plain alias)
-//	"sub@"    → subAlias="sub", aliasName=""        (caller must handle empty alias)
-//	"a@b@c"   → subAlias="a",   aliasName="b@c"    (first @ is the separator)
-func parseSubAlias(input string) (subAlias, aliasName string) {
-	i := strings.IndexByte(input, '@')
+// parseAllSegments splits "seg1@seg2@alias" into (["seg1","seg2"], "alias").
+// The alias is always the last token (after the last @). Segments are returned
+// in left-to-right order as written by the user; callers process them
+// right-to-left to build the path innermost-first.
+// Returns (nil, input) when no "@" is present.
+func parseAllSegments(input string) (segments []string, aliasName string) {
+	i := strings.LastIndex(input, "@")
 	if i < 0 {
-		return "", input
+		return nil, input
 	}
-	return input[:i], input[i+1:]
+	raw, aliasName := input[:i], input[i+1:]
+	if raw == "" {
+		return nil, aliasName
+	}
+	for _, s := range strings.Split(raw, "@") {
+		if s != "" {
+			segments = append(segments, s)
+		}
+	}
+	return segments, aliasName
 }
 
 // resolveBuiltin maps an ONIX_COMMAND value to the builtin identifier used by

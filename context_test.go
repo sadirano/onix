@@ -8,6 +8,28 @@ import (
 	"github.com/sadirano/onix/internal/config"
 )
 
+func TestApplyContextTemplate(t *testing.T) {
+	tests := []struct {
+		template string
+		value    string
+		want     string
+	}{
+		{"", "12345", "12345"},
+		{"{value}", "12345", "12345"},
+		{"/{value}", "12345", "12345"},
+		{"task/{value}", "12345", "task/12345"},
+		{"/task/{value}", "12345", "task/12345"},
+		{"client/{value}/docs", "abc", "client/abc/docs"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.template+"|"+tt.value, func(t *testing.T) {
+			if got := applyContextTemplate(tt.template, tt.value); got != tt.want {
+				t.Errorf("applyContextTemplate(%q, %q) = %q, want %q", tt.template, tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAliasContextConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("USERPROFILE", tmp)
@@ -23,6 +45,20 @@ func TestAliasContextConfig(t *testing.T) {
 		}
 		if got.Source != "env" || got.Var != "MY_CTX" {
 			t.Errorf("got source=%q var=%q, want env/MY_CTX", got.Source, got.Var)
+		}
+	})
+
+	t.Run("template is persisted", func(t *testing.T) {
+		cc := config.ContextConfig{Source: "env", Var: "TASK_ID", Template: "task/{value}"}
+		if err := writeAliasContextConfig("task", cc); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		got, ok := loadAliasContextConfig("task")
+		if !ok {
+			t.Fatal("expected config to be present")
+		}
+		if got.Template != "task/{value}" {
+			t.Errorf("got template=%q, want task/{value}", got.Template)
 		}
 	})
 
@@ -54,28 +90,28 @@ func TestAliasContextConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("load missing alias returns false", func(t *testing.T) {
+	t.Run("load missing segment returns false", func(t *testing.T) {
 		_, ok := loadAliasContextConfig("does-not-exist-xyz")
 		if ok {
-			t.Error("expected false for unconfigured alias")
+			t.Error("expected false for unconfigured segment")
 		}
 	})
 
 	t.Run("clear removes config", func(t *testing.T) {
 		cc := config.ContextConfig{Source: "env", Var: "V"}
-		if err := writeAliasContextConfig("tmp-alias", cc); err != nil {
+		if err := writeAliasContextConfig("tmp-seg", cc); err != nil {
 			t.Fatal(err)
 		}
-		if err := clearAliasContext("tmp-alias"); err != nil {
+		if err := clearAliasContext("tmp-seg"); err != nil {
 			t.Fatalf("clear: %v", err)
 		}
-		_, ok := loadAliasContextConfig("tmp-alias")
+		_, ok := loadAliasContextConfig("tmp-seg")
 		if ok {
 			t.Error("expected false after clear")
 		}
 	})
 
-	t.Run("clear on missing alias is no-op", func(t *testing.T) {
+	t.Run("clear on missing is no-op", func(t *testing.T) {
 		if err := clearAliasContext("never-set-xyz"); err != nil {
 			t.Errorf("expected no error, got: %v", err)
 		}
@@ -101,7 +137,7 @@ func TestResolveContext(t *testing.T) {
 
 	t.Run("no config and no global returns empty string", func(t *testing.T) {
 		cfg := &config.Config{}
-		ctx, err := resolveContext("unset-alias", cfg)
+		ctx, err := resolveContext("unset-seg", cfg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -110,46 +146,35 @@ func TestResolveContext(t *testing.T) {
 		}
 	})
 
-	t.Run("per-alias config takes priority over global", func(t *testing.T) {
+	t.Run("per-segment config takes priority over global", func(t *testing.T) {
 		t.Setenv("GLOBAL_VAR", "global")
-		t.Setenv("ALIAS_VAR", "alias-specific")
-		if err := writeAliasContextConfig("priority-alias", config.ContextConfig{Source: "env", Var: "ALIAS_VAR"}); err != nil {
+		t.Setenv("SEG_VAR", "seg-specific")
+		if err := writeAliasContextConfig("my-seg", config.ContextConfig{Source: "env", Var: "SEG_VAR"}); err != nil {
 			t.Fatal(err)
 		}
 		cfg := &config.Config{
 			Context: config.ContextConfig{Source: "env", Var: "GLOBAL_VAR"},
 		}
-		ctx, err := resolveContext("priority-alias", cfg)
+		ctx, err := resolveContext("my-seg", cfg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if ctx != "alias-specific" {
-			t.Errorf("got %q, want alias-specific", ctx)
+		if ctx != "seg-specific" {
+			t.Errorf("got %q, want seg-specific", ctx)
 		}
 	})
 
-	t.Run("falls back to global when no alias config", func(t *testing.T) {
+	t.Run("falls back to global when no segment config", func(t *testing.T) {
 		t.Setenv("FALLBACK_VAR", "fallback")
 		cfg := &config.Config{
 			Context: config.ContextConfig{Source: "env", Var: "FALLBACK_VAR"},
 		}
-		ctx, err := resolveContext("no-alias-config", cfg)
+		ctx, err := resolveContext("no-config-seg", cfg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if ctx != "fallback" {
 			t.Errorf("got %q, want fallback", ctx)
-		}
-	})
-
-	t.Run("env source var unset returns error", func(t *testing.T) {
-		t.Setenv("UNSET_VAR", "")
-		cfg := &config.Config{
-			Context: config.ContextConfig{Source: "env", Var: "UNSET_VAR"},
-		}
-		_, err := resolveContext("no-pin", cfg)
-		if err == nil {
-			t.Fatal("expected error, got nil")
 		}
 	})
 
@@ -161,7 +186,7 @@ func TestResolveContext(t *testing.T) {
 		cfg := &config.Config{
 			Context: config.ContextConfig{Source: "file", File: p},
 		}
-		ctx, err := resolveContext("no-pin", cfg)
+		ctx, err := resolveContext("no-seg", cfg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -174,7 +199,7 @@ func TestResolveContext(t *testing.T) {
 		cfg := &config.Config{
 			Context: config.ContextConfig{Source: "cmd", Cmd: "echo hello"},
 		}
-		ctx, err := resolveContext("no-pin", cfg)
+		ctx, err := resolveContext("no-seg", cfg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
