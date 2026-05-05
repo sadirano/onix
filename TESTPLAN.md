@@ -166,18 +166,116 @@ Everything is tested against alias `tst` → `C:\temp\onix-test`.
 ## 8 — Print Path
 
 - [ ] **T-29** `y tst`
-  - Prints `C:\temp\onix-test` to stdout, nothing else
+  - Prints `C:\temp\onix-test` to stdout
+  - Clipboard contains `C:\temp\onix-test` (paste to confirm — no extra output)
+  - `%ONIX_LAST%` is set to that path (open a new shell and check `echo %ONIX_LAST%`)
 
 - [ ] **T-30** `y tst -s src`
   - Prints `C:\temp\onix-test\src`
+  - Clipboard contains `C:\temp\onix-test\src`
 
 - [ ] **T-31** `y tst | clip`
-  - Path is silently copied to clipboard
-  - Paste elsewhere to confirm
+  - Path is copied to clipboard via both the builtin (silent) and the pipe
+  - Paste confirms correct value
 
 ---
 
-## 9 — Interactive Alias Creation
+## 9 — Sub-Alias Navigation
+
+Setup for this section (run once):
+
+```
+mkdir C:\temp\onix-test\anexos
+mkdir C:\temp\onix-test\testes
+mkdir "C:\temp\onix-test\task\12345"
+echo an=anexos > %USERPROFILE%\.onix\subdirs.env
+echo ts=testes >> %USERPROFILE%\.onix\subdirs.env
+```
+
+Ensure `tst` → `C:\temp\onix-test` is registered.
+
+### 9a — Subdir Registry
+
+- [ ] **T-32a** `y an@tst`
+  - Prints `C:\temp\onix-test\anexos`
+  - Creates the directory if it doesn't exist (MkdirAll)
+
+- [ ] **T-32b** `y ts@tst`
+  - Prints `C:\temp\onix-test\testes`
+
+- [ ] **T-32c** `y outros@tst`
+  - Prints `C:\temp\onix-test\outros` (literal fallback — not in registry)
+
+- [ ] **T-32d** `y an@tst -s sub`
+  - Prints `C:\temp\onix-test\anexos\sub` (`-s` stacks after `@` segment)
+
+- [ ] **T-32e** `s an@tst`
+  - Opens Explorer at `C:\temp\onix-test\anexos`
+
+- [ ] **T-32f** `n an@tst`
+  - Opens editor at `C:\temp\onix-test\anexos`
+
+- [ ] **T-32g** Local subdir registry override
+  - Create `C:\temp\onix-test\subdirs.env` with content `an=local-anexos`
+  - `y an@tst` → `C:\temp\onix-test\local-anexos` (local file wins over global)
+  - Remove the local file to restore global behaviour
+
+### 9b — Context Segments
+
+Setup:
+
+```
+set CLIENT_ID=acme
+set TASK_ID=12345
+onix ctx client env CLIENT_ID {value}
+onix ctx task   env TASK_ID   task/{value}
+```
+
+- [ ] **T-33a** `onix ctx client`
+  - Prints: `source=env`, `var=CLIENT_ID`, `template={value}`
+
+- [ ] **T-33b** `y client@tst`
+  - Prints `C:\temp\onix-test\acme`
+
+- [ ] **T-33c** `y task@client@tst`
+  - Prints `C:\temp\onix-test\acme\task\12345`
+
+- [ ] **T-33d** `s task@client@tst`
+  - Opens shell at `C:\temp\onix-test\acme\task\12345`
+
+- [ ] **T-33e** `n task@client@tst`
+  - Opens editor at `C:\temp\onix-test\acme\task\12345`
+
+- [ ] **T-33f** `y task@client@tst -s config`
+  - Prints `C:\temp\onix-test\acme\task\12345\config`
+
+- [ ] **T-33g** `ONIX_DEBUG=1 y task@client@tst`
+  - Stderr includes lines like:
+    `[ONIX] segment "client" → template="{value}" value="acme" → "acme"`
+    `[ONIX] segment "task" → template="task/{value}" value="12345" → "task/12345"`
+
+- [ ] **T-33h** `onix ctx client --clear`
+  - Prints: `Context for "client" cleared`
+  - `onix ctx client` → prints: `no context configured for "client"`
+  - `y client@tst` → falls back to subdir registry (or literal `client` dir)
+
+- [ ] **T-33i** cmd source
+  - `onix ctx branch cmd "git rev-parse --abbrev-ref HEAD" {value}`
+  - Run inside a git repo: `y branch@<alias>` → current branch name as path segment
+
+- [ ] **T-33j** file source
+  - `echo feature-x > %USERPROFILE%\.onix\current-sprint`
+  - `onix ctx sprint file ~/.onix/current-sprint {value}`
+  - `y sprint@tst` → `C:\temp\onix-test\feature-x`
+
+- [ ] **T-33k** Unset env var → error
+  - `set CLIENT_ID=` (clear the variable)
+  - `y client@tst` with env source configured → `onix: resolve context: context env var "CLIENT_ID" is not set`
+  - Exits non-zero
+
+---
+
+## 10 — Interactive Alias Creation
 
 These tests require fzf to be installed. If not, fall through to the plain-text prompt.
 
@@ -196,7 +294,7 @@ These tests require fzf to be installed. If not, fall through to the plain-text 
 
 ---
 
-## 10 — Content Search (`sg`)
+## 11 — Content Search (`sg`)
 
 Requires `rg` (ripgrep) and `fzf` in PATH.
 
@@ -227,7 +325,7 @@ Requires `rg` (ripgrep) and `fzf` in PATH.
 
 ---
 
-## 11 — File Search (`ff`)
+## 12 — File Search (`ff`)
 
 Requires `fzf`. `es` (Everything) gives instant results; walk fallback is used if absent.
 
@@ -253,7 +351,7 @@ Requires `fzf`. `es` (Everything) gives instant results; walk fallback is used i
 
 ---
 
-## 12 — Subdir Combinations Matrix
+## 13 — Subdir Combinations Matrix
 
 Quick sweep to confirm `-s` works uniformly across all actions.
 
@@ -270,7 +368,7 @@ Quick sweep to confirm `-s` works uniformly across all actions.
 
 ---
 
-## 13 — Visual Themes
+## 14 — Visual Themes
 
 - [ ] **T-54** `onix themes list`
   - Lists all `onix.visual.*.toml` files found next to `onix.exe`
@@ -300,7 +398,7 @@ Quick sweep to confirm `-s` works uniformly across all actions.
 
 ---
 
-## 14 — Module Management
+## 15 — Module Management
 
 These tests require network access and Go installed. Use a real public repo for install tests.
 
@@ -361,7 +459,7 @@ These tests require network access and Go installed. Use a real public repo for 
 
 ---
 
-## 15 — Disabled Module
+## 16 — Disabled Module
 
 - [ ] **T-75** Add a module, then in `~/.onix/config.toml` set `enabled = false`
   - `onix install` → prints `skip <name> (disabled)`, skips it
@@ -370,7 +468,7 @@ These tests require network access and Go installed. Use a real public repo for 
 
 ---
 
-## 16 — Module Dispatch
+## 17 — Module Dispatch
 
 Requires a module to be installed (repeat T-62–T-65 if removed).
 
@@ -386,7 +484,7 @@ Requires a module to be installed (repeat T-62–T-65 if removed).
 
 ---
 
-## 17 — Config & Environment Overrides
+## 18 — Config & Environment Overrides
 
 - [ ] **T-78** `set ONIX_DEBUG=1 && o tst`
   - Prints to stderr: `[ONIX] build_version=... onix_exe=... modified_at=...`
@@ -422,7 +520,7 @@ Requires a module to be installed (repeat T-62–T-65 if removed).
 
 ---
 
-## 18 — Edge Cases
+## 19 — Edge Cases
 
 - [ ] **T-84** `o unknownalias` with no fzf and blank prompt input
   - Prompt: `Destination for "unknownalias": `

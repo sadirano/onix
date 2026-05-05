@@ -3,10 +3,14 @@
 Jump to any project in one word. Open a shell, your editor, Explorer, or run a command — all from wherever you are, no `cd` required. Extends via Go modules installed straight from GitHub.
 
 ```
-o acme                  # open a shell in your project
-n acme                  # open editor there
-sg acme handleAuth      # search contents → jump to line
-r acme "go test ./..."  # run a command without leaving your shell
+o acme                      # open a shell in your project
+n acme                      # open editor there
+sg acme handleAuth          # search contents → jump to line
+r acme "go test ./..."      # run a command without leaving your shell
+y acme                      # print path + copy to clipboard + set ONIX_LAST
+
+s an@sms                    # subdir shortcut: shell in <sms>/anexos
+s task@client@place         # multi-segment: <place>/{CLIENT_ID}/task/{TASK_ID}
 ```
 
 For the full command reference and workflow examples, see [GUIDE.md](GUIDE.md).

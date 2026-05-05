@@ -122,7 +122,46 @@ set ONIX_TIMING=1
 onix api -n
 ```
 
-## 9) Fast Smoke Run
+## 9) Sub-Alias Navigation
+
+Single segment — subdir registry lookup:
+
+```powershell
+# Registry: ~/.onix/subdirs.env
+# an=anexos   doc=documentacao   ts=testes
+
+s an@sms        # shell in <sms>/anexos
+n doc@sms       # editor in <sms>/documentacao
+y ts@sms        # print path of <sms>/testes
+o outros@sms    # literal fallback (not in registry)
+s an@sms -s config   # stacks: <sms>/anexos/config
+```
+
+Multi-segment chain with context:
+
+```powershell
+# Setup (one time)
+onix ctx client env CLIENT_ID {value}
+onix ctx task   env TASK_ID   task/{value}
+onix ctx branch cmd "git rev-parse --abbrev-ref HEAD" {value}
+onix ctx sprint file ~/.onix/sprint {value}
+
+# Use
+s task@client@place     # <place>/{CLIENT_ID}/task/{TASK_ID}
+n branch@proj           # editor in <proj>/<current-branch>
+```
+
+Context management:
+
+```powershell
+onix ctx <seg>                          # show current config
+onix ctx <seg> env <VAR> [template]     # configure from env var
+onix ctx <seg> cmd <command> [template] # configure from command output
+onix ctx <seg> file <path> [template]   # configure from file
+onix ctx <seg> --clear                  # remove config
+```
+
+## 10) Fast Smoke Run
 
 ```powershell
 onix -a demo -d C:\temp\demo

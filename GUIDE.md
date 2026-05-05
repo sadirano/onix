@@ -71,6 +71,129 @@ Pick a folder, press Enter — the alias is registered automatically. No separat
 
 ---
 
+## Sub-Alias Navigation
+
+Sub-alias navigation lets you jump into a specific subdirectory inside an alias without
+registering a new alias for every path combination you visit.
+
+### Subdir shortcuts — `sub@alias`
+
+```
+s an@sms
+```
+
+Resolves `sms` (the alias), then looks up `an` in the two-level subdir registry and
+appends the result. If `an=anexos` is in the registry, you land in `<sms>/anexos`.
+
+**Subdir registry** — two levels, case-insensitive lookup:
+
+| File | Scope |
+|------|-------|
+| `~/.onix/subdirs.env` | Global — available for all aliases |
+| `<alias_dir>/subdirs.env` | Local — overrides global for entries with the same key |
+
+Both use the same `key=value` format as the alias file. Local entries win when a key
+appears in both files. If a name isn't in either registry, it's used literally as the
+directory name — raw directory names always work without registration.
+
+```
+# ~/.onix/subdirs.env
+an=anexos
+doc=documentacao
+ts=testes
+cfg=configuracoes
+```
+
+```
+s an@sms        → shell in <sms>/anexos
+n doc@sms       → editor in <sms>/documentacao
+y ts@sms        → print path of <sms>/testes
+o outros@sms    → explorer in <sms>/outros  (literal fallback)
+```
+
+All existing action shortcuts (`s`, `n`, `o`, `y`, `r`, `f`) work with this form. The
+`-s` flag still stacks on top if needed:
+
+```
+s an@sms -s subdir      → <sms>/anexos/subdir
+```
+
+### Context layers — `seg1@seg2@alias`
+
+When your directory tree has a rotating dimension (a current task, client, branch, sprint…)
+you can inject its value into the path without typing it every time.
+
+```
+s task@client@place
+```
+
+Segments are processed right-to-left (closest to the alias first). Each segment either:
+- Has a **context config** → resolves a runtime value and applies a path template
+- Has no context config → falls back to the subdir registry (or literal name)
+
+**Configure a segment's context:**
+
+```
+onix ctx client env CLIENT_ID {value}         # read from %CLIENT_ID% env var
+onix ctx task   env TASK_ID   task/{value}    # template: /task/<taskID>
+```
+
+| Subcommand | Syntax | Effect |
+|------------|--------|--------|
+| Set (env)  | `onix ctx <seg> env <var> [template]` | Read context from environment variable |
+| Set (cmd)  | `onix ctx <seg> cmd <command> [template]` | Run command, use its stdout |
+| Set (file) | `onix ctx <seg> file <path> [template]` | Read first line of a file |
+| Show       | `onix ctx <seg>` | Print the current config for this segment |
+| Clear      | `onix ctx <seg> --clear` | Remove the config |
+
+**Template syntax** — the `[template]` argument controls what the segment contributes to
+the path. `{value}` is replaced with the resolved context value:
+
+| Template | Resolved value | Path contribution |
+|----------|---------------|-------------------|
+| *(omitted)* | `12345` | `12345` |
+| `{value}` | `12345` | `12345` |
+| `task/{value}` | `12345` | `task/12345` |
+| `client/{value}/docs` | `abc` | `client/abc/docs` |
+
+Leading and trailing slashes in the template are stripped automatically.
+
+**Full example:**
+
+Setup:
+```
+onix ctx client env CLIENT_ID {value}
+onix ctx task   env TASK_ID   task/{value}
+```
+
+With `CLIENT_ID=abc` and `TASK_ID=12345`:
+
+```
+s task@client@place
+→ <place>/abc/task/12345
+
+n task@client@place -s config
+→ editor at <place>/abc/task/12345/config
+```
+
+**Context sources:**
+
+| Source | Config key | Reads from |
+|--------|-----------|------------|
+| `env`  | `var`     | Environment variable |
+| `file` | `file`    | First line of a file (supports `~`) |
+| `cmd`  | `cmd`     | stdout of a shell command |
+
+```
+onix ctx branch cmd "git rev-parse --abbrev-ref HEAD"
+onix ctx sprint file ~/.onix/current-sprint
+```
+
+Context configs are stored in `~/.onix/contexts/<segment>` as plain key=value files.
+They are per-segment (identified by the name before the `@`), not per-alias.
+
+---
+
 ## Open Explorer Here
 
 **Manual:** Win+R, paste the full path, press Enter. Or click through six folders in Explorer.
@@ -229,15 +352,21 @@ o acme -y
 y acme
 ```
 
-Prints:
+Prints the resolved path to stdout and also:
+- Copies it to the clipboard via `clip.exe` (silent — no extra output)
+- Persists it as `%ONIX_LAST%` via `setx` so new shells and scripts can read it
+
 ```
 C:\Users\dev\projects\client-work\acme\backend\api\v2
 ```
 
+`setx` does not affect the current shell session (Windows limitation). Open a new terminal
+window to use `%ONIX_LAST%`.
+
 Practical uses:
 ```
-y acme | clip
-robocopy (y acme) D:\backup\acme /MIR
+y acme                          # print + auto-clip + set ONIX_LAST
+robocopy %ONIX_LAST% D:\backup /MIR    # use the persisted path in a new shell
 ```
 
 ---
@@ -390,12 +519,23 @@ timing     = false
 ## Quick Reference
 
 ```
-sg acme handleAuth          # search contents → jump to line in editor
-n acme -s src               # open editor directly in a subdirectory
-r acme "go test ./..."      # run tests without leaving your current shell
-f acme README.md            # open a known file from anywhere
-ff acme migration           # find a filename, open it
-y acme | clip               # resolved path to clipboard
-o acme -s internal -n       # land in a subdir and open editor in one shot
-img acme screenshot-name    # paste clipboard image into project
+sg acme handleAuth              # search contents → jump to line in editor
+n acme -s src                   # open editor directly in a subdirectory
+r acme "go test ./..."          # run tests without leaving your current shell
+f acme README.md                # open a known file from anywhere
+ff acme migration               # find a filename, open it
+y acme                          # resolved path → print + clipboard + ONIX_LAST
+o acme -s internal -n           # land in a subdir and open editor in one shot
+img acme screenshot-name        # paste clipboard image into project
+
+# Sub-alias navigation
+s an@sms                        # shell in <sms>/anexos  (subdir registry)
+n doc@sms                       # editor in <sms>/documentacao
+s task@client@place             # multi-segment: <place>/{clientID}/task/{taskID}
+
+# Context segment setup
+onix ctx client env CLIENT_ID {value}
+onix ctx task   env TASK_ID   task/{value}
+onix ctx branch cmd "git rev-parse --abbrev-ref HEAD"
+onix ctx sprint file ~/.onix/current-sprint
 ```
