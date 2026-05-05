@@ -4,15 +4,57 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
 )
 
-// resolveContext returns the active context string using the source configured
-// in [context]. Returns ("", nil) when no context section is present —
+// aliasContextPath returns the path of the per-alias pinned context file.
+func aliasContextPath(alias string) string {
+	return filepath.Join(config.Dir(), "contexts", alias)
+}
+
+// setAliasContext writes value as the pinned context for alias.
+func setAliasContext(alias, value string) error {
+	dir := filepath.Join(config.Dir(), "contexts")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create contexts dir: %w", err)
+	}
+	return os.WriteFile(aliasContextPath(alias), []byte(value+"\n"), 0o644)
+}
+
+// getAliasContext reads the pinned context for alias. Returns ("", false) when
+// no context has been pinned.
+func getAliasContext(alias string) (string, bool) {
+	b, err := os.ReadFile(aliasContextPath(alias))
+	if err != nil {
+		return "", false
+	}
+	v := strings.TrimSpace(string(b))
+	if v == "" {
+		return "", false
+	}
+	return v, true
+}
+
+// clearAliasContext removes the pinned context for alias.
+func clearAliasContext(alias string) error {
+	err := os.Remove(aliasContextPath(alias))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// resolveContext returns the active context string for aliasName.
+// Per-alias pinned values (set via "onix ctx") take priority over the global
+// [context] config. Returns ("", nil) when no context is configured or pinned —
 // callers should omit the context layer from the path in that case.
-func resolveContext(cfg *config.Config) (string, error) {
+func resolveContext(aliasName string, cfg *config.Config) (string, error) {
+	if v, ok := getAliasContext(aliasName); ok {
+		return v, nil
+	}
 	if !cfg.HasContext() {
 		return "", nil
 	}

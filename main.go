@@ -140,7 +140,7 @@ func main() {
 	t.mark("alias resolved")
 
 	if subAlias != "" {
-		ctx, err := resolveContext(cfg)
+		ctx, err := resolveContext(aliasName, cfg)
 		if err != nil {
 			fatalCode(exitErr, "resolve context: %v", err)
 		}

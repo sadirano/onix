@@ -76,6 +76,31 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 			fatal("%v", err)
 		}
 
+	case "ctx":
+		if len(args) < 2 {
+			fatal("usage: onix ctx <alias> [value | --clear]")
+		}
+		a := args[1]
+		switch {
+		case len(args) == 2:
+			v, ok := getAliasContext(a)
+			if !ok {
+				fmt.Printf("no context pinned for %q\n", a)
+			} else {
+				fmt.Println(v)
+			}
+		case args[2] == "--clear":
+			if err := clearAliasContext(a); err != nil {
+				fatal("clear context: %v", err)
+			}
+			fmt.Printf("Context for %q cleared\n", a)
+		default:
+			if err := setAliasContext(a, args[2]); err != nil {
+				fatal("set context: %v", err)
+			}
+			fmt.Printf("Context for %q set to %q\n", a, args[2])
+		}
+
 	case "-h", "--help", "help":
 		printHelp()
 
