@@ -10,35 +10,68 @@ import (
 	"github.com/sadirano/onix/internal/config"
 )
 
-// aliasContextPath returns the path of the per-alias pinned context file.
+// aliasContextPath returns the path of the per-alias context config file.
 func aliasContextPath(alias string) string {
 	return filepath.Join(config.Dir(), "contexts", alias)
 }
 
-// setAliasContext writes value as the pinned context for alias.
-func setAliasContext(alias, value string) error {
+// writeAliasContextConfig serialises cc into the per-alias context file using
+// the same key=value format as the alias file.
+func writeAliasContextConfig(alias string, cc config.ContextConfig) error {
 	dir := filepath.Join(config.Dir(), "contexts")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create contexts dir: %w", err)
 	}
-	return os.WriteFile(aliasContextPath(alias), []byte(value+"\n"), 0o644)
+	var sb strings.Builder
+	sb.WriteString("source=" + cc.Source + "\n")
+	switch cc.Source {
+	case "file":
+		sb.WriteString("file=" + cc.File + "\n")
+	case "cmd":
+		sb.WriteString("cmd=" + cc.Cmd + "\n")
+	default:
+		sb.WriteString("var=" + cc.Var + "\n")
+	}
+	return os.WriteFile(aliasContextPath(alias), []byte(sb.String()), 0o644)
 }
 
-// getAliasContext reads the pinned context for alias. Returns ("", false) when
-// no context has been pinned.
-func getAliasContext(alias string) (string, bool) {
+// loadAliasContextConfig reads and parses the per-alias context config.
+// Returns (zero, false) when no config exists for the alias.
+func loadAliasContextConfig(alias string) (config.ContextConfig, bool) {
 	b, err := os.ReadFile(aliasContextPath(alias))
 	if err != nil {
-		return "", false
+		return config.ContextConfig{}, false
 	}
-	v := strings.TrimSpace(string(b))
-	if v == "" {
-		return "", false
+	text := strings.ReplaceAll(string(b), "\r\n", "\n")
+	text = strings.TrimPrefix(text, "\xef\xbb\xbf")
+	cc := config.ContextConfig{}
+	for _, raw := range strings.Split(text, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(k) {
+		case "source":
+			cc.Source = strings.TrimSpace(v)
+		case "var":
+			cc.Var = strings.TrimSpace(v)
+		case "file":
+			cc.File = strings.TrimSpace(v)
+		case "cmd":
+			cc.Cmd = strings.TrimSpace(v)
+		}
 	}
-	return v, true
+	if cc.Source == "" {
+		return config.ContextConfig{}, false
+	}
+	return cc, true
 }
 
-// clearAliasContext removes the pinned context for alias.
+// clearAliasContext removes the per-alias context config.
 func clearAliasContext(alias string) error {
 	err := os.Remove(aliasContextPath(alias))
 	if os.IsNotExist(err) {
@@ -47,24 +80,47 @@ func clearAliasContext(alias string) error {
 	return err
 }
 
+// printAliasContextConfig prints the context config for alias to stdout.
+func printAliasContextConfig(alias string) {
+	cc, ok := loadAliasContextConfig(alias)
+	if !ok {
+		fmt.Printf("no context configured for %q\n", alias)
+		return
+	}
+	fmt.Printf("source=%s\n", cc.Source)
+	switch cc.Source {
+	case "file":
+		fmt.Printf("file=%s\n", cc.File)
+	case "cmd":
+		fmt.Printf("cmd=%s\n", cc.Cmd)
+	default:
+		fmt.Printf("var=%s\n", cc.Var)
+	}
+}
+
 // resolveContext returns the active context string for aliasName.
-// Per-alias pinned values (set via "onix ctx") take priority over the global
-// [context] config. Returns ("", nil) when no context is configured or pinned —
+// Per-alias config (set via "onix ctx") takes priority over the global
+// [context] config. Returns ("", nil) when no context is configured —
 // callers should omit the context layer from the path in that case.
 func resolveContext(aliasName string, cfg *config.Config) (string, error) {
-	if v, ok := getAliasContext(aliasName); ok {
-		return v, nil
+	if cc, ok := loadAliasContextConfig(aliasName); ok {
+		return resolveContextConfig(cc)
 	}
 	if !cfg.HasContext() {
 		return "", nil
 	}
-	switch cfg.Context.Source {
+	return resolveContextConfig(cfg.Context)
+}
+
+// resolveContextConfig resolves a context value from a ContextConfig.
+func resolveContextConfig(cc config.ContextConfig) (string, error) {
+	switch cc.Source {
 	case "file":
-		return contextFromFile(cfg.Context.File)
+		return contextFromFile(cc.File)
 	case "cmd":
-		return contextFromCmd(cfg.Context.Cmd)
+		return contextFromCmd(cc.Cmd)
 	default: // "env"
-		return contextFromEnv(cfg.Context.Var)
+		return contextFromEnv(cc.Var)
 	}
 }
 

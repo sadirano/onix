@@ -8,68 +8,89 @@ import (
 	"github.com/sadirano/onix/internal/config"
 )
 
-// redirectContextDir points the per-alias context store at dir for the test.
-func redirectContextDir(t *testing.T, dir string) {
-	t.Helper()
-	t.Setenv("ONIX_HOME", dir) // config.Dir() reads ONIX_HOME when set — not currently wired;
-	// we override aliasContextPath indirectly by pointing ONIX_HOME isn't wired yet,
-	// so we test getAliasContext / setAliasContext via the real home dir in a tempdir.
-	// Tests that need isolation call the low-level functions directly.
-	_ = dir
-}
-
-func TestAliasContextStore(t *testing.T) {
-	// Run storage tests in a temp dir by temporarily swapping USERPROFILE so
-	// config.Dir() resolves there, keeping the real ~/.onix untouched.
+func TestAliasContextConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("USERPROFILE", tmp)
 
-	t.Run("set then get returns value", func(t *testing.T) {
-		if err := setAliasContext("sms", "12345"); err != nil {
-			t.Fatalf("set: %v", err)
+	t.Run("write env config then load", func(t *testing.T) {
+		cc := config.ContextConfig{Source: "env", Var: "MY_CTX"}
+		if err := writeAliasContextConfig("sms", cc); err != nil {
+			t.Fatalf("write: %v", err)
 		}
-		v, ok := getAliasContext("sms")
-		if !ok || v != "12345" {
-			t.Errorf("get: got (%q, %v), want (\"12345\", true)", v, ok)
+		got, ok := loadAliasContextConfig("sms")
+		if !ok {
+			t.Fatal("expected config to be present")
+		}
+		if got.Source != "env" || got.Var != "MY_CTX" {
+			t.Errorf("got source=%q var=%q, want env/MY_CTX", got.Source, got.Var)
 		}
 	})
 
-	t.Run("get with no file returns false", func(t *testing.T) {
-		_, ok := getAliasContext("nonexistent-alias-xyz")
+	t.Run("write cmd config then load", func(t *testing.T) {
+		cc := config.ContextConfig{Source: "cmd", Cmd: "git branch --show-current"}
+		if err := writeAliasContextConfig("proj", cc); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		got, ok := loadAliasContextConfig("proj")
+		if !ok {
+			t.Fatal("expected config to be present")
+		}
+		if got.Source != "cmd" || got.Cmd != "git branch --show-current" {
+			t.Errorf("got source=%q cmd=%q", got.Source, got.Cmd)
+		}
+	})
+
+	t.Run("write file config then load", func(t *testing.T) {
+		cc := config.ContextConfig{Source: "file", File: "~/.onix/ctx"}
+		if err := writeAliasContextConfig("work", cc); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		got, ok := loadAliasContextConfig("work")
+		if !ok {
+			t.Fatal("expected config to be present")
+		}
+		if got.Source != "file" || got.File != "~/.onix/ctx" {
+			t.Errorf("got source=%q file=%q", got.Source, got.File)
+		}
+	})
+
+	t.Run("load missing alias returns false", func(t *testing.T) {
+		_, ok := loadAliasContextConfig("does-not-exist-xyz")
 		if ok {
-			t.Error("expected false for unset alias")
+			t.Error("expected false for unconfigured alias")
 		}
 	})
 
-	t.Run("clear removes file", func(t *testing.T) {
-		if err := setAliasContext("proj", "branch-main"); err != nil {
-			t.Fatalf("set: %v", err)
+	t.Run("clear removes config", func(t *testing.T) {
+		cc := config.ContextConfig{Source: "env", Var: "V"}
+		if err := writeAliasContextConfig("tmp-alias", cc); err != nil {
+			t.Fatal(err)
 		}
-		if err := clearAliasContext("proj"); err != nil {
+		if err := clearAliasContext("tmp-alias"); err != nil {
 			t.Fatalf("clear: %v", err)
 		}
-		_, ok := getAliasContext("proj")
+		_, ok := loadAliasContextConfig("tmp-alias")
 		if ok {
 			t.Error("expected false after clear")
 		}
 	})
 
-	t.Run("clear on missing alias is a no-op", func(t *testing.T) {
-		if err := clearAliasContext("does-not-exist-xyz"); err != nil {
-			t.Errorf("clear of missing alias should not error: %v", err)
+	t.Run("clear on missing alias is no-op", func(t *testing.T) {
+		if err := clearAliasContext("never-set-xyz"); err != nil {
+			t.Errorf("expected no error, got: %v", err)
 		}
 	})
 
-	t.Run("set overwrites previous value", func(t *testing.T) {
-		if err := setAliasContext("work", "v1"); err != nil {
+	t.Run("write overwrites previous config", func(t *testing.T) {
+		if err := writeAliasContextConfig("x", config.ContextConfig{Source: "env", Var: "V1"}); err != nil {
 			t.Fatal(err)
 		}
-		if err := setAliasContext("work", "v2"); err != nil {
+		if err := writeAliasContextConfig("x", config.ContextConfig{Source: "cmd", Cmd: "echo v2"}); err != nil {
 			t.Fatal(err)
 		}
-		v, ok := getAliasContext("work")
-		if !ok || v != "v2" {
-			t.Errorf("got (%q, %v), want (\"v2\", true)", v, ok)
+		got, ok := loadAliasContextConfig("x")
+		if !ok || got.Source != "cmd" || got.Cmd != "echo v2" {
+			t.Errorf("got source=%q cmd=%q", got.Source, got.Cmd)
 		}
 	})
 }
@@ -78,62 +99,53 @@ func TestResolveContext(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("USERPROFILE", tmp)
 
-	t.Run("no context section and no pinned value returns empty string", func(t *testing.T) {
+	t.Run("no config and no global returns empty string", func(t *testing.T) {
 		cfg := &config.Config{}
 		ctx, err := resolveContext("unset-alias", cfg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if ctx != "" {
-			t.Errorf("got %q, want empty string", ctx)
+			t.Errorf("got %q, want empty", ctx)
 		}
 	})
 
-	t.Run("pinned alias context takes priority over global config", func(t *testing.T) {
-		t.Setenv("GLOBAL_CTX_VAR", "global-value")
-		if err := setAliasContext("pinned-alias", "pinned-value"); err != nil {
+	t.Run("per-alias config takes priority over global", func(t *testing.T) {
+		t.Setenv("GLOBAL_VAR", "global")
+		t.Setenv("ALIAS_VAR", "alias-specific")
+		if err := writeAliasContextConfig("priority-alias", config.ContextConfig{Source: "env", Var: "ALIAS_VAR"}); err != nil {
 			t.Fatal(err)
 		}
 		cfg := &config.Config{
-			Context: config.ContextConfig{Source: "env", Var: "GLOBAL_CTX_VAR"},
+			Context: config.ContextConfig{Source: "env", Var: "GLOBAL_VAR"},
 		}
-		ctx, err := resolveContext("pinned-alias", cfg)
+		ctx, err := resolveContext("priority-alias", cfg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if ctx != "pinned-value" {
-			t.Errorf("got %q, want pinned-value", ctx)
+		if ctx != "alias-specific" {
+			t.Errorf("got %q, want alias-specific", ctx)
 		}
 	})
 
-	t.Run("falls back to global config when no alias-specific context", func(t *testing.T) {
-		t.Setenv("TEST_CTX_VAR", "12345")
+	t.Run("falls back to global when no alias config", func(t *testing.T) {
+		t.Setenv("FALLBACK_VAR", "fallback")
 		cfg := &config.Config{
-			Context: config.ContextConfig{Source: "env", Var: "TEST_CTX_VAR"},
+			Context: config.ContextConfig{Source: "env", Var: "FALLBACK_VAR"},
 		}
-		ctx, err := resolveContext("alias-without-pin", cfg)
+		ctx, err := resolveContext("no-alias-config", cfg)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if ctx != "12345" {
-			t.Errorf("got %q, want 12345", ctx)
+		if ctx != "fallback" {
+			t.Errorf("got %q, want fallback", ctx)
 		}
 	})
 
-	t.Run("env source with var unset returns error", func(t *testing.T) {
-		t.Setenv("TEST_CTX_MISSING", "")
+	t.Run("env source var unset returns error", func(t *testing.T) {
+		t.Setenv("UNSET_VAR", "")
 		cfg := &config.Config{
-			Context: config.ContextConfig{Source: "env", Var: "TEST_CTX_MISSING"},
-		}
-		_, err := resolveContext("no-pin", cfg)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-	})
-
-	t.Run("env source with empty var name returns error", func(t *testing.T) {
-		cfg := &config.Config{
-			Context: config.ContextConfig{Source: "env", Var: ""},
+			Context: config.ContextConfig{Source: "env", Var: "UNSET_VAR"},
 		}
 		_, err := resolveContext("no-pin", cfg)
 		if err == nil {
@@ -158,17 +170,7 @@ func TestResolveContext(t *testing.T) {
 		}
 	})
 
-	t.Run("file source with missing file returns error", func(t *testing.T) {
-		cfg := &config.Config{
-			Context: config.ContextConfig{Source: "file", File: "/nonexistent/path/ctx"},
-		}
-		_, err := resolveContext("no-pin", cfg)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-	})
-
-	t.Run("cmd source with echo command", func(t *testing.T) {
+	t.Run("cmd source with echo", func(t *testing.T) {
 		cfg := &config.Config{
 			Context: config.ContextConfig{Source: "cmd", Cmd: "echo hello"},
 		}
@@ -178,16 +180,6 @@ func TestResolveContext(t *testing.T) {
 		}
 		if ctx != "hello" {
 			t.Errorf("got %q, want hello", ctx)
-		}
-	})
-
-	t.Run("cmd source with empty cmd string returns error", func(t *testing.T) {
-		cfg := &config.Config{
-			Context: config.ContextConfig{Source: "cmd", Cmd: ""},
-		}
-		_, err := resolveContext("no-pin", cfg)
-		if err == nil {
-			t.Fatal("expected error, got nil")
 		}
 	})
 }

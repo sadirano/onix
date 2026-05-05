@@ -78,27 +78,46 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 
 	case "ctx":
 		if len(args) < 2 {
-			fatal("usage: onix ctx <alias> [value | --clear]")
+			fatal("usage: onix ctx <alias> [env <var> | cmd <command> | file <path> | --clear]")
 		}
 		a := args[1]
 		switch {
 		case len(args) == 2:
-			v, ok := getAliasContext(a)
-			if !ok {
-				fmt.Printf("no context pinned for %q\n", a)
-			} else {
-				fmt.Println(v)
-			}
+			printAliasContextConfig(a)
 		case args[2] == "--clear":
 			if err := clearAliasContext(a); err != nil {
 				fatal("clear context: %v", err)
 			}
 			fmt.Printf("Context for %q cleared\n", a)
-		default:
-			if err := setAliasContext(a, args[2]); err != nil {
-				fatal("set context: %v", err)
+		case args[2] == "env":
+			if len(args) < 4 {
+				fatal("usage: onix ctx <alias> env <var>")
 			}
-			fmt.Printf("Context for %q set to %q\n", a, args[2])
+			cc := config.ContextConfig{Source: "env", Var: args[3]}
+			if err := writeAliasContextConfig(a, cc); err != nil {
+				fatal("write context: %v", err)
+			}
+			fmt.Printf("Context for %q: source=env var=%s\n", a, args[3])
+		case args[2] == "cmd":
+			if len(args) < 4 {
+				fatal("usage: onix ctx <alias> cmd <command>")
+			}
+			cc := config.ContextConfig{Source: "cmd", Cmd: strings.Join(args[3:], " ")}
+			if err := writeAliasContextConfig(a, cc); err != nil {
+				fatal("write context: %v", err)
+			}
+			fmt.Printf("Context for %q: source=cmd cmd=%s\n", a, cc.Cmd)
+		case args[2] == "file":
+			if len(args) < 4 {
+				fatal("usage: onix ctx <alias> file <path>")
+			}
+			cc := config.ContextConfig{Source: "file", File: args[3]}
+			if err := writeAliasContextConfig(a, cc); err != nil {
+				fatal("write context: %v", err)
+			}
+			fmt.Printf("Context for %q: source=file file=%s\n", a, args[3])
+		default:
+			fatal("unknown context source %q — use env, cmd, or file", args[2])
 		}
 
 	case "-h", "--help", "help":
