@@ -40,6 +40,31 @@ func TestAliasContextConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("USERPROFILE", tmp)
 
+	t.Run("write alias config then load", func(t *testing.T) {
+		cc := config.ContextConfig{Source: "alias", Path: "a/sub/dir"}
+		if err := writeAliasContextConfig("fix-seg", cc); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		got, ok := loadAliasContextConfig("fix-seg")
+		if !ok {
+			t.Fatal("expected config to be present")
+		}
+		if got.Source != "alias" || got.Path != "a/sub/dir" {
+			t.Errorf("got source=%q path=%q, want alias/a/sub/dir", got.Source, got.Path)
+		}
+	})
+
+	t.Run("alias source resolves to literal path", func(t *testing.T) {
+		cc := config.ContextConfig{Source: "alias", Path: "some/fixed/path"}
+		v, err := resolveContextConfig(cc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if v != "some/fixed/path" {
+			t.Errorf("got %q, want some/fixed/path", v)
+		}
+	})
+
 	t.Run("write env config then load", func(t *testing.T) {
 		cc := config.ContextConfig{Source: "env", Var: "MY_CTX"}
 		if err := writeAliasContextConfig("sms", cc); err != nil {

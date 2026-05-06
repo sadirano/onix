@@ -36,10 +36,11 @@ type Action struct {
 // When absent from config.toml the zero value is used and HasContext() returns
 // false — sub-alias navigation then works without a context layer.
 type ContextConfig struct {
-	Source   string `toml:"source"`   // "env" (default) | "file" | "cmd"
-	Var      string `toml:"var"`      // env:  variable name to read
-	File     string `toml:"file"`     // file: path to read (supports ~)
-	Cmd      string `toml:"cmd"`      // cmd:  command whose stdout is the context
+	Source   string `toml:"source"`   // "env" (default) | "file" | "cmd" | "alias"
+	Var      string `toml:"var"`      // env:   variable name to read
+	File     string `toml:"file"`     // file:  path to read (supports ~)
+	Cmd      string `toml:"cmd"`      // cmd:   command whose stdout is the context
+	Path     string `toml:"path"`     // alias: fixed subdirectory path
 	Template string `toml:"template"` // path template; {value} is replaced with context value
 }
 

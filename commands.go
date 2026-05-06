@@ -86,7 +86,7 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 
 	case "ctx":
 		if len(args) < 2 {
-			fatal("usage: onix ctx <segment> [env <var> | cmd <command> | file <path>] [template] | --clear")
+			fatal("usage: onix ctx <segment> [env <var> | cmd <command> | file <path> | alias <subdir>] [template] | --clear")
 		}
 		// Accept both "sg" and "sg@onix" — extract just the segment name.
 		segs, _ := parseAllSegments(args[1])
@@ -138,6 +138,15 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 				fatal("write context: %v", err)
 			}
 			fmt.Printf("Context for %q: source=file file=%s template=%s\n", a, cc.File, cc.Template)
+		case args[2] == "alias":
+			if len(args) < 4 {
+				fatal("usage: onix ctx <segment> alias <subdir>")
+			}
+			cc := config.ContextConfig{Source: "alias", Path: args[3]}
+			if err := writeAliasContextConfig(a, cc); err != nil {
+				fatal("write context: %v", err)
+			}
+			fmt.Printf("Context for %q: source=alias path=%s\n", a, cc.Path)
 		default:
 			fatal("unknown context source %q — use env, cmd, or file", args[2])
 		}

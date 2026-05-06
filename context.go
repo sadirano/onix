@@ -30,6 +30,8 @@ func writeAliasContextConfig(alias string, cc config.ContextConfig) error {
 		sb.WriteString("file=" + cc.File + "\n")
 	case "cmd":
 		sb.WriteString("cmd=" + cc.Cmd + "\n")
+	case "alias":
+		sb.WriteString("path=" + cc.Path + "\n")
 	default:
 		sb.WriteString("var=" + cc.Var + "\n")
 	}
@@ -67,6 +69,8 @@ func loadAliasContextConfig(alias string) (config.ContextConfig, bool) {
 			cc.File = strings.TrimSpace(v)
 		case "cmd":
 			cc.Cmd = v // preserve spacing — cmd values may contain = signs
+		case "path":
+			cc.Path = v
 		case "template":
 			cc.Template = v
 		}
@@ -99,6 +103,8 @@ func printAliasContextConfig(alias string) {
 		fmt.Printf("file=%s\n", cc.File)
 	case "cmd":
 		fmt.Printf("cmd=%s\n", cc.Cmd)
+	case "alias":
+		fmt.Printf("path=%s\n", cc.Path)
 	default:
 		fmt.Printf("var=%s\n", cc.Var)
 	}
@@ -156,6 +162,8 @@ func resolveContextConfig(cc config.ContextConfig) (string, error) {
 		return contextFromFile(cc.File)
 	case "cmd":
 		return contextFromCmd(cc.Cmd)
+	case "alias":
+		return contextFromAlias(cc.Path)
 	default: // "env"
 		return contextFromEnv(cc.Var)
 	}
@@ -166,6 +174,14 @@ func resolveContextConfig(cc config.ContextConfig) (string, error) {
 // applied with the resolved value. Otherwise the subdir registry is consulted.
 func applySegment(seg, target string, cfg *config.Config, debugEnabled bool) (string, error) {
 	if cc, ok := loadAliasContextConfig(seg); ok {
+		// alias source: the path is the direct subdirectory — no template applied.
+		if cc.Source == "alias" {
+			part := strings.Trim(cc.Path, "/\\")
+			if debugEnabled {
+				fmt.Printf("[ONIX] segment %q → alias path=%q\n", seg, part)
+			}
+			return part, nil
+		}
 		val, err := resolveContextConfig(cc)
 		if err != nil {
 			return "", fmt.Errorf("segment %q: %w", seg, err)
@@ -181,6 +197,13 @@ func applySegment(seg, target string, cfg *config.Config, debugEnabled bool) (st
 		fmt.Printf("[ONIX] segment %q → subdir=%q\n", seg, resolved)
 	}
 	return resolved, nil
+}
+
+func contextFromAlias(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("[context] alias path is empty")
+	}
+	return path, nil
 }
 
 func contextFromEnv(name string) (string, error) {
