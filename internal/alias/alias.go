@@ -69,12 +69,6 @@ func Register(name, destination string) error {
 	return upsertLine(name, destination, FilePath())
 }
 
-// RegisterSubdir upserts a name=value entry in filePath (a subdirs.env file).
-// Creates the file and its parent directories if they do not exist.
-func RegisterSubdir(name, value, filePath string) error {
-	return upsertLine(name, value, filePath)
-}
-
 // upsertLine writes or replaces a name=value line in the given key=value file,
 // preserving comments and existing entries. Creates the file if absent.
 func upsertLine(name, value, file string) error {

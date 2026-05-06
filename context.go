@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
 )
 
@@ -169,34 +168,30 @@ func resolveContextConfig(cc config.ContextConfig) (string, error) {
 	}
 }
 
-// applySegment resolves a single @ segment against target, returning the new
-// path segment to append. If the segment has a context config, its template is
-// applied with the resolved value. Otherwise the subdir registry is consulted.
-func applySegment(seg, target string, cfg *config.Config, debugEnabled bool) (string, error) {
-	if cc, ok := loadAliasContextConfig(seg); ok {
-		// alias source: the path is the direct subdirectory — no template applied.
-		if cc.Source == "alias" {
-			part := strings.Trim(cc.Path, "/\\")
-			if debugEnabled {
-				fmt.Printf("[ONIX] segment %q → alias path=%q\n", seg, part)
-			}
-			return part, nil
-		}
-		val, err := resolveContextConfig(cc)
-		if err != nil {
-			return "", fmt.Errorf("segment %q: %w", seg, err)
-		}
-		part := applyContextTemplate(cc.Template, contextVarName(cc), val)
+// applySegment resolves a single @ segment using its context config, returning
+// the path part to append. Returns an error when no context config exists —
+// callers must ensure the config is present before calling (e.g. by prompting).
+func applySegment(seg string, cfg *config.Config, debugEnabled bool) (string, error) {
+	cc, ok := loadAliasContextConfig(seg)
+	if !ok {
+		return "", fmt.Errorf("segment %q: no context configured", seg)
+	}
+	if cc.Source == "alias" {
+		part := strings.Trim(cc.Path, "/\\")
 		if debugEnabled {
-			fmt.Printf("[ONIX] segment %q → template=%q value=%q → %q\n", seg, cc.Template, val, part)
+			fmt.Printf("[ONIX] segment %q → alias=%q\n", seg, part)
 		}
 		return part, nil
 	}
-	resolved := alias.ResolveSubdir(seg, target)
-	if debugEnabled {
-		fmt.Printf("[ONIX] segment %q → subdir=%q\n", seg, resolved)
+	val, err := resolveContextConfig(cc)
+	if err != nil {
+		return "", fmt.Errorf("segment %q: %w", seg, err)
 	}
-	return resolved, nil
+	part := applyContextTemplate(cc.Template, contextVarName(cc), val)
+	if debugEnabled {
+		fmt.Printf("[ONIX] segment %q → template=%q value=%q → %q\n", seg, cc.Template, val, part)
+	}
+	return part, nil
 }
 
 func contextFromAlias(path string) (string, error) {
@@ -247,33 +242,24 @@ func contextFromCmd(command string) (string, error) {
 	return v, nil
 }
 
-// expandTilde expands a leading ~ to the user home directory.
 // walkSegments resolves each @ segment against target right-to-left, returning
-// the final target path. When a segment falls back to its literal name and the
-// corresponding directory does not exist on disk, the user is prompted to enter
-// a subdirectory name which is then registered in the local subdirs.env.
+// the final target path. When a segment has no context config the user is
+// prompted to configure one, which is then saved for future invocations.
 func walkSegments(segments []string, target string, cfg *config.Config, debugEnabled bool) string {
 	for i := len(segments) - 1; i >= 0; i-- {
 		seg := segments[i]
-		part, err := applySegment(seg, target, cfg, debugEnabled)
+		if _, ok := loadAliasContextConfig(seg); !ok {
+			cc, ok := promptContextConfig(seg)
+			if !ok {
+				os.Exit(exitNotFound)
+			}
+			if err := writeAliasContextConfig(seg, cc); err != nil {
+				fatalCode(exitErr, "save context for %q: %v", seg, err)
+			}
+		}
+		part, err := applySegment(seg, cfg, debugEnabled)
 		if err != nil {
 			fatalCode(exitErr, "%v", err)
-		}
-		// Detect raw fallback: segment resolved to itself and directory doesn't exist.
-		if part == seg {
-			if _, statErr := os.Stat(filepath.Join(target, part)); statErr != nil {
-				fmt.Fprintf(os.Stderr, "onix: segment %q is not registered\n", seg)
-				sub := promptSubdir(seg)
-				if sub == "" {
-					os.Exit(exitNotFound)
-				}
-				localFile := filepath.Join(target, "subdirs.env")
-				if err := alias.RegisterSubdir(seg, sub, localFile); err != nil {
-					fatalCode(exitErr, "register subdir: %v", err)
-				}
-				fmt.Printf("Registered segment %q -> %q\n", seg, sub)
-				part = sub
-			}
 		}
 		target = filepath.Join(target, part)
 	}
