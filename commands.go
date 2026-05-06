@@ -88,7 +88,12 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 		if len(args) < 2 {
 			fatal("usage: onix ctx <segment> [env <var> | cmd <command> | file <path>] [template] | --clear")
 		}
+		// Accept both "sg" and "sg@onix" — extract just the segment name.
+		segs, _ := parseAllSegments(args[1])
 		a := args[1]
+		if len(segs) > 0 {
+			a = segs[0]
+		}
 		switch {
 		case len(args) == 2:
 			printAliasContextConfig(a)

@@ -11,20 +11,26 @@ import (
 func TestApplyContextTemplate(t *testing.T) {
 	tests := []struct {
 		template string
+		varName  string
 		value    string
 		want     string
 	}{
-		{"", "12345", "12345"},
-		{"{value}", "12345", "12345"},
-		{"/{value}", "12345", "12345"},
-		{"task/{value}", "12345", "task/12345"},
-		{"/task/{value}", "12345", "task/12345"},
-		{"client/{value}/docs", "abc", "client/abc/docs"},
+		{"", "", "12345", "12345"},
+		{"{value}", "", "12345", "12345"},
+		{"/{value}", "", "12345", "12345"},
+		{"task/{value}", "", "12345", "task/12345"},
+		{"/task/{value}", "", "12345", "task/12345"},
+		{"client/{value}/docs", "", "abc", "client/abc/docs"},
+		// named-var placeholder: {varName} substituted like {value}
+		{"/tes/{test}", "test", "123", "tes/123"},
+		{"tes/{test}/sub", "test", "abc", "tes/abc/sub"},
+		// both placeholders present
+		{"{test}/{value}", "test", "x", "x/x"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.template+"|"+tt.value, func(t *testing.T) {
-			if got := applyContextTemplate(tt.template, tt.value); got != tt.want {
-				t.Errorf("applyContextTemplate(%q, %q) = %q, want %q", tt.template, tt.value, got, tt.want)
+			if got := applyContextTemplate(tt.template, tt.varName, tt.value); got != tt.want {
+				t.Errorf("applyContextTemplate(%q, %q, %q) = %q, want %q", tt.template, tt.varName, tt.value, got, tt.want)
 			}
 		})
 	}

@@ -107,14 +107,32 @@ func printAliasContextConfig(alias string) {
 	}
 }
 
-// applyContextTemplate substitutes {value} in template with value.
+// contextVarName returns the identifier to use as a named placeholder in
+// templates: the var name for env source, the file path for file source, and
+// the cmd string for cmd source. Returns "" when no meaningful name exists.
+func contextVarName(cc config.ContextConfig) string {
+	switch cc.Source {
+	case "file":
+		return cc.File
+	case "cmd":
+		return cc.Cmd
+	default:
+		return cc.Var
+	}
+}
+
+// applyContextTemplate substitutes placeholders in template with value.
+// Supports both {value} (generic) and {varName} (the configured var/cmd/file name).
 // Leading/trailing path separators are stripped so the result can be safely
 // joined with filepath.Join. When template is empty, value is returned as-is.
-func applyContextTemplate(template, value string) string {
+func applyContextTemplate(template, varName, value string) string {
 	if template == "" {
 		return value
 	}
 	result := strings.ReplaceAll(template, "{value}", value)
+	if varName != "" {
+		result = strings.ReplaceAll(result, "{"+varName+"}", value)
+	}
 	return strings.Trim(result, "/\\")
 }
 
@@ -152,7 +170,7 @@ func applySegment(seg, target string, cfg *config.Config, debugEnabled bool) (st
 		if err != nil {
 			return "", fmt.Errorf("segment %q: %w", seg, err)
 		}
-		part := applyContextTemplate(cc.Template, val)
+		part := applyContextTemplate(cc.Template, contextVarName(cc), val)
 		if debugEnabled {
 			fmt.Printf("[ONIX] segment %q → template=%q value=%q → %q\n", seg, cc.Template, val, part)
 		}
