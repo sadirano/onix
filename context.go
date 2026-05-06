@@ -275,7 +275,7 @@ func walkSegments(segments []string, target string, cfg *config.Config, debugEna
 		if _, ok := loadAliasContextConfig(seg); !ok {
 			cc, ok := promptContextConfig(seg)
 			if !ok {
-				os.Exit(errs.ExitNotFound)
+				os.Exit(errs.ExitOK)
 			}
 			if err := writeAliasContextConfig(seg, cc); err != nil {
 				errs.FatalCode(errs.ExitErr, "save context for %q: %v", seg, err)

@@ -233,6 +233,9 @@ func promptContextConfig(segName string) (config.ContextConfig, bool) {
 		if !ok {
 			return config.ContextConfig{}, false
 		}
+		if s == "" {
+			return config.ContextConfig{}, false
+		}
 		switch s {
 		case "env", "cmd", "file", "alias":
 			source = s

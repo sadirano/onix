@@ -9,6 +9,7 @@ import (
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/errs"
 	"github.com/sadirano/onix/internal/installer"
+	"github.com/sadirano/onix/internal/opener"
 )
 
 // handleManagementCommand executes a built-in onix subcommand (install, add,
@@ -102,6 +103,11 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 				errs.Fatal("clear context: %v", err)
 			}
 			fmt.Printf("Context for %q cleared\n", a)
+		case args[2] == "editor":
+			p := aliasContextPath(a)
+			if err := opener.RunEditorCommand(cfg.ResolveEditor(), filepath.Dir(p), filepath.Base(p)); err != nil {
+				errs.Fatal("%v", err)
+			}
 		case args[2] == "env", args[2] == "cmd", args[2] == "file", args[2] == "alias":
 			if len(args) < 4 {
 				errs.Fatal("usage: onix ctx <segment> %s <value> [template]", args[2])
