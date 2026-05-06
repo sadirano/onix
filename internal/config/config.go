@@ -102,11 +102,11 @@ func BinDir() string {
 
 // Settings holds global onix settings.
 type Settings struct {
-	AliasFile  string `toml:"alias_file"`  // override alias file; empty = use default
-	Editor     string `toml:"editor"`      // override editor; empty = use EDITOR env
-	Timing     bool   `toml:"timing"`      // equivalent to ONIX_TIMING=1
-	Debug      bool   `toml:"debug"`       // equivalent to ONIX_DEBUG=1
-	DisableRun bool   `toml:"disable_run"` // set true to block the run builtin
+	AliasFile    string `toml:"alias_file"`    // override alias file; empty = use default
+	Editor       string `toml:"editor"`       // override editor; empty = use EDITOR env
+	Timing       bool   `toml:"timing"`       // equivalent to ONIX_TIMING=1
+	Debug        bool   `toml:"debug"`        // equivalent to ONIX_DEBUG=1
+	DisableRun   bool   `toml:"disable_run"`  // set true to block the run builtin
 }
 
 // Module describes one installable module.
@@ -224,23 +224,17 @@ func (c *Config) HasContext() bool {
 }
 
 // IsDebugEnabled reports whether debug output is active.
-// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
 func (c *Config) IsDebugEnabled() bool {
 	return c.Settings.Debug ||
-		os.Getenv("ONIX_DEBUG") == "1" ||
-		os.Getenv("OMNI_DEBUG") == "1"
+		os.Getenv("ONIX_DEBUG") == "1"
 }
 
 // ResolveEditor returns the configured editor, falling back to EDITOR env then nvim.
-// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
 func (c *Config) ResolveEditor() string {
 	if e := strings.TrimSpace(c.Settings.Editor); e != "" {
 		return e
 	}
 	if e := strings.TrimSpace(os.Getenv("EDITOR")); e != "" {
-		return e
-	}
-	if e := strings.TrimSpace(os.Getenv("OMNI_EDITOR")); e != "" {
 		return e
 	}
 	return "nvim"
@@ -299,12 +293,11 @@ const Starter = `# ~/.onix/config.toml
 # Onix configuration.
 
 [settings]
-# alias_file   = ""     # default: ~/.omni/.env  (omni-compatible)
-# editor       = ""     # default: $EDITOR env var, then nvim
-# timing       = false
-# debug        = false
-# disable_run  = false  # set true to block the run builtin (shell execution)
-
+# alias_file    = ""     # default: ~/.onix/aliases
+# editor        = ""     # default: $EDITOR env var, then nvim
+# timing        = false
+# debug         = false
+# disable_run   = false  # set true to block the run builtin (shell execution)
 # Context resolved at runtime for subalias@alias navigation.
 # When this section is absent, subalias@alias paths omit the context layer.
 #
