@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
+	"github.com/sadirano/onix/internal/errs"
 )
 
 // aliasContextPath returns the path of the per-segment context config file.
@@ -156,16 +157,39 @@ func resolveContext(segmentName string, cfg *config.Config) (string, error) {
 
 // resolveContextConfig resolves a context value from a ContextConfig.
 func resolveContextConfig(cc config.ContextConfig) (string, error) {
+	var val string
+	var err error
+
 	switch cc.Source {
 	case "file":
-		return contextFromFile(cc.File)
+		val, err = contextFromFile(cc.File)
 	case "cmd":
-		return contextFromCmd(cc.Cmd)
+		val, err = contextFromCmd(cc.Cmd)
 	case "alias":
-		return contextFromAlias(cc.Path)
+		val, err = contextFromAlias(cc.Path)
 	default: // "env"
-		return contextFromEnv(cc.Var)
+		val, err = contextFromEnv(cc.Var)
 	}
+
+	if err != nil {
+		return "", err
+	}
+	return sanitizeContextValue(val), nil
+}
+
+// sanitizeContextValue removes whitespace, wrapping quotes, and characters
+// that are illegal in Windows path segments.
+func sanitizeContextValue(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.Trim(v, `"'`)
+	v = strings.TrimSpace(v)
+	// Strip characters that are illegal in Windows filenames/paths.
+	// We keep / and \ as they may be intentional subdirectories.
+	bad := []string{`"`, `*`, `?`, `<`, `>`, `|`}
+	for _, b := range bad {
+		v = strings.ReplaceAll(v, b, "")
+	}
+	return v
 }
 
 // applySegment resolves a single @ segment using its context config, returning
@@ -177,7 +201,7 @@ func applySegment(seg string, cfg *config.Config, debugEnabled bool) (string, er
 		return "", fmt.Errorf("segment %q: no context configured", seg)
 	}
 	if cc.Source == "alias" {
-		part := strings.Trim(cc.Path, "/\\")
+		part := strings.Trim(sanitizeContextValue(cc.Path), "/\\")
 		if debugEnabled {
 			fmt.Printf("[ONIX] segment %q → alias=%q\n", seg, part)
 		}
@@ -251,15 +275,15 @@ func walkSegments(segments []string, target string, cfg *config.Config, debugEna
 		if _, ok := loadAliasContextConfig(seg); !ok {
 			cc, ok := promptContextConfig(seg)
 			if !ok {
-				os.Exit(exitNotFound)
+				os.Exit(errs.ExitNotFound)
 			}
 			if err := writeAliasContextConfig(seg, cc); err != nil {
-				fatalCode(exitErr, "save context for %q: %v", seg, err)
+				errs.FatalCode(errs.ExitErr, "save context for %q: %v", seg, err)
 			}
 		}
 		part, err := applySegment(seg, cfg, debugEnabled)
 		if err != nil {
-			fatalCode(exitErr, "%v", err)
+			errs.FatalCode(errs.ExitErr, "%v", err)
 		}
 		target = filepath.Join(target, part)
 	}

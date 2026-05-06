@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
+	"github.com/sadirano/onix/internal/errs"
 	"github.com/sadirano/onix/internal/installer"
 )
 
@@ -28,15 +28,15 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 		}
 		if installModule != "" {
 			if err := installer.Install(installModule, cfg); err != nil {
-				fatal("%v", err)
+				errs.Fatal("%v", err)
 			}
 		} else {
 			if err := installer.InstallAll(cfg); err != nil {
-				fatal("%v", err)
+				errs.Fatal("%v", err)
 			}
 		}
 		if err := installer.InstallShortcutsProfile(installProfile, cfg); err != nil {
-			fatal("%v", err)
+			errs.Fatal("%v", err)
 		}
 		t.mark("install")
 
@@ -44,22 +44,22 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 		switch len(args) {
 		case 2:
 			if err := installer.Add(args[1], "", cfg); err != nil {
-				fatal("%v", err)
+				errs.Fatal("%v", err)
 			}
 		case 3:
 			if err := installer.Add(args[1], args[2], cfg); err != nil {
-				fatal("%v", err)
+				errs.Fatal("%v", err)
 			}
 		default:
-			fatal("usage: onix add <user/repo> [name]")
+			errs.Fatal("usage: onix add <user/repo> [name]")
 		}
 
 	case "remove":
 		if len(args) < 2 {
-			fatal("usage: onix remove <name>")
+			errs.Fatal("usage: onix remove <name>")
 		}
 		if err := installer.Remove(args[1], cfg); err != nil {
-			fatal("%v", err)
+			errs.Fatal("%v", err)
 		}
 
 	case "update":
@@ -69,10 +69,10 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 			name = args[1]
 		}
 		if err := installer.Update(name, cfg); err != nil {
-			fatal("%v", err)
+			errs.Fatal("%v", err)
 		}
 		if err := installer.InstallShortcuts(cfg); err != nil {
-			fatal("%v", err)
+			errs.Fatal("%v", err)
 		}
 		t.mark("update")
 
@@ -81,12 +81,12 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 
 	case "init":
 		if err := installer.Init(); err != nil {
-			fatal("%v", err)
+			errs.Fatal("%v", err)
 		}
 
 	case "ctx":
 		if len(args) < 2 {
-			fatal("usage: onix ctx <segment> [env <var> | cmd <command> | file <path> | alias <subdir>] [template] | --clear")
+			errs.Fatal("usage: onix ctx <segment> [env <var> | cmd <command> | file <path> | alias <subdir>] [template] | --clear")
 		}
 		// Accept both "sg" and "sg@onix" — extract just the segment name.
 		segs, _ := parseAllSegments(args[1])
@@ -99,56 +99,33 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 			printAliasContextConfig(a)
 		case args[2] == "--clear":
 			if err := clearAliasContext(a); err != nil {
-				fatal("clear context: %v", err)
+				errs.Fatal("clear context: %v", err)
 			}
 			fmt.Printf("Context for %q cleared\n", a)
-		case args[2] == "env":
+		case args[2] == "env", args[2] == "cmd", args[2] == "file", args[2] == "alias":
 			if len(args) < 4 {
-				fatal("usage: onix ctx <segment> env <var> [template]")
+				errs.Fatal("usage: onix ctx <segment> %s <value> [template]", args[2])
 			}
-			cc := config.ContextConfig{Source: "env", Var: args[3]}
+			cc := config.ContextConfig{Source: args[2]}
+			switch args[2] {
+			case "env":
+				cc.Var = args[3]
+			case "cmd":
+				cc.Cmd = args[3]
+			case "file":
+				cc.File = args[3]
+			case "alias":
+				cc.Path = args[3]
+			}
 			if len(args) >= 5 {
 				cc.Template = args[4]
 			}
 			if err := writeAliasContextConfig(a, cc); err != nil {
-				fatal("write context: %v", err)
+				errs.Fatal("write context: %v", err)
 			}
-			fmt.Printf("Context for %q: source=env var=%s template=%s\n", a, cc.Var, cc.Template)
-		case args[2] == "cmd":
-			if len(args) < 4 {
-				fatal("usage: onix ctx <segment> cmd <command> [template]")
-			}
-			cc := config.ContextConfig{Source: "cmd", Cmd: args[3]}
-			if len(args) >= 5 {
-				cc.Template = args[4]
-			}
-			if err := writeAliasContextConfig(a, cc); err != nil {
-				fatal("write context: %v", err)
-			}
-			fmt.Printf("Context for %q: source=cmd cmd=%s template=%s\n", a, cc.Cmd, cc.Template)
-		case args[2] == "file":
-			if len(args) < 4 {
-				fatal("usage: onix ctx <segment> file <path> [template]")
-			}
-			cc := config.ContextConfig{Source: "file", File: args[3]}
-			if len(args) >= 5 {
-				cc.Template = args[4]
-			}
-			if err := writeAliasContextConfig(a, cc); err != nil {
-				fatal("write context: %v", err)
-			}
-			fmt.Printf("Context for %q: source=file file=%s template=%s\n", a, cc.File, cc.Template)
-		case args[2] == "alias":
-			if len(args) < 4 {
-				fatal("usage: onix ctx <segment> alias <subdir>")
-			}
-			cc := config.ContextConfig{Source: "alias", Path: args[3]}
-			if err := writeAliasContextConfig(a, cc); err != nil {
-				fatal("write context: %v", err)
-			}
-			fmt.Printf("Context for %q: source=alias path=%s\n", a, cc.Path)
+			fmt.Printf("Context for %q: source=%s value=%s template=%s\n", a, cc.Source, args[3], cc.Template)
 		default:
-			fatal("unknown context source %q — use env, cmd, or file", args[2])
+			errs.Fatal("unknown context source %q — use env, cmd, file, or alias", args[2])
 		}
 
 	case "-h", "--help", "help":
@@ -185,14 +162,11 @@ func registerAlias(args []string) string {
 		}
 	}
 
-	if aliasName == "" || destination == "" {
-		fatal("usage: onix -a <alias> -d <destination>")
-	}
 	if subdir != "" {
 		destination = filepath.Join(destination, subdir)
 	}
 	if err := alias.Register(aliasName, destination); err != nil {
-		fatal("register alias: %v", err)
+		errs.Fatal("register alias: %v", err)
 	}
 	fmt.Printf("Registered \"%s\" -> \"%s\"\n", aliasName, destination)
 	return destination
@@ -246,7 +220,7 @@ func resolveBuiltin(cmdName string, cfg *config.Config) string {
 	}
 	action := cfg.FindAction(cmdName)
 	if action == nil {
-		fatal("unknown command %q — check [[action]] blocks in config", cmdName)
+		errs.Fatal("unknown command %q — check [[action]] blocks in config", cmdName)
 	}
 	return action.Builtin
 }
@@ -264,6 +238,7 @@ Usage:
   onix remove <name>            remove a module
   onix update [name]            update one or all modules
   onix list                     list declared modules
+  onix shortcuts                install .cmd wrappers in ~/.onix/bin/
   onix init                     initialise ~/.onix/ structure
   onix help                     show this message
 
@@ -285,15 +260,4 @@ Config:  ~/.onix/config.toml
 Modules: ~/.onix/modules/
 Bin:     ~/.onix/bin/   ← add this to PATH
 `)
-}
-
-// fatal prints an error to stderr and exits with code 1 (general error).
-func fatal(format string, a ...any) {
-	fatalCode(exitErr, format, a...)
-}
-
-// fatalCode prints an error to stderr and exits with the given code.
-func fatalCode(code int, format string, a ...any) {
-	fmt.Fprintf(os.Stderr, "onix: "+format+"\n", a...)
-	os.Exit(code)
 }

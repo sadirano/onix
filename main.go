@@ -35,21 +35,13 @@ import (
 //
 //	ONIX_MODULE=mymodule onix <alias> [args...]
 
-// Exit codes used by onix.
-const (
-	exitOK      = 0
-	exitErr     = 1 // general error
-	exitUsage   = 2 // bad arguments / usage error
-	exitNotFound = 3 // alias or module not found
-)
-
 func main() {
 	t := newTimer()
 	defer t.report()
 
 	cfg, err := config.Load()
 	if err != nil {
-		fatalCode(exitErr, "load config: %v", err)
+		errs.FatalCode(errs.ExitErr, "load config: %v", err)
 	}
 	alias.ApplyEnvOverride(cfg.Settings.AliasFile)
 	debugEnabled := cfg.IsDebugEnabled()
@@ -64,10 +56,10 @@ func main() {
 	if mod := strings.TrimSpace(os.Getenv("ONIX_MODULE")); mod != "" && !dispatch.IsCoreCommand(args) {
 		t.mark("config loaded")
 		if len(args) == 0 {
-			fatalCode(exitUsage, "usage: %s <alias> [args...]", mod)
+			errs.FatalCode(errs.ExitUsage, "usage: %s <alias> [args...]", mod)
 		}
 		if err := installer.EnsureInstalled(mod, cfg); err != nil {
-			fatalCode(exitNotFound, "%v", err)
+			errs.FatalCode(errs.ExitNotFound, "%v", err)
 		}
 		entry := strings.TrimSpace(os.Getenv("ONIX_ENTRY"))
 		segments, aliasName := parseAllSegments(args[0])
@@ -79,7 +71,7 @@ func main() {
 		} else {
 			target, err := alias.Resolve(aliasName, debugEnabled)
 			if err != nil {
-				fatalCode(exitNotFound, "%v", err)
+				errs.FatalCode(errs.ExitNotFound, "%v", err)
 			}
 			target = walkSegments(segments, target, cfg, debugEnabled)
 			if err := dispatch.RunAtTarget(mod, entry, aliasName, target, args[1:], cfg); err != nil {
@@ -93,13 +85,10 @@ func main() {
 	// Action dispatch — invoked via a .cmd wrapper that sets ONIX_COMMAND.
 	cmdName := strings.TrimSpace(os.Getenv("ONIX_COMMAND"))
 
-	// No args — open the alias file in the editor (only when not via a wrapper).
+	// No args — open the alias file.
 	if len(args) == 0 {
-		if cmdName != "" {
-			fatalCode(exitUsage, "usage: %s <alias> [args...]", cmdName)
-		}
 		if err := alias.OpenInEditor(cfg.ResolveEditor()); err != nil {
-			fatalCode(exitErr, "%v", err)
+			errs.FatalCode(errs.ExitErr, "%v", err)
 		}
 		return
 	}
@@ -116,7 +105,7 @@ func main() {
 			builtin := resolveBuiltin(cmdName, cfg)
 			if !isUNCPath(destination) {
 				if err := os.MkdirAll(destination, 0o755); err != nil {
-					fatalCode(exitErr, "create target: %v", err)
+					errs.FatalCode(errs.ExitErr, "create target: %v", err)
 				}
 			}
 			t.mark("action after register")
@@ -138,14 +127,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "onix: %v\n", resolveErr)
 		dest := promptDestination(aliasName)
 		if dest == "" {
-			os.Exit(exitNotFound)
+			os.Exit(errs.ExitNotFound)
 		}
 		abs, err := filepath.Abs(dest) // C4: resolve to absolute before registering
 		if err != nil {
-			fatalCode(exitErr, "resolve path: %v", err)
+			errs.FatalCode(errs.ExitErr, "resolve path: %v", err)
 		}
 		if err := alias.Register(aliasName, abs); err != nil {
-			fatalCode(exitErr, "register alias: %v", err)
+			errs.FatalCode(errs.ExitErr, "register alias: %v", err)
 		}
 		fmt.Printf("Registered \"%s\" -> \"%s\"\n", aliasName, abs)
 		target = abs
@@ -161,10 +150,10 @@ func main() {
 	}
 	if !isUNCPath(target) {
 		if err := os.MkdirAll(target, 0o755); err != nil {
-			fatalCode(exitErr, "create target: %v", err)
+			errs.FatalCode(errs.ExitErr, "create target: %v", err)
 		}
 		if err := os.Chdir(target); err != nil {
-			fatalCode(exitErr, "chdir: %v", err)
+			errs.FatalCode(errs.ExitErr, "chdir: %v", err)
 		}
 	}
 	t.mark("chdir")
@@ -176,10 +165,10 @@ func main() {
 }
 
 // handleActionErr checks whether err is an ExitError (child process exit code)
-// and exits with that code, otherwise fatals with exitErr.
+// and exits with that code, otherwise fatals with ExitErr.
 func handleActionErr(err error) {
 	if ee, ok := err.(*errs.ExitError); ok {
 		os.Exit(ee.Code)
 	}
-	fatalCode(exitErr, "%v", err)
+	errs.FatalCode(errs.ExitErr, "%v", err)
 }
