@@ -70,8 +70,21 @@ func main() {
 			fatalCode(exitNotFound, "%v", err)
 		}
 		entry := strings.TrimSpace(os.Getenv("ONIX_ENTRY"))
-		if err := dispatch.Run(mod, entry, args[0], args[1:], cfg); err != nil {
-			handleActionErr(err)
+		segments, aliasName := parseAllSegments(args[0])
+		if len(segments) == 0 {
+			// Fast path: no @ segments — delegate full resolve to dispatch.Run.
+			if err := dispatch.Run(mod, entry, aliasName, args[1:], cfg); err != nil {
+				handleActionErr(err)
+			}
+		} else {
+			target, err := alias.Resolve(aliasName, debugEnabled)
+			if err != nil {
+				fatalCode(exitNotFound, "%v", err)
+			}
+			target = walkSegments(segments, target, cfg, debugEnabled)
+			if err := dispatch.RunAtTarget(mod, entry, aliasName, target, args[1:], cfg); err != nil {
+				handleActionErr(err)
+			}
 		}
 		t.mark("dispatch")
 		return
@@ -141,13 +154,7 @@ func main() {
 
 	// Walk segments right-to-left (closest to alias first) so that
 	// "task@client@place" appends client's contribution before task's.
-	for i := len(segments) - 1; i >= 0; i-- {
-		part, err := applySegment(segments[i], target, cfg, debugEnabled)
-		if err != nil {
-			fatalCode(exitErr, "%v", err)
-		}
-		target = filepath.Join(target, part)
-	}
+	target = walkSegments(segments, target, cfg, debugEnabled)
 
 	if subdir != "" {
 		target = filepath.Join(target, subdir)

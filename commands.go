@@ -18,8 +18,16 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 	switch args[0] {
 	case "install":
 		t.mark("config loaded")
-		if len(args) > 1 {
-			if err := installer.Install(args[1], cfg); err != nil {
+		var installModule, installProfile string
+		for _, a := range args[1:] {
+			if strings.HasPrefix(a, "-") {
+				installProfile = strings.TrimPrefix(a, "-")
+			} else {
+				installModule = a
+			}
+		}
+		if installModule != "" {
+			if err := installer.Install(installModule, cfg); err != nil {
 				fatal("%v", err)
 			}
 		} else {
@@ -27,7 +35,7 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 				fatal("%v", err)
 			}
 		}
-		if err := installer.InstallShortcuts(cfg); err != nil {
+		if err := installer.InstallShortcutsProfile(installProfile, cfg); err != nil {
 			fatal("%v", err)
 		}
 		t.mark("install")
@@ -237,7 +245,7 @@ Usage:
   onix                          open alias file in editor
   onix <alias>                  open shell in target directory
   onix -a <alias> -d <path>     register an alias
-  onix install [name]           install one or all modules
+  onix install [name] [-profile] install one or all modules; -profile applies a named shortcut set
   onix add <user/repo> [name]   declare a module in config
   onix remove <name>            remove a module
   onix update [name]            update one or all modules

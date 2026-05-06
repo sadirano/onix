@@ -14,11 +14,37 @@ import (
 // InstallShortcuts writes .cmd wrappers in ~/.onix/bin/ for each configured
 // action. Each wrapper sets ONIX_COMMAND to the action name before calling onix.
 func InstallShortcuts(cfg *config.Config) error {
-	actions := cfg.Actions
-	if len(actions) == 0 {
-		actions = config.DefaultActions
-	}
+	return InstallShortcutsProfile("", cfg)
+}
 
+// InstallShortcutsProfile writes .cmd wrappers using a named built-in profile
+// when profile is non-empty, otherwise falls back to the config actions (or
+// DefaultActions when none are declared).
+// When a profile is used its actions are also written into config.toml so that
+// resolveBuiltin can look them up at runtime.
+func InstallShortcutsProfile(profile string, cfg *config.Config) error {
+	var actions []config.Action
+	if profile != "" {
+		p, ok := config.BuiltinProfiles[profile]
+		if !ok {
+			return fmt.Errorf("unknown shortcut profile %q — available: %v", profile, profileNames())
+		}
+		actions = p
+		fmt.Printf("Using shortcut profile %q\n", profile)
+		cfg.Actions = actions
+		if err := config.Save(cfg); err != nil {
+			return fmt.Errorf("save profile actions to config: %w", err)
+		}
+	} else {
+		actions = cfg.Actions
+		if len(actions) == 0 {
+			actions = config.DefaultActions
+		}
+	}
+	return installShortcutsFromActions(actions)
+}
+
+func installShortcutsFromActions(actions []config.Action) error {
 	sorted := make([]config.Action, len(actions))
 	copy(sorted, actions)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
@@ -52,6 +78,15 @@ func InstallShortcuts(cfg *config.Config) error {
 		fmt.Printf("Add manually: %s\n", binDir)
 	}
 	return nil
+}
+
+func profileNames() []string {
+	names := make([]string, 0, len(config.BuiltinProfiles))
+	for k := range config.BuiltinProfiles {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // addBinToUserPath adds dir to the user-scoped PATH in the Windows registry.

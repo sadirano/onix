@@ -64,6 +64,20 @@ func runResolved(moduleName, entryName, target string, args []string, cfg *confi
 	return runModule(moduleName, entryName, "", target, args, cfg)
 }
 
+// RunAtTarget chdir to a pre-resolved target and executes the named module.
+// Use this when the caller has already resolved @ segments and knows the final
+// target path. aliasName is the base alias (without segment prefixes) set as
+// ONIX_ALIAS for the module process; pass "" to omit it.
+func RunAtTarget(moduleName, entryName, aliasName, target string, args []string, cfg *config.Config) error {
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return fmt.Errorf("create target %q: %w", target, err)
+	}
+	if err := os.Chdir(target); err != nil {
+		return fmt.Errorf("chdir to %q: %w", target, err)
+	}
+	return runModule(moduleName, entryName, aliasName, target, args, cfg)
+}
+
 // runModule builds and executes the module command. aliasName is included in
 // the environment as ONIX_ALIAS only when non-empty.
 func runModule(moduleName, entryName, aliasName, target string, args []string, cfg *config.Config) error {

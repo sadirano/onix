@@ -53,6 +53,20 @@ var DefaultActions = []Action{
 	{Name: "run",     Builtin: "run"},
 }
 
+// BuiltinProfiles maps profile names to their action sets.
+// Pass a profile name via `onix install -<profile>` to apply it.
+var BuiltinProfiles = map[string][]Action{
+	"sadirano": {
+		{Name: "c", Builtin: "shell"},    // command line
+		{Name: "f", Builtin: "files"},    // open file
+		{Name: "n", Builtin: "editor"},   // neovim/editor
+		{Name: "o", Builtin: "shell"},    // onix short alias
+		{Name: "r", Builtin: "run"},      // run
+		{Name: "s", Builtin: "explorer"}, // start/explorer
+		{Name: "y", Builtin: "print"},    // yank/copy path
+	},
+}
+
 // Dir returns the onix home directory (~/.onix).
 // Panics when the home directory cannot be determined, as all subsequent
 // path operations would silently resolve relative to CWD otherwise.

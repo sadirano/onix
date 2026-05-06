@@ -3,6 +3,7 @@ package alias
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -118,6 +119,57 @@ func TestParseSubdirFile(t *testing.T) {
 		m := parseSubdirFile("/nonexistent/path/subdirs.env")
 		if m != nil {
 			t.Errorf("expected nil, got %v", m)
+		}
+	})
+}
+
+func TestRegisterSubdir(t *testing.T) {
+	t.Run("creates file and inserts entry", func(t *testing.T) {
+		dir := t.TempDir()
+		p := filepath.Join(dir, "subdirs.env")
+		if err := RegisterSubdir("sg", "segmentos", p); err != nil {
+			t.Fatalf("RegisterSubdir: %v", err)
+		}
+		v, ok := lookupSubdir("sg", p)
+		if !ok || v != "segmentos" {
+			t.Errorf("got (%q, %v), want (\"segmentos\", true)", v, ok)
+		}
+	})
+
+	t.Run("upserts existing entry", func(t *testing.T) {
+		dir := t.TempDir()
+		p := filepath.Join(dir, "subdirs.env")
+		if err := RegisterSubdir("sg", "old", p); err != nil {
+			t.Fatal(err)
+		}
+		if err := RegisterSubdir("sg", "new", p); err != nil {
+			t.Fatal(err)
+		}
+		v, ok := lookupSubdir("sg", p)
+		if !ok || v != "new" {
+			t.Errorf("got (%q, %v), want (\"new\", true)", v, ok)
+		}
+		// No duplicate lines.
+		data, _ := os.ReadFile(p)
+		count := 0
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "sg=") {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Errorf("expected exactly one sg= line, found %d", count)
+		}
+	})
+
+	t.Run("creates parent directories", func(t *testing.T) {
+		dir := t.TempDir()
+		p := filepath.Join(dir, "nested", "subdirs.env")
+		if err := RegisterSubdir("x", "y", p); err != nil {
+			t.Fatalf("RegisterSubdir in nested dir: %v", err)
+		}
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("file not created: %v", err)
 		}
 	})
 }

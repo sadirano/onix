@@ -11,6 +11,6 @@ if errorlevel 1 (
     echo Deploy failed - could not copy to %USERPROFILE%\.onix\onix.exe
     exit /b 1
 )
-echo onix.exe deployed. Installing shortcuts...
-"%USERPROFILE%\.onix\onix.exe" shortcuts
+echo onix.exe deployed. Installing ...
+"%USERPROFILE%\.onix\onix.exe" install
 echo Done.

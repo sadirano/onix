@@ -207,6 +207,38 @@ func contextFromCmd(command string) (string, error) {
 }
 
 // expandTilde expands a leading ~ to the user home directory.
+// walkSegments resolves each @ segment against target right-to-left, returning
+// the final target path. When a segment falls back to its literal name and the
+// corresponding directory does not exist on disk, the user is prompted to enter
+// a subdirectory name which is then registered in the local subdirs.env.
+func walkSegments(segments []string, target string, cfg *config.Config, debugEnabled bool) string {
+	for i := len(segments) - 1; i >= 0; i-- {
+		seg := segments[i]
+		part, err := applySegment(seg, target, cfg, debugEnabled)
+		if err != nil {
+			fatalCode(exitErr, "%v", err)
+		}
+		// Detect raw fallback: segment resolved to itself and directory doesn't exist.
+		if part == seg {
+			if _, statErr := os.Stat(filepath.Join(target, part)); statErr != nil {
+				fmt.Fprintf(os.Stderr, "onix: segment %q is not registered\n", seg)
+				sub := promptSubdir(seg)
+				if sub == "" {
+					os.Exit(exitNotFound)
+				}
+				localFile := filepath.Join(target, "subdirs.env")
+				if err := alias.RegisterSubdir(seg, sub, localFile); err != nil {
+					fatalCode(exitErr, "register subdir: %v", err)
+				}
+				fmt.Printf("Registered segment %q -> %q\n", seg, sub)
+				part = sub
+			}
+		}
+		target = filepath.Join(target, part)
+	}
+	return target
+}
+
 func expandTilde(path string) string {
 	if !strings.HasPrefix(path, "~") {
 		return path
