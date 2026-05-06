@@ -193,10 +193,10 @@ func sanitizeContextValue(v string) string {
 }
 
 // applySegment resolves a single @ segment using its context config, returning
-// the path part to append. Returns an error when no context config exists —
-// callers must ensure the config is present before calling (e.g. by prompting).
-func applySegment(seg string, cfg *config.Config, debugEnabled bool) (string, error) {
-	cc, ok := loadAliasContextConfig(seg)
+// the path part to append. key is the storage key (seg@alias); seg is used only
+// for display. Returns an error when no context config exists.
+func applySegment(seg, key string, cfg *config.Config, debugEnabled bool) (string, error) {
+	cc, ok := loadAliasContextConfig(key)
 	if !ok {
 		return "", fmt.Errorf("segment %q: no context configured", seg)
 	}
@@ -267,21 +267,25 @@ func contextFromCmd(command string) (string, error) {
 }
 
 // walkSegments resolves each @ segment against target right-to-left, returning
-// the final target path. When a segment has no context config the user is
-// prompted to configure one, which is then saved for future invocations.
-func walkSegments(segments []string, target string, cfg *config.Config, debugEnabled bool) string {
+// the final target path. aliasName is the root alias (after the last @) and is
+// combined with each segment name to form the storage key (e.g. "sg@play"),
+// keeping configs for the same segment name under different aliases separate.
+// When a segment has no context config the user is prompted to configure one,
+// which is then saved for future invocations.
+func walkSegments(segments []string, aliasName string, target string, cfg *config.Config, debugEnabled bool) string {
 	for i := len(segments) - 1; i >= 0; i-- {
 		seg := segments[i]
-		if _, ok := loadAliasContextConfig(seg); !ok {
+		key := seg + "@" + aliasName
+		if _, ok := loadAliasContextConfig(key); !ok {
 			cc, ok := promptContextConfig(seg)
 			if !ok {
 				os.Exit(errs.ExitOK)
 			}
-			if err := writeAliasContextConfig(seg, cc); err != nil {
-				errs.FatalCode(errs.ExitErr, "save context for %q: %v", seg, err)
+			if err := writeAliasContextConfig(key, cc); err != nil {
+				errs.FatalCode(errs.ExitErr, "save context for %q: %v", key, err)
 			}
 		}
-		part, err := applySegment(seg, cfg, debugEnabled)
+		part, err := applySegment(seg, key, cfg, debugEnabled)
 		if err != nil {
 			errs.FatalCode(errs.ExitErr, "%v", err)
 		}

@@ -89,11 +89,12 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 		if len(args) < 2 {
 			errs.Fatal("usage: onix ctx <segment> [env <var> | cmd <command> | file <path> | alias <subdir>] [template] | --clear")
 		}
-		// Accept both "sg" and "sg@onix" — extract just the segment name.
-		segs, _ := parseAllSegments(args[1])
+		// Key is "seg@alias" (e.g. "sg@play") so the same segment name under
+		// different aliases stays isolated. Bare "seg" (no @) is accepted as-is.
+		segs, aliasName := parseAllSegments(args[1])
 		a := args[1]
 		if len(segs) > 0 {
-			a = segs[0]
+			a = segs[0] + "@" + aliasName
 		}
 		switch {
 		case len(args) == 2:

@@ -73,7 +73,7 @@ func main() {
 			if err != nil {
 				errs.FatalCode(errs.ExitNotFound, "%v", err)
 			}
-			target = walkSegments(segments, target, cfg, debugEnabled)
+			target = walkSegments(segments, aliasName, target, cfg, debugEnabled)
 			if err := dispatch.RunAtTarget(mod, entry, aliasName, target, args[1:], cfg); err != nil {
 				handleActionErr(err)
 			}
@@ -143,7 +143,7 @@ func main() {
 
 	// Walk segments right-to-left (closest to alias first) so that
 	// "task@client@place" appends client's contribution before task's.
-	target = walkSegments(segments, target, cfg, debugEnabled)
+	target = walkSegments(segments, aliasName, target, cfg, debugEnabled)
 
 	if subdir != "" {
 		target = filepath.Join(target, subdir)
