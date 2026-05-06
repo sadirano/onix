@@ -70,27 +70,7 @@ sg api auth middleware
 ff api migration
 ```
 
-`sg` / `ff` are visual and controlled by `onix.visual.toml` (plus themes).
-
-## 5) Theme Selector
-
-```powershell
-# Interactive picker (fzf if available)
-onix theme
-
-# List available themes in the exe folder
-onix themes list
-
-# Apply directly by name
-onix theme onix.visual.classic-omni.toml
-onix theme onix.visual.cinematic-wide.toml
-```
-
-Theme examples in repo:
-
-```powershell
-themes\onix.visual.*.toml
-```
+`sg` / `ff` are visual and controlled by `onix.visual.toml`.
 
 ## 6) Module Lifecycle
 

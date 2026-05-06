@@ -27,10 +27,9 @@ One command, one time. The alias is yours forever.
 o -a acme -d C:\Users\dev\projects\client-work\acme\backend\api\v2
 ```
 
-That writes `acme=C:\Users\dev\projects\client-work\acme\backend\api\v2` to `~/.omni/.env`.
+That writes `acme=C:\Users\dev\projects\client-work\acme\backend\api\v2` to `~/.onix/aliases`.
 Run `o` with no arguments to open that file in your editor if you ever want to edit it by hand.
 
-> The alias file is shared with omni — switching between them doesn't break anything.
 > Override the path with `ONIX_ENV` or `alias_file` in `~/.onix/config.toml`.
 
 ---
@@ -384,37 +383,13 @@ o
 o -a acme -d C:\Users\dev\projects\client-work\acme\v3
 ```
 
-Aliases live in `~/.omni/.env` as plain `KEY=VALUE` pairs.
-
----
-
-## Visual Themes
-
-onix ships with several fzf themes that control colours, layout, and preview position for
-`sg`, `ff`, and the destination picker.
-
-```
-# Interactive picker (fzf if available, numbered prompt otherwise)
-onix theme
-
-# List themes available next to the exe
-onix themes list
-
-# Apply one directly
-onix theme onix.visual.cinematic-wide.toml
-onix theme classic-omni
-```
-
-Fine-grained tweaks live in `onix.visual.toml` (auto-created next to `onix.exe`).
-See `README.md` for the full key reference.
+Aliases live in `~/.onix/aliases` as plain `KEY=VALUE` pairs.
 
 ---
 
 ## Extending with Modules
 
-omni packed everything into a single PowerShell script. onix separates concerns: the core
-binary handles alias resolution and dispatch, and capabilities are added as independent Go
-modules installed from GitHub.
+onix separates concerns: the core binary handles alias resolution and dispatch, and capabilities are added as independent Go modules installed from GitHub.
 
 **Install a module:**
 ```
@@ -502,17 +477,15 @@ onix remove img        # uninstall and remove from config
 | `ONIX_TIMING=1`   | Print phase timings to stderr                             |
 | `ONIX_ENV`        | Override alias file path (highest precedence)             |
 | `ONIX_ALIAS_FILE` | Override alias file path (second precedence)              |
-| `OMNI_ENV`        | omni-compatible alias file override                       |
-| `EDITOR`          | Preferred editor (fallback: `OMNI_EDITOR`, then `nvim`)   |
+| `EDITOR`          | Preferred editor (fallback: `nvim`)                       |
 
 Config-file equivalents (in `~/.onix/config.toml` under `[settings]`):
 ```toml
 [settings]
-alias_file = ""     # same as ONIX_ENV, lower precedence than env var
-editor     = ""     # same as EDITOR
-debug      = false
-timing     = false
-```
+alias_file    = ""     # same as ONIX_ENV, lower precedence than env var
+editor        = ""     # same as EDITOR
+debug         = false
+timing        = false```
 
 ---
 

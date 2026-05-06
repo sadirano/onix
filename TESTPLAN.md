@@ -47,12 +47,12 @@ Everything is tested against alias `tst` → `C:\temp\onix-test`.
 ## 2 — Alias Registration
 
 - [ ] **T-05** `onix -a tst -d C:\temp\onix-test`
-  - Writes `tst=C:\temp\onix-test` to `~/.omni/.env`
+  - Writes `tst=C:\temp\onix-test` to `~/.onix/aliases`
   - Prints `Registered "tst" -> "C:\temp\onix-test"`
   - No shell opens (invoked as `onix`, not `o`/`c`)
 
 - [ ] **T-06** `o -a tst2 -d C:\temp\onix-test`
-  - Writes `tst2=C:\temp\onix-test` to `~/.omni/.env`
+  - Writes `tst2=C:\temp\onix-test` to `~/.onix/aliases`
   - Prints `Registered "tst2" -> "C:\temp\onix-test"`
   - **Also opens a new cmd.exe shell at `C:\temp\onix-test`** — unique to `o`/`c`
 
@@ -73,7 +73,7 @@ Everything is tested against alias `tst` → `C:\temp\onix-test`.
   - Exits non-zero
 
 - [ ] **T-11** `o` (no args)
-  - Opens `~/.omni/.env` in `$EDITOR` (defaults to nvim)
+  - Opens `~/.onix/aliases` in `$EDITOR` (defaults to nvim)
   - The file should contain `tst`, `tst2`, `tst3` entries from prior tests
 
 ---
@@ -374,15 +374,9 @@ Quick sweep to confirm `-s` works uniformly across all actions.
   - Lists all `onix.visual.*.toml` files found next to `onix.exe`
   - Current active theme is marked `(current)`
 
-- [ ] **T-55** `onix theme classic-omni`
-  - Copies `onix.visual.classic-omni.toml` → `onix.visual.toml`
-  - Prints `Applied onix.visual.classic-omni.toml`
-
-- [ ] **T-56** `onix themes list` (after T-55)
-  - `onix.visual.classic-omni.toml` is now marked `(current)`
-
-- [ ] **T-57** `onix theme cinematic-wide`
-  - Applies that theme; themes list reflects new current
+- [ ] **T-55** `onix theme cinematic-wide`
+  - Copies `onix.visual.cinematic-wide.toml` → `onix.visual.toml`
+  - Prints `Applied onix.visual.cinematic-wide.toml`
 
 - [ ] **T-58** `onix theme` (no name — interactive)
   - fzf picker opens listing theme filenames
@@ -502,8 +496,8 @@ Requires a module to be installed (repeat T-62–T-65 if removed).
     ```
 
 - [ ] **T-80** `set ONIX_ENV=C:\temp\custom.env && o tst`
-  - onix reads aliases from `C:\temp\custom.env` instead of `~/.omni/.env`
-  - `tst` not found → interactive picker (alias only exists in `~/.omni/.env`)
+  - onix reads aliases from `C:\temp\custom.env` instead of `~/.onix/aliases`
+  - `tst` not found → interactive picker (alias only exists in `~/.onix/aliases`)
   - Unset `ONIX_ENV` afterward to restore
 
 - [ ] **T-81** Set `alias_file = "C:\temp\custom.env"` in `~/.onix/config.toml [settings]`
@@ -527,7 +521,7 @@ Requires a module to be installed (repeat T-62–T-65 if removed).
   - Press Enter with no input
   - Prints: `onix: no destination provided`, exits non-zero
 
-- [ ] **T-85** `o tst` when `~/.omni/.env` does not exist
+- [ ] **T-85** `o tst` when `~/.onix/aliases` does not exist
   - onix creates an empty alias map, proceeds to interactive picker
   - (Delete or rename the file to test this)
 
@@ -578,8 +572,6 @@ f tst hello.txt
 r tst "dir"
 sg tst handle
 ff tst auth
-onix themes list
-onix theme classic-omni
 onix add sadirano/onix-img
 onix list
 onix install onix-img

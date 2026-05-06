@@ -57,11 +57,7 @@ Modules receive the resolved project path and config via environment variables â
 
 ## Visual Configuration
 
-fzf UI settings (prompts, preview layout, colours) are controlled by `onix.visual.toml`, located next to `onix.exe`. The file is created automatically with defaults on first run. Switch themes interactively:
-
-```
-onix theme
-```
+fzf UI settings (prompts, preview layout, colours) are controlled by `onix.visual.toml`, located next to `onix.exe`. The file is created automatically with defaults on first run.
 
 ## License
 
