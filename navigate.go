@@ -189,7 +189,7 @@ func openShellAt(dir string) error {
 }
 
 // readLine prints prompt and reads one line from stdin.
-// Returns ("", false) when the user cancels with Ctrl+C.
+// Returns ("", false) when the user cancels with Ctrl+C or a stream error occurs.
 func readLine(prompt string) (string, bool) {
 	fmt.Print(prompt)
 
@@ -197,18 +197,26 @@ func readLine(prompt string) (string, bool) {
 	signal.Notify(sig, os.Interrupt)
 	defer signal.Stop(sig)
 
-	type result struct{ line string }
+	type result struct {
+		line string
+		err  error
+	}
 	ch := make(chan result, 1)
 	go func() {
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		ch <- result{line}
+		// Create a new reader on every call to avoid buffer state issues.
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		ch <- result{line, err}
 	}()
 
 	select {
 	case <-sig:
 		fmt.Println()
+		os.Exit(1) // Terminate immediately to avoid "Terminate batch job" loops.
 		return "", false
 	case r := <-ch:
+		if r.err != nil {
+			return "", false
+		}
 		return strings.TrimSpace(r.line), true
 	}
 }
@@ -285,24 +293,9 @@ func promptContextConfig(segName string) (config.ContextConfig, bool) {
 }
 
 func promptDestination(aliasName string) string {
-	fmt.Printf("Destination for %q: ", aliasName)
-
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	defer signal.Stop(sig)
-
-	type readResult struct{ line string }
-	ch := make(chan readResult, 1)
-	go func() {
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		ch <- readResult{line}
-	}()
-
-	select {
-	case <-sig:
-		fmt.Println() // move cursor to a clean line before the shell prompt reappears
+	line, ok := readLine(fmt.Sprintf("Destination for %q: ", aliasName))
+	if !ok {
 		return ""
-	case r := <-ch:
-		return strings.TrimSpace(r.line)
 	}
+	return line
 }
