@@ -9,16 +9,16 @@ import (
 )
 
 const (
-	defaultDirName  = ".omni"
-	defaultFileName = ".env"
+	defaultDirName  = ".onix"
+	defaultFileName = "aliases"
 )
 
 // aliasEnvVars is the precedence list of environment variables that can
-// override the active alias file path. OMNI_* kept for backwards compatibility.
-var aliasEnvVars = []string{"ONIX_ENV", "ONIX_ALIAS_FILE", "OMNI_ENV", "OMNI_ALIAS_FILE"}
+// override the active alias file path.
+var aliasEnvVars = []string{"ONIX_ENV", "ONIX_ALIAS_FILE"}
 
 // FilePath returns the active alias file path.
-// Precedence: ONIX_ENV > ONIX_ALIAS_FILE > OMNI_ENV > ~/.omni/.env
+// Precedence: ONIX_ENV > ONIX_ALIAS_FILE > ~/.onix/aliases
 func FilePath() string {
 	for _, env := range aliasEnvVars {
 		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
@@ -29,7 +29,8 @@ func FilePath() string {
 	if err != nil || home == "" {
 		return filepath.Join(defaultDirName, defaultFileName)
 	}
-	return filepath.Join(home, defaultDirName, defaultFileName)
+
+	return filepath.Join(home, ".onix", "aliases")
 }
 
 // Load reads all aliases from the active alias file.
@@ -145,9 +146,6 @@ func OpenInEditor(editor string) error {
 
 // ApplyEnvOverride propagates aliasFile into ONIX_ALIAS_FILE so that child
 // processes (module binaries) inherit the same alias file path as the parent.
-// It is a no-op when aliasFile is empty or any alias-file env var is already set,
-// so an explicit env override always wins over the config file setting.
-// OMNI_* env vars are kept for backwards compatibility with the predecessor tool "omni".
 func ApplyEnvOverride(aliasFile string) {
 	if strings.TrimSpace(aliasFile) == "" {
 		return
