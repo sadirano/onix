@@ -26,11 +26,16 @@ func executeAction(action, target string, extras []string, cfg *config.Config, t
 
 	case "print":
 		fmt.Println(target)
-		if c := exec.Command("clip"); c != nil {
-			c.Stdin = strings.NewReader(target)
-			_ = c.Run()
+		// clip.exe is built-in on Windows.
+		c := exec.Command("clip")
+		c.Stdin = strings.NewReader(target)
+		if err := c.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not copy to clipboard: %v\n", err)
 		}
-		_ = exec.Command("setx", "ONIX_LAST", target).Run()
+		// setx sets a user-level environment variable.
+		if err := exec.Command("setx", "ONIX_LAST", target).Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not set ONIX_LAST: %v\n", err)
+		}
 		return nil
 
 	case "files":
