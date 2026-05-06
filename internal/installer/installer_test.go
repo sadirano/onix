@@ -15,7 +15,9 @@ import (
 // On Windows, os.UserHomeDir reads USERPROFILE, so overriding it is sufficient.
 func homeSetup(t *testing.T) {
 	t.Helper()
-	t.Setenv("USERPROFILE", t.TempDir())
+	tempHome := t.TempDir()
+	t.Setenv("USERPROFILE", tempHome)
+	t.Setenv("HOME", tempHome)
 }
 
 // ---------------------------------------------------------------------------
