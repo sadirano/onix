@@ -72,23 +72,80 @@ func procName(pid uint32) string {
 	return strings.ToLower(filepath.Base(syscall.UTF16ToString(buf[:size])))
 }
 
+// processCommandLineInformation is the NtQueryInformationProcess class that
+// returns the process command line as a UNICODE_STRING.
+const processCommandLineInformation = 60
+
+// procCmdLine reads the command line of pid using ProcessCommandLineInformation.
+// Returns "" on any failure. The UNICODE_STRING buffer returned by the kernel
+// is self-contained: Buffer points within the same allocation we pass in.
+func procCmdLine(pid uint32) string {
+	h, err := syscall.OpenProcess(processQueryLimitedInformation, false, pid)
+	if err != nil {
+		return ""
+	}
+	defer syscall.CloseHandle(h)
+
+	var retLen uint32
+	procNtQueryInformationProcess.Call(
+		uintptr(h), processCommandLineInformation,
+		0, 0,
+		uintptr(unsafe.Pointer(&retLen)),
+	)
+	if retLen == 0 {
+		retLen = 1024
+	}
+	buf := make([]byte, retLen)
+	r, _, _ := procNtQueryInformationProcess.Call(
+		uintptr(h), processCommandLineInformation,
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(len(buf)),
+		uintptr(unsafe.Pointer(&retLen)),
+	)
+	if r != 0 || len(buf) < 16 {
+		return ""
+	}
+	// UNICODE_STRING layout (64-bit): Length uint16, MaxLength uint16, [4 pad], Buffer *uint16
+	length := *(*uint16)(unsafe.Pointer(&buf[0]))
+	bufPtr := *(*uintptr)(unsafe.Pointer(&buf[8]))
+	if bufPtr == 0 || length == 0 {
+		return ""
+	}
+	base := uintptr(unsafe.Pointer(&buf[0]))
+	if bufPtr < base || bufPtr+uintptr(length) > base+uintptr(len(buf)) {
+		return ""
+	}
+	chars := unsafe.Slice((*uint16)(unsafe.Pointer(bufPtr)), length/2)
+	return syscall.UTF16ToString(chars)
+}
+
 // launchedFromRunner reports whether onix was started from the Windows Run
-// dialog (Win+R) rather than from an interactive terminal. It checks whether
-// the direct parent or the grandparent process is explorer.exe.
+// dialog (Win+R) rather than from an interactive terminal.
 //
-// Uses targeted OpenProcess + NtQueryInformationProcess calls instead of a
-// full process snapshot to keep the overhead under ~1 ms.
+// Win+R chain:  explorer.exe → cmd.exe /C <wrapper.cmd> → onix.exe
+// Normal chain: explorer.exe → cmd.exe (interactive terminal) → onix.exe
+//
+// Both chains have explorer.exe as grandparent, so the grandparent name alone
+// is not enough. We disambiguate by reading the parent cmd.exe command line:
+// a Win+R launch uses /C (one-shot), an interactive terminal uses /K or none.
 func launchedFromRunner() bool {
 	ppid := uint32(os.Getppid())
 	if procName(ppid) == "explorer.exe" {
 		return true
 	}
-	// Typical Win+R chain: explorer.exe → cmd.exe → c.cmd → onix.exe
 	gpid, ok := parentPID(ppid)
 	if !ok {
 		return false
 	}
-	return procName(gpid) == "explorer.exe"
+	if procName(gpid) != "explorer.exe" {
+		return false
+	}
+	// Grandparent is explorer.exe — check whether the parent cmd.exe is
+	// non-interactive (/C one-shot) rather than an interactive terminal.
+	parentLine := strings.ToLower(procCmdLine(ppid))
+	hasC := strings.Contains(parentLine, " /c ")
+	hasK := strings.Contains(parentLine, " /k ")
+	return hasC && !hasK
 }
 
 // isUNCPath reports whether path is a UNC network path (\\server\share\...).
