@@ -121,6 +121,15 @@ func main() {
 	segments, aliasName := parseAllSegments(args[0])
 	subdir, extras := parseExtras(args[1:])
 
+	// Context management: <action> <seg>@<alias> ctx [source <val> [tmpl] | --clear]
+	if len(extras) > 0 && extras[0] == "ctx" {
+		if len(segments) == 0 {
+			errs.FatalCode(errs.ExitUsage, "usage: <action> <segment>@<alias> ctx [env/cmd/file/alias <value>] | [--clear]")
+		}
+		handleCtxCommand(segments[0]+"@"+aliasName, segments[0], extras[1:], cfg)
+		return
+	}
+
 	target, resolveErr := alias.Resolve(aliasName, debugEnabled)
 	if resolveErr != nil {
 		// UX1: alias not found — show the error and ask the user to provide a destination.

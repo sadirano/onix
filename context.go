@@ -9,6 +9,7 @@ import (
 
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/errs"
+	"github.com/sadirano/onix/internal/opener"
 )
 
 // aliasContextPath returns the path of the per-segment context config file.
@@ -90,28 +91,6 @@ func clearAliasContext(alias string) error {
 	return err
 }
 
-// printAliasContextConfig prints the context config for a segment to stdout.
-func printAliasContextConfig(alias string) {
-	cc, ok := loadAliasContextConfig(alias)
-	if !ok {
-		fmt.Printf("no context configured for %q\n", alias)
-		return
-	}
-	fmt.Printf("source=%s\n", cc.Source)
-	switch cc.Source {
-	case "file":
-		fmt.Printf("file=%s\n", cc.File)
-	case "cmd":
-		fmt.Printf("cmd=%s\n", cc.Cmd)
-	case "alias":
-		fmt.Printf("path=%s\n", cc.Path)
-	default:
-		fmt.Printf("var=%s\n", cc.Var)
-	}
-	if cc.Template != "" {
-		fmt.Printf("template=%s\n", cc.Template)
-	}
-}
 
 // contextVarName returns the identifier to use as a named placeholder in
 // templates: the var name for env source, the file path for file source, and
@@ -292,6 +271,54 @@ func walkSegments(segments []string, aliasName string, target string, cfg *confi
 		target = filepath.Join(target, part)
 	}
 	return target
+}
+
+// handleCtxCommand executes a context operation for key (e.g. "sg@play").
+// seg is the segment name used in messages. args are the sub-arguments after "ctx":
+//
+//	(none)                      open context file in editor
+//	--clear                     remove context config
+//	env <var> [tmpl]            write env-source config
+//	cmd <command> [tmpl]        write cmd-source config
+//	file <path> [tmpl]          write file-source config
+//	alias <subdir>              write alias-source config
+func handleCtxCommand(key, seg string, args []string, cfg *config.Config) {
+	switch {
+	case len(args) == 0:
+		p := aliasContextPath(key)
+		if err := opener.RunEditorCommand(cfg.ResolveEditor(), filepath.Dir(p), filepath.Base(p)); err != nil {
+			errs.Fatal("%v", err)
+		}
+	case args[0] == "--clear":
+		if err := clearAliasContext(key); err != nil {
+			errs.Fatal("clear context: %v", err)
+		}
+		fmt.Printf("Context for %q cleared\n", key)
+	case args[0] == "env" || args[0] == "cmd" || args[0] == "file" || args[0] == "alias":
+		if len(args) < 2 {
+			errs.FatalCode(errs.ExitUsage, "usage: ctx %s <value> [template]", args[0])
+		}
+		cc := config.ContextConfig{Source: args[0]}
+		switch args[0] {
+		case "env":
+			cc.Var = args[1]
+		case "cmd":
+			cc.Cmd = args[1]
+		case "file":
+			cc.File = args[1]
+		case "alias":
+			cc.Path = args[1]
+		}
+		if len(args) >= 3 {
+			cc.Template = args[2]
+		}
+		if err := writeAliasContextConfig(key, cc); err != nil {
+			errs.Fatal("write context: %v", err)
+		}
+		fmt.Printf("Context for %q: source=%s value=%s template=%s\n", key, cc.Source, args[1], cc.Template)
+	default:
+		errs.FatalCode(errs.ExitUsage, "unknown ctx arg %q — use env, cmd, file, alias, or --clear", args[0])
+	}
 }
 
 func expandTilde(path string) string {

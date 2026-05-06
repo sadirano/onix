@@ -9,7 +9,6 @@ import (
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/errs"
 	"github.com/sadirano/onix/internal/installer"
-	"github.com/sadirano/onix/internal/opener"
 )
 
 // handleManagementCommand executes a built-in onix subcommand (install, add,
@@ -83,56 +82,6 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 	case "init":
 		if err := installer.Init(); err != nil {
 			errs.Fatal("%v", err)
-		}
-
-	case "ctx":
-		if len(args) < 2 {
-			errs.Fatal("usage: onix ctx <segment> [env <var> | cmd <command> | file <path> | alias <subdir>] [template] | --clear")
-		}
-		// Key is "seg@alias" (e.g. "sg@play") so the same segment name under
-		// different aliases stays isolated. Bare "seg" (no @) is accepted as-is.
-		segs, aliasName := parseAllSegments(args[1])
-		a := args[1]
-		if len(segs) > 0 {
-			a = segs[0] + "@" + aliasName
-		}
-		switch {
-		case len(args) == 2:
-			printAliasContextConfig(a)
-		case args[2] == "--clear":
-			if err := clearAliasContext(a); err != nil {
-				errs.Fatal("clear context: %v", err)
-			}
-			fmt.Printf("Context for %q cleared\n", a)
-		case args[2] == "editor":
-			p := aliasContextPath(a)
-			if err := opener.RunEditorCommand(cfg.ResolveEditor(), filepath.Dir(p), filepath.Base(p)); err != nil {
-				errs.Fatal("%v", err)
-			}
-		case args[2] == "env", args[2] == "cmd", args[2] == "file", args[2] == "alias":
-			if len(args) < 4 {
-				errs.Fatal("usage: onix ctx <segment> %s <value> [template]", args[2])
-			}
-			cc := config.ContextConfig{Source: args[2]}
-			switch args[2] {
-			case "env":
-				cc.Var = args[3]
-			case "cmd":
-				cc.Cmd = args[3]
-			case "file":
-				cc.File = args[3]
-			case "alias":
-				cc.Path = args[3]
-			}
-			if len(args) >= 5 {
-				cc.Template = args[4]
-			}
-			if err := writeAliasContextConfig(a, cc); err != nil {
-				errs.Fatal("write context: %v", err)
-			}
-			fmt.Printf("Context for %q: source=%s value=%s template=%s\n", a, cc.Source, args[3], cc.Template)
-		default:
-			errs.Fatal("unknown context source %q — use env, cmd, file, or alias", args[2])
 		}
 
 	case "-h", "--help", "help":
