@@ -391,6 +391,8 @@ Aliases live in `~/.onix/aliases` as plain `KEY=VALUE` pairs.
 
 onix separates concerns: the core binary handles alias resolution and dispatch, and capabilities are added as independent Go modules installed from GitHub.
 
+For a detailed guide and template for creating your own modules, see [MODULE_PATTERN.md](./MODULE_PATTERN.md).
+
 **Install a module:**
 ```
 onix add sadirano/onix-img
