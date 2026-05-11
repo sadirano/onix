@@ -8,10 +8,12 @@ import (
 	"github.com/sadirano/onix/internal/config"
 )
 
-// setAliasDir points the alias package at an isolated temp directory.
+// setAliasDir points the alias package at an isolated temp directory and
+// flushes the in-process entry cache so each test starts clean.
 func setAliasDir(t *testing.T, dir string) {
 	t.Helper()
 	t.Setenv(EnvVar, dir)
+	entries.Range(func(k, _ any) bool { entries.Delete(k); return true })
 }
 
 func TestApplyEnvOverride(t *testing.T) {
