@@ -210,31 +210,3 @@ func checkCmdConflict(cmdName, moduleName, entryName string) error {
 	return nil
 }
 
-// removeModuleWrappers removes all .cmd files in BinDir whose ONIX_MODULE
-// variable matches moduleName.
-func removeModuleWrappers(moduleName string) error {
-	binDir := config.BinDir()
-	entries, err := os.ReadDir(binDir)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, de := range entries {
-		if de.IsDir() || !strings.HasSuffix(de.Name(), ".cmd") {
-			continue
-		}
-		p := filepath.Join(binDir, de.Name())
-		data, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		if extractCmdVar(string(data), "ONIX_MODULE") == moduleName {
-			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("remove %s: %w", de.Name(), err)
-			}
-		}
-	}
-	return nil
-}

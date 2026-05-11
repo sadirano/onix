@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/sadirano/onix/internal/config"
@@ -70,51 +69,6 @@ func TestIsInstalled_False(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Add
-// ---------------------------------------------------------------------------
-
-func TestAdd_NewModule(t *testing.T) {
-	homeSetup(t)
-	cfg := &config.Config{}
-	// Add saves config before attempting install. The install will fail because
-	// the repo doesn't exist, but the config entry must still be persisted so the
-	// user can retry with `onix install mymod`.
-	err := Add("user/mymod", "", cfg)
-	if err == nil {
-		t.Fatal("expected Add to return an error when install fails, got nil")
-	}
-	saved, err2 := config.Load()
-	if err2 != nil {
-		t.Fatalf("config.Load: %v", err2)
-	}
-	if saved.FindModule("mymod") == nil {
-		t.Error("expected module \"mymod\" in saved config even after install failure")
-	}
-}
-
-func TestAdd_DuplicateModule(t *testing.T) {
-	homeSetup(t)
-	cfg := &config.Config{
-		Modules: []config.Module{
-			{Name: "mymod", Repo: "user/mymod", Enabled: true},
-		},
-	}
-	err := Add("user/mymod", "", cfg)
-	if err == nil {
-		t.Fatal("expected error for duplicate module, got nil")
-	}
-	if !strings.Contains(err.Error(), "already in config") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestAdd_InvalidRepo(t *testing.T) {
-	cfg := &config.Config{}
-	if err := Add("notarepo", "", cfg); err == nil {
-		t.Fatal("expected error for bare module name, got nil")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Install
@@ -214,63 +168,6 @@ func TestUpdate_All(t *testing.T) {
 	t.Skip("requires a local git + Go fixture — implement as integration test")
 }
 
-// ---------------------------------------------------------------------------
-// Remove
-// ---------------------------------------------------------------------------
-
-func TestRemove_NotFound(t *testing.T) {
-	homeSetup(t)
-	if err := Remove("missing", &config.Config{}); err == nil {
-		t.Fatal("expected error removing unknown module, got nil")
-	}
-}
-
-func TestRemove_RemovesFilesAndConfig(t *testing.T) {
-	homeSetup(t)
-
-	cfg := &config.Config{
-		Modules: []config.Module{
-			{Name: "mymod", Repo: "user/mymod", Ref: "main", Enabled: true},
-		},
-	}
-	if err := config.Save(cfg); err != nil {
-		t.Fatal(err)
-	}
-
-	// Simulate an installed module: create source dir and .cmd wrapper.
-	srcDir := filepath.Join(config.ModulesDir(), "user", "mymod")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	wrapperPath := filepath.Join(config.BinDir(), "mymod.cmd")
-	if err := os.MkdirAll(config.BinDir(), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Simulate an onix-generated .cmd wrapper (must contain ONIX_MODULE so
-	// removeModuleWrappers can identify it).
-	wrapperContent := "@echo off\r\nsetlocal\r\nset \"ONIX_MODULE=mymod\"\r\n\"onix.exe\" %*\r\nendlocal\r\n"
-	if err := os.WriteFile(wrapperPath, []byte(wrapperContent), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := Remove("mymod", cfg); err != nil {
-		t.Fatalf("Remove: %v", err)
-	}
-
-	if _, err := os.Stat(srcDir); !os.IsNotExist(err) {
-		t.Error("source dir should have been removed")
-	}
-	if _, err := os.Stat(wrapperPath); !os.IsNotExist(err) {
-		t.Error(".cmd wrapper should have been removed")
-	}
-	saved, err := config.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if saved.FindModule("mymod") != nil {
-		t.Error("module entry should have been removed from config")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // EnsureInstalled

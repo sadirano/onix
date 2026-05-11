@@ -40,28 +40,6 @@ func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugE
 		}
 		t.mark("install")
 
-	case "add":
-		switch len(args) {
-		case 2:
-			if err := installer.Add(args[1], "", cfg); err != nil {
-				errs.Fatal("%v", err)
-			}
-		case 3:
-			if err := installer.Add(args[1], args[2], cfg); err != nil {
-				errs.Fatal("%v", err)
-			}
-		default:
-			errs.Fatal("usage: onix add <user/repo> [name]")
-		}
-
-	case "remove":
-		if len(args) < 2 {
-			errs.Fatal("usage: onix remove <name>")
-		}
-		if err := installer.Remove(args[1], cfg); err != nil {
-			errs.Fatal("%v", err)
-		}
-
 	case "update":
 		t.mark("config loaded")
 		name := ""
@@ -190,8 +168,6 @@ Usage:
   onix <alias>                  open shell in target directory
   onix -a <alias> -d <path>     register an alias
   onix install [name] [-profile] install one or all modules; -profile applies a named shortcut set
-  onix add <user/repo> [name]   declare a module in config
-  onix remove <name>            remove a module
   onix update [name]            update one or all modules
   onix list                     list declared modules
   onix shortcuts                install .cmd wrappers in ~/.onix/bin/

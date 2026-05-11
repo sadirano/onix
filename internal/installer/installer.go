@@ -47,83 +47,6 @@ func InstallAll(cfg *config.Config) error {
 	return nil
 }
 
-// Add appends a new [[module]] entry to config and immediately installs it.
-// repo is "user/repo" or "github.com/user/repo". alias overrides the command
-// name; if empty, the repo's last segment is used.
-func Add(repo, alias string, cfg *config.Config) error {
-	repo = config.NormalizeRepo(repo)
-	if !strings.Contains(repo, "/") {
-		return fmt.Errorf("invalid repo %q — expected format: user/repo or github.com/user/repo", repo)
-	}
-
-	name := alias
-	if name == "" {
-		parts := strings.Split(repo, "/")
-		name = parts[len(parts)-1]
-	}
-	if name == "" {
-		return fmt.Errorf("invalid repo %q — could not determine module name", repo)
-	}
-
-	if cfg.FindModule(name) != nil {
-		return fmt.Errorf("module %q already in config", name)
-	}
-
-	cfg.Modules = append(cfg.Modules, config.Module{
-		Name:    name,
-		Repo:    repo,
-		Ref:     "main",
-		Enabled: true,
-	})
-
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
-	fmt.Printf("Added %q (%s)\n", name, repo)
-	if err := Install(name, cfg); err != nil {
-		return fmt.Errorf("install %s: %w (retry with: onix install %s)", name, err, name)
-	}
-	return nil
-}
-
-// Remove uninstalls a module: deletes its directory, its .cmd wrapper, and
-// removes its entry from config.
-func Remove(name string, cfg *config.Config) error {
-	var removedRepo string
-	found := false
-	kept := make([]config.Module, 0, len(cfg.Modules))
-	for _, m := range cfg.Modules {
-		if strings.EqualFold(m.EffectiveName(), name) {
-			found = true
-			removedRepo = m.Repo
-			continue
-		}
-		kept = append(kept, m)
-	}
-	if !found {
-		return fmt.Errorf("module %q not found in config", name)
-	}
-	cfg.Modules = kept
-
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
-
-	// Remove binary directory.
-	modDir := config.ModuleDir(removedRepo)
-	if err := os.RemoveAll(modDir); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove module dir: %w", err)
-	}
-
-	// Remove .cmd wrapper(s) — handles both single and multi-entry modules.
-	if err := removeModuleWrappers(name); err != nil {
-		return fmt.Errorf("remove wrappers: %w", err)
-	}
-
-	fmt.Printf("Removed %s.\n", name)
-	return nil
-}
-
 // Update pulls the latest source and rebuilds a single module (or all if name
 // is empty).
 func Update(name string, cfg *config.Config) error {
@@ -332,36 +255,18 @@ func buildGo(srcDir, outPath string) error {
 }
 
 // EnsureInstalled checks whether the named module is installed. If not, it
-// prompts the user to confirm installation. If the module is not yet declared
-// in config it infers the default repo as sadirano/onix-<name>.
+// prompts the user to confirm installation. The module must be declared in
+// config.lua first.
 func EnsureInstalled(name string, cfg *config.Config) error {
 	mod := cfg.FindModule(name)
-
-	repo := "sadirano/onix-" + name
-	if mod != nil {
-		repo = mod.Repo
-	}
-
-	if IsInstalled(repo) {
-		return nil
-	}
-
 	if mod == nil {
-		fmt.Printf("Module %q is not installed or declared in config.\nAdd %q and install? [y/N] ", name, repo)
-		line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-		if strings.ToLower(strings.TrimSpace(line)) != "y" {
-			return fmt.Errorf("module %q not installed — add it with: onix add <repo>", name)
-		}
-		// Add saves config, clones, builds, and wires the wrapper.
-		// If it returns nil the module is fully installed; no second Install call needed.
-		if err := Add(repo, "", cfg); err != nil {
-			return fmt.Errorf("add module %q: %w", name, err)
-		}
+		return fmt.Errorf("module %q is not declared in config.lua — add it to the modules table, then run: onix install %s", name, name)
+	}
+
+	if IsInstalled(mod.Repo) {
 		return nil
 	}
-	// Note: ReadString errors (e.g. closed stdin) are intentionally ignored;
-	// an empty/failed read produces an empty string which fails the "y" check,
-	// so the prompt safely rejects non-interactive invocations.
+
 	fmt.Printf("Module %q is declared but not installed. Install now? [y/N] ", name)
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	if strings.ToLower(strings.TrimSpace(line)) != "y" {
