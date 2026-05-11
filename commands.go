@@ -185,7 +185,7 @@ Environment:
   ONIX_MODULE        set by module .cmd wrappers
   ONIX_DEBUG=1       verbose trace
   ONIX_TIMING=1      print phase timings to stderr
-  ONIX_ENV           override alias file path
+  ONIX_ALIAS_DIR     override aliases directory path
   EDITOR             preferred editor (default: nvim)
 
 Config:  ~/.onix/config.lua

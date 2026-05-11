@@ -103,7 +103,7 @@ func BinDir() string {
 
 // Settings holds global onix settings.
 type Settings struct {
-	AliasFile  string // override alias file; empty = use default
+	AliasDir   string // override aliases directory; empty = use default (~/.onix/aliases)
 	Editor     string // override editor; empty = use EDITOR env
 	Timing     bool   // equivalent to ONIX_TIMING=1
 	Debug      bool   // equivalent to ONIX_DEBUG=1
@@ -178,7 +178,7 @@ func Load() (*Config, error) {
 
 	if st, ok := tbl.RawGetString("settings").(*lua.LTable); ok {
 		cfg.Settings = Settings{
-			AliasFile:  luaStr(st, "alias_file"),
+			AliasDir:   luaStr(st, "alias_dir"),
 			Editor:     luaStr(st, "editor"),
 			Timing:     luaBool(st, "timing"),
 			Debug:      luaBool(st, "debug"),
@@ -258,8 +258,8 @@ func Save(cfg *Config) error {
 	b.WriteString("return {\n")
 
 	b.WriteString("  settings = {\n")
-	if cfg.Settings.AliasFile != "" {
-		fmt.Fprintf(&b, "    alias_file  = %q,\n", cfg.Settings.AliasFile)
+	if cfg.Settings.AliasDir != "" {
+		fmt.Fprintf(&b, "    alias_dir   = %q,\n", cfg.Settings.AliasDir)
 	}
 	if cfg.Settings.Editor != "" {
 		fmt.Fprintf(&b, "    editor      = %q,\n", cfg.Settings.Editor)
@@ -418,7 +418,7 @@ const Starter = `-- ~/.onix/config.lua
 
 return {
   settings = {
-    -- alias_file  = "",       -- default: ~/.onix/aliases
+    -- alias_dir   = "",       -- default: ~/.onix/aliases/  (each alias is a <name>.lua file)
     -- editor      = "",       -- default: $EDITOR env var, then nvim
     -- timing      = false,
     -- debug       = false,

@@ -6,181 +6,137 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	lua "github.com/yuin/gopher-lua"
+
+	"github.com/sadirano/onix/internal/config"
 )
 
-const (
-	defaultDirName  = ".onix"
-	defaultFileName = "aliases"
-)
+const EnvVar = "ONIX_ALIAS_DIR"
 
-// aliasEnvVars is the precedence list of environment variables that can
-// override the active alias file path.
-var aliasEnvVars = []string{"ONIX_ENV", "ONIX_ALIAS_FILE"}
+// Entry is the full definition of one alias stored as a Lua file.
+type Entry struct {
+	Path     string                          // resolved target directory
+	Context  config.ContextConfig            // optional alias-level context
+	Segments map[string]config.ContextConfig // optional per-segment contexts, keyed by segment name
+}
 
-// FilePath returns the active alias file path.
-// Precedence: ONIX_ENV > ONIX_ALIAS_FILE > ~/.onix/aliases
-func FilePath() string {
-	for _, env := range aliasEnvVars {
-		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
-			return v
-		}
+// Dir returns the aliases directory path.
+// Precedence: ONIX_ALIAS_DIR > settings.alias_dir > ~/.onix/aliases
+func Dir() string {
+	if v := strings.TrimSpace(os.Getenv(EnvVar)); v != "" {
+		return v
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return filepath.Join(defaultDirName, defaultFileName)
+		return filepath.Join(".onix", "aliases")
 	}
-
 	return filepath.Join(home, ".onix", "aliases")
 }
 
-// Load reads all aliases from the active alias file.
-func Load() (map[string]string, error) {
-	content, err := os.ReadFile(FilePath())
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]string{}, nil
-		}
-		return nil, err
+// Load reads and parses ~/.onix/aliases/<name>.lua.
+// Returns (nil, nil) when the file does not exist.
+func Load(name string) (*Entry, error) {
+	p := filepath.Join(Dir(), name+".lua")
+	if _, err := os.Stat(p); os.IsNotExist(err) {
+		return nil, nil
 	}
 
-	text := strings.ReplaceAll(string(content), "\r\n", "\n")
-	text = strings.TrimPrefix(text, "\ufeff")
+	L := lua.NewState()
+	defer L.Close()
 
-	aliases := make(map[string]string)
-	for _, raw := range strings.Split(text, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		if key != "" && value != "" {
-			aliases[key] = value
-		}
-	}
-	return aliases, nil
-}
-
-// Register upserts an alias entry in the active alias file.
-func Register(name, destination string) error {
-	return upsertLine(name, destination, FilePath())
-}
-
-// upsertLine writes or replaces a name=value line in the given key=value file,
-// preserving comments and existing entries. Creates the file if absent.
-func upsertLine(name, value, file string) error {
-	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-		return err
+	if err := L.DoFile(p); err != nil {
+		return nil, fmt.Errorf("%s.lua: %w", name, err)
 	}
 
-	content, err := os.ReadFile(file)
-	if err != nil && !os.IsNotExist(err) {
-		return err
+	tbl, ok := L.Get(-1).(*lua.LTable)
+	if !ok {
+		return nil, fmt.Errorf("%s.lua must return a table", name)
 	}
 
-	var lines []string
-	if len(content) > 0 {
-		text := strings.ReplaceAll(string(content), "\r\n", "\n")
-		text = strings.TrimPrefix(text, "\ufeff")
-		lines = strings.Split(text, "\n")
-		for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
-			lines = lines[:len(lines)-1]
-		}
+	e := &Entry{
+		Path: luaStr(tbl, "path"),
 	}
 
-	entry := fmt.Sprintf("%s=%s", name, value)
-	replaced := false
-	out := make([]string, 0, len(lines)+1)
+	if ct, ok := tbl.RawGetString("context").(*lua.LTable); ok {
+		e.Context = parseContextConfig(ct)
+	}
 
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			if i == len(lines)-1 {
-				continue
+	if st, ok := tbl.RawGetString("segments").(*lua.LTable); ok {
+		e.Segments = make(map[string]config.ContextConfig)
+		st.ForEach(func(k, v lua.LValue) {
+			if ks, ok := k.(lua.LString); ok {
+				if vt, ok := v.(*lua.LTable); ok {
+					e.Segments[string(ks)] = parseContextConfig(vt)
+				}
 			}
-			out = append(out, line)
-			continue
-		}
-		if strings.HasPrefix(trimmed, "#") {
-			out = append(out, line)
-			continue
-		}
-		key, _, ok := strings.Cut(trimmed, "=")
-		if ok && strings.EqualFold(strings.TrimSpace(key), name) {
-			out = append(out, entry)
-			replaced = true
-			continue
-		}
-		out = append(out, line)
-	}
-	if !replaced {
-		out = append(out, entry)
+		})
 	}
 
-	data := strings.Join(out, "\r\n")
-	if !strings.HasSuffix(data, "\r\n") {
-		data += "\r\n"
-	}
-	return os.WriteFile(file, []byte(data), 0o644)
+	return e, nil
 }
 
-// OpenInEditor opens the active alias file in the given editor.
-func OpenInEditor(editor string) error {
-	f := FilePath()
-	cmd := exec.Command(editor, f)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("open editor: %w", err)
+// Save writes e to ~/.onix/aliases/<name>.lua.
+func Save(name string, e *Entry) error {
+	d := Dir()
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		return err
 	}
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("editor exited: %w", err)
-	}
-	return nil
-}
 
-// ApplyEnvOverride propagates aliasFile into ONIX_ALIAS_FILE so that child
-// processes (module binaries) inherit the same alias file path as the parent.
-func ApplyEnvOverride(aliasFile string) {
-	if strings.TrimSpace(aliasFile) == "" {
-		return
+	var b strings.Builder
+	b.WriteString("return {\n")
+	fmt.Fprintf(&b, "  path = %q,\n", e.Path)
+
+	if e.Context != (config.ContextConfig{}) {
+		b.WriteString("  context = ")
+		writeContextLua(&b, e.Context, "  ")
+		b.WriteString(",\n")
 	}
-	for _, env := range aliasEnvVars {
-		if strings.TrimSpace(os.Getenv(env)) != "" {
-			return
+
+	if len(e.Segments) > 0 {
+		b.WriteString("  segments = {\n")
+		for seg, cc := range e.Segments {
+			fmt.Fprintf(&b, "    [%q] = ", seg)
+			writeContextLua(&b, cc, "    ")
+			b.WriteString(",\n")
 		}
+		b.WriteString("  },\n")
 	}
-	if err := os.Setenv("ONIX_ALIAS_FILE", aliasFile); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not set ONIX_ALIAS_FILE: %v\n", err)
-	}
+
+	b.WriteString("}\n")
+	return os.WriteFile(filepath.Join(d, name+".lua"), []byte(b.String()), 0o644)
 }
 
-// Resolve returns the absolute path for the given alias or raw path.
-// Alias file is consulted first; a raw filesystem path is only accepted when
-// no alias matches, preventing accidental navigation to a CWD subdirectory
-// that happens to share a name with an intended alias.
+// Register creates or updates the alias file for name, setting its path.
+// Existing context and segment data are preserved.
+func Register(name, destination string) error {
+	e, err := Load(name)
+	if err != nil {
+		return err
+	}
+	if e == nil {
+		e = &Entry{}
+	}
+	e.Path = destination
+	return Save(name, e)
+}
+
+// Resolve returns the target directory for the given alias name.
+// Falls back to a raw filesystem path when no alias file exists.
 func Resolve(input string, debug bool) (string, error) {
-	aliases, err := Load()
+	e, err := Load(input)
 	if err != nil {
 		return "", err
 	}
-
-	for k, v := range aliases {
-		if strings.EqualFold(k, input) {
-			if debug {
-				fmt.Printf("[ONIX] resolved %q -> %q\n", input, v)
-			}
-			return v, nil
+	if e != nil && e.Path != "" {
+		if debug {
+			fmt.Printf("[ONIX] resolved %q -> %q\n", input, e.Path)
 		}
+		return e.Path, nil
 	}
 
 	// Fall back to a raw path if it exists on disk.
-	if _, err := os.Stat(input); err == nil {
+	if _, serr := os.Stat(input); serr == nil {
 		abs, err := filepath.Abs(input)
 		if err != nil {
 			return "", fmt.Errorf("resolve path %q: %w", input, err)
@@ -188,5 +144,80 @@ func Resolve(input string, debug bool) (string, error) {
 		return abs, nil
 	}
 
-	return "", fmt.Errorf("unknown alias %q — register it with: onix -a %s -d <path>", input, input)
+	return "", fmt.Errorf("unknown alias %q — create ~/.onix/aliases/%s.lua with path = \"...\"", input, input)
+}
+
+// OpenInEditor opens the aliases directory in the given editor.
+func OpenInEditor(editor string) error {
+	d := Dir()
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		return err
+	}
+	cmd := exec.Command(editor, d)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("open editor: %w", err)
+	}
+	return cmd.Wait()
+}
+
+// ApplyEnvOverride propagates aliasDir into ONIX_ALIAS_DIR so that child
+// processes inherit the same aliases directory as the parent.
+func ApplyEnvOverride(aliasDir string) {
+	if strings.TrimSpace(aliasDir) == "" {
+		return
+	}
+	if strings.TrimSpace(os.Getenv(EnvVar)) != "" {
+		return
+	}
+	if err := os.Setenv(EnvVar, aliasDir); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not set %s: %v\n", EnvVar, err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Lua helpers
+// ---------------------------------------------------------------------------
+
+func luaStr(t *lua.LTable, key string) string {
+	if s, ok := t.RawGetString(key).(lua.LString); ok {
+		return string(s)
+	}
+	return ""
+}
+
+func parseContextConfig(t *lua.LTable) config.ContextConfig {
+	return config.ContextConfig{
+		Source:   luaStr(t, "source"),
+		Var:      luaStr(t, "var"),
+		File:     luaStr(t, "file"),
+		Cmd:      luaStr(t, "cmd"),
+		Path:     luaStr(t, "path"),
+		Template: luaStr(t, "template"),
+	}
+}
+
+func writeContextLua(b *strings.Builder, cc config.ContextConfig, indent string) {
+	b.WriteString("{\n")
+	if cc.Source != "" {
+		fmt.Fprintf(b, "%s  source   = %q,\n", indent, cc.Source)
+	}
+	if cc.Var != "" {
+		fmt.Fprintf(b, "%s  var      = %q,\n", indent, cc.Var)
+	}
+	if cc.File != "" {
+		fmt.Fprintf(b, "%s  file     = %q,\n", indent, cc.File)
+	}
+	if cc.Cmd != "" {
+		fmt.Fprintf(b, "%s  cmd      = %q,\n", indent, cc.Cmd)
+	}
+	if cc.Path != "" {
+		fmt.Fprintf(b, "%s  path     = %q,\n", indent, cc.Path)
+	}
+	if cc.Template != "" {
+		fmt.Fprintf(b, "%s  template = %q,\n", indent, cc.Template)
+	}
+	fmt.Fprintf(b, "%s}", indent)
 }

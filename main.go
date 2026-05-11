@@ -17,12 +17,10 @@ import (
 //
 // Direct invocation:
 //
-//	onix                          open alias file in editor
+//	onix                          open aliases directory in editor
 //	onix -a <alias> -d <path>     register an alias
 //	onix <alias>                  open cmd.exe in target directory (built-in default)
 //	onix install [name]           install one or all modules
-//	onix add <user/repo> [name]   declare a new module in config
-//	onix remove <name>            remove a module
 //	onix update [name]            update one or all modules
 //	onix list                     list declared modules
 //	onix init                     set up ~/.onix/ directory structure
@@ -43,7 +41,7 @@ func main() {
 	if err != nil {
 		errs.FatalCode(errs.ExitErr, "load config: %v", err)
 	}
-	alias.ApplyEnvOverride(cfg.Settings.AliasFile)
+	alias.ApplyEnvOverride(cfg.Settings.AliasDir)
 	debugEnabled := cfg.IsDebugEnabled()
 
 	if debugEnabled {
@@ -138,7 +136,7 @@ func main() {
 		if dest == "" {
 			os.Exit(errs.ExitNotFound)
 		}
-		abs, err := filepath.Abs(dest) // C4: resolve to absolute before registering
+		abs, err := filepath.Abs(dest)
 		if err != nil {
 			errs.FatalCode(errs.ExitErr, "resolve path: %v", err)
 		}
