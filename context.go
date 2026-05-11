@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sadirano/onix/internal/alias"
@@ -228,7 +229,13 @@ func contextFromCmd(command string) (string, error) {
 	if command == "" {
 		return "", fmt.Errorf("[context] cmd not configured")
 	}
-	out, err := exec.Command("cmd.exe", "/C", command).Output()
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd.exe", "/C", command)
+	} else {
+		cmd = exec.Command("sh", "-c", command)
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("context command %q: %w", command, err)
 	}
