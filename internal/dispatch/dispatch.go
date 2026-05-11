@@ -15,7 +15,7 @@ import (
 // coreCommands is the canonical list of built-in onix command names that must
 // never be intercepted by module dispatch, even when ONIX_MODULE is set.
 var coreCommands = []string{
-	"install", "add", "remove", "update", "list", "init",
+	"install", "update", "list", "init",
 	"help", "-h", "--help", "-a", "--alias",
 }
 

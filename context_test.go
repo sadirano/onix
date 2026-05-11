@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
 )
 
@@ -39,6 +40,7 @@ func TestApplyContextTemplate(t *testing.T) {
 func TestAliasContextConfig(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("USERPROFILE", tmp)
+	t.Setenv(alias.EnvVar, filepath.Join(tmp, "aliases"))
 
 	t.Run("write alias config then load", func(t *testing.T) {
 		cc := config.ContextConfig{Source: "alias", Path: "a/sub/dir"}
@@ -165,6 +167,7 @@ func TestAliasContextConfig(t *testing.T) {
 func TestResolveContext(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("USERPROFILE", tmp)
+	t.Setenv(alias.EnvVar, filepath.Join(tmp, "aliases"))
 
 	t.Run("no config and no global returns empty string", func(t *testing.T) {
 		cfg := &config.Config{}

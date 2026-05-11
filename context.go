@@ -5,90 +5,85 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
+	"github.com/sadirano/onix/internal/alias"
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/errs"
 	"github.com/sadirano/onix/internal/opener"
 )
 
-// aliasContextPath returns the path of the per-segment context config file.
-func aliasContextPath(alias string) string {
-	return filepath.Join(config.Dir(), "contexts", alias)
+// splitContextKey splits a key of the form "seg@alias" into (aliasName, segName).
+// When there is no "@", the whole key is treated as the alias name and segName is "".
+func splitContextKey(key string) (aliasName, segName string) {
+	if i := strings.Index(key, "@"); i >= 0 {
+		return key[i+1:], key[:i]
+	}
+	return key, ""
 }
 
-// writeAliasContextConfig serialises cc into the per-segment context file using
-// the same key=value format as the alias file.
-func writeAliasContextConfig(alias string, cc config.ContextConfig) error {
-	dir := filepath.Join(config.Dir(), "contexts")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create contexts dir: %w", err)
-	}
-	var sb strings.Builder
-	sb.WriteString("source=" + cc.Source + "\n")
-	switch cc.Source {
-	case "file":
-		sb.WriteString("file=" + cc.File + "\n")
-	case "cmd":
-		sb.WriteString("cmd=" + cc.Cmd + "\n")
-	case "alias":
-		sb.WriteString("path=" + cc.Path + "\n")
-	default:
-		sb.WriteString("var=" + cc.Var + "\n")
-	}
-	if cc.Template != "" {
-		sb.WriteString("template=" + cc.Template + "\n")
-	}
-	return os.WriteFile(aliasContextPath(alias), []byte(sb.String()), 0o644)
-}
-
-// loadAliasContextConfig reads and parses the per-segment context config.
-// Returns (zero, false) when no config exists for the segment.
-func loadAliasContextConfig(alias string) (config.ContextConfig, bool) {
-	b, err := os.ReadFile(aliasContextPath(alias))
+// writeAliasContextConfig persists cc into the alias's Lua file.
+// key is either "seg@alias" (segment-level) or "alias" (alias-level context).
+func writeAliasContextConfig(key string, cc config.ContextConfig) error {
+	aliasName, segName := splitContextKey(key)
+	e, err := alias.Load(aliasName)
 	if err != nil {
-		return config.ContextConfig{}, false
+		return err
 	}
-	text := strings.ReplaceAll(string(b), "\r\n", "\n")
-	text = strings.TrimPrefix(text, "\xef\xbb\xbf")
-	cc := config.ContextConfig{}
-	for _, raw := range strings.Split(text, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		switch strings.TrimSpace(k) {
-		case "source":
-			cc.Source = strings.TrimSpace(v)
-		case "var":
-			cc.Var = strings.TrimSpace(v)
-		case "file":
-			cc.File = strings.TrimSpace(v)
-		case "cmd":
-			cc.Cmd = v // preserve spacing — cmd values may contain = signs
-		case "path":
-			cc.Path = v
-		case "template":
-			cc.Template = v
-		}
+	if e == nil {
+		e = &alias.Entry{}
 	}
-	if cc.Source == "" {
-		return config.ContextConfig{}, false
+	if segName != "" {
+		if e.Segments == nil {
+			e.Segments = make(map[string]config.ContextConfig)
+		}
+		e.Segments[segName] = cc
+	} else {
+		e.Context = cc
 	}
-	return cc, true
+	return alias.Save(aliasName, e)
 }
 
-// clearAliasContext removes the per-segment context config.
-func clearAliasContext(alias string) error {
-	err := os.Remove(aliasContextPath(alias))
-	if os.IsNotExist(err) {
+// loadAliasContextConfig reads context config from the alias's Lua file.
+// key is either "seg@alias" (segment-level) or "alias" (alias-level context).
+// Returns (zero, false) when no config exists.
+func loadAliasContextConfig(key string) (config.ContextConfig, bool) {
+	aliasName, segName := splitContextKey(key)
+	e, err := alias.Load(aliasName)
+	if err != nil || e == nil {
+		return config.ContextConfig{}, false
+	}
+	if segName != "" {
+		cc, ok := e.Segments[segName]
+		return cc, ok
+	}
+	if e.Context == (config.ContextConfig{}) {
+		return config.ContextConfig{}, false
+	}
+	return e.Context, true
+}
+
+// clearAliasContext removes the context config for key from the alias's Lua file.
+func clearAliasContext(key string) error {
+	aliasName, segName := splitContextKey(key)
+	e, err := alias.Load(aliasName)
+	if err != nil || e == nil {
 		return nil
 	}
-	return err
+	if segName != "" {
+		delete(e.Segments, segName)
+	} else {
+		e.Context = config.ContextConfig{}
+	}
+	return alias.Save(aliasName, e)
+}
+
+// aliasFilePath returns the path to the Lua file for the given alias.
+// key may be "seg@alias" or a plain alias name.
+func aliasFilePath(key string) string {
+	aliasName, _ := splitContextKey(key)
+	return filepath.Join(alias.Dir(), aliasName+".lua")
 }
 
 
@@ -123,7 +118,7 @@ func applyContextTemplate(template, varName, value string) string {
 
 // resolveContext returns the active context string for a segment.
 // Checks the per-segment config file first, then falls back to the global
-// [context] section in config.toml.
+// context section in config.lua.
 func resolveContext(segmentName string, cfg *config.Config) (string, error) {
 	if cc, ok := loadAliasContextConfig(segmentName); ok {
 		return resolveContextConfig(cc)
@@ -234,7 +229,13 @@ func contextFromCmd(command string) (string, error) {
 	if command == "" {
 		return "", fmt.Errorf("[context] cmd not configured")
 	}
-	out, err := exec.Command("cmd.exe", "/C", command).Output()
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd.exe", "/C", command)
+	} else {
+		cmd = exec.Command("sh", "-c", command)
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("context command %q: %w", command, err)
 	}
@@ -252,6 +253,7 @@ func contextFromCmd(command string) (string, error) {
 // When a segment has no context config the user is prompted to configure one,
 // which is then saved for future invocations.
 func walkSegments(segments []string, aliasName string, target string, cfg *config.Config, debugEnabled bool) string {
+	root, _ := alias.Load(aliasName) // load once for optional join function
 	for i := len(segments) - 1; i >= 0; i-- {
 		seg := segments[i]
 		key := seg + "@" + aliasName
@@ -267,6 +269,19 @@ func walkSegments(segments []string, aliasName string, target string, cfg *confi
 		part, err := applySegment(seg, key, cfg, debugEnabled)
 		if err != nil {
 			errs.FatalCode(errs.ExitErr, "%v", err)
+		}
+		if root != nil && root.Join != nil {
+			joined, jerr := alias.CallJoin(root.Join, target, part)
+			if jerr == nil {
+				if debugEnabled {
+					fmt.Printf("[ONIX] join(%q, %q) → %q\n", target, part, joined)
+				}
+				target = joined
+				continue
+			}
+			if debugEnabled {
+				fmt.Printf("[ONIX] join function error for %q: %v — falling back to filepath.Join\n", aliasName, jerr)
+			}
 		}
 		target = filepath.Join(target, part)
 	}
@@ -285,7 +300,7 @@ func walkSegments(segments []string, aliasName string, target string, cfg *confi
 func handleCtxCommand(key, seg string, args []string, cfg *config.Config) {
 	switch {
 	case len(args) == 0:
-		p := aliasContextPath(key)
+		p := aliasFilePath(key)
 		if err := opener.RunEditorCommand(cfg.ResolveEditor(), filepath.Dir(p), filepath.Base(p)); err != nil {
 			errs.Fatal("%v", err)
 		}

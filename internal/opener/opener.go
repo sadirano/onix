@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // Match represents a single search result with position information.
@@ -32,14 +31,6 @@ func IsBinaryFile(path string) bool {
 		return false
 	}
 	return bytes.IndexByte(buf[:n], 0) >= 0
-}
-
-// OpenFileWithDefault launches path using the Windows default program
-// association, equivalent to double-clicking the file in Explorer.
-func OpenFileWithDefault(path string) error {
-	cmd := exec.Command("cmd.exe", "/C", "start", "", path)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Start()
 }
 
 // OpenMixedFiles splits files into binary vs text, launches binary files with
@@ -146,17 +137,10 @@ func OpenSearchMatchesMixed(editor, dir string, matches []Match) error {
 	return OpenSearchMatches(editor, dir, textMatches)
 }
 
-// OpenInExplorer opens path in Windows Explorer with the file selected.
-func OpenInExplorer(path string) error {
-	// The empty string is a required window-title argument for `start`; without
-	// it, start treats the first quoted argument as the title, not the program.
-	cmd := exec.Command("cmd.exe", "/C", "start", "", "explorer.exe", "/select,"+path)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Start()
-}
-
 // EditorBase returns the lowercase base name of editor without extension.
+// Backslashes are normalised to forward slashes so Windows paths work on any OS.
 func EditorBase(editor string) string {
-	base := strings.ToLower(filepath.Base(strings.TrimSpace(editor)))
+	normalized := strings.ReplaceAll(strings.TrimSpace(editor), `\`, `/`)
+	base := strings.ToLower(filepath.Base(normalized))
 	return strings.TrimSuffix(base, filepath.Ext(base))
 }
