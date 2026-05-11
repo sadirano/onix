@@ -123,7 +123,7 @@ func applyContextTemplate(template, varName, value string) string {
 
 // resolveContext returns the active context string for a segment.
 // Checks the per-segment config file first, then falls back to the global
-// [context] section in config.toml.
+// context section in config.lua.
 func resolveContext(segmentName string, cfg *config.Config) (string, error) {
 	if cc, ok := loadAliasContextConfig(segmentName); ok {
 		return resolveContextConfig(cc)

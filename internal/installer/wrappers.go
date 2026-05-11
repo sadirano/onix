@@ -20,7 +20,7 @@ func InstallShortcuts(cfg *config.Config) error {
 // InstallShortcutsProfile writes .cmd wrappers using a named built-in profile
 // when profile is non-empty, otherwise falls back to the config actions (or
 // DefaultActions when none are declared).
-// When a profile is used its actions are also written into config.toml so that
+// When a profile is used its actions are also written into config.lua so that
 // resolveBuiltin can look them up at runtime.
 func InstallShortcutsProfile(profile string, cfg *config.Config) error {
 	var actions []config.Action

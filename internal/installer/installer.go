@@ -8,7 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/BurntSushi/toml"
+	lua "github.com/yuin/gopher-lua"
+
 	"github.com/sadirano/onix/internal/config"
 )
 
@@ -383,23 +384,50 @@ func IsInstalled(repo string) bool {
 // Entry-point helpers
 // ---------------------------------------------------------------------------
 
-// manifestToml is the structure of an onix.toml manifest in a module source dir.
-type manifestToml struct {
-	Entries []config.Entry `toml:"entry"`
-}
-
-// loadManifest reads onix.toml from srcDir and returns its entry list.
+// loadManifest reads onix.lua from srcDir and returns its entry list.
 // Returns nil (not an error) when the file is absent.
 func loadManifest(srcDir string) ([]config.Entry, error) {
-	p := filepath.Join(srcDir, "onix.toml")
+	p := filepath.Join(srcDir, "onix.lua")
 	if _, err := os.Stat(p); os.IsNotExist(err) {
 		return nil, nil
 	}
-	var m manifestToml
-	if _, err := toml.DecodeFile(p, &m); err != nil {
-		return nil, err
+
+	L := lua.NewState()
+	defer L.Close()
+
+	if err := L.DoFile(p); err != nil {
+		return nil, fmt.Errorf("onix.lua: %w", err)
 	}
-	return m.Entries, nil
+
+	tbl, ok := L.Get(-1).(*lua.LTable)
+	if !ok {
+		return nil, fmt.Errorf("onix.lua must return a table")
+	}
+
+	et, ok := tbl.RawGetString("entries").(*lua.LTable)
+	if !ok {
+		return nil, nil
+	}
+
+	var entries []config.Entry
+	n := et.MaxN()
+	for i := 1; i <= n; i++ {
+		t, ok := et.RawGetInt(i).(*lua.LTable)
+		if !ok {
+			continue
+		}
+		name := luaManifestStr(t, "name")
+		cmd := luaManifestStr(t, "cmd")
+		entries = append(entries, config.Entry{Name: name, Cmd: cmd})
+	}
+	return entries, nil
+}
+
+func luaManifestStr(t *lua.LTable, key string) string {
+	if s, ok := t.RawGetString(key).(lua.LString); ok {
+		return string(s)
+	}
+	return ""
 }
 
 // resolveEntries applies user overrides (from config) on top of the manifest.

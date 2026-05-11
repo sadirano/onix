@@ -212,7 +212,7 @@ Environment:
   ONIX_ENV           override alias file path
   EDITOR             preferred editor (default: nvim)
 
-Config:  ~/.onix/config.toml
+Config:  ~/.onix/config.lua
 Modules: ~/.onix/modules/
 Bin:     ~/.onix/bin/   ← add this to PATH
 `)
