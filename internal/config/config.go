@@ -31,6 +31,7 @@ func (e Entry) EffectiveCmd() string {
 type Action struct {
 	Name    string // wrapper name (e.g. "editor") and ONIX_COMMAND value
 	Builtin string // which built-in behaviour to run: shell|editor|explorer|print|files|run
+	Lua     string // inline Lua function source: function(target, args) ... end
 }
 
 // ContextConfig defines how to resolve the active working context at runtime.
@@ -103,11 +104,14 @@ func BinDir() string {
 
 // Settings holds global onix settings.
 type Settings struct {
-	AliasDir   string // override aliases directory; empty = use default (~/.onix/aliases)
-	Editor     string // override editor; empty = use EDITOR env
-	Timing     bool   // equivalent to ONIX_TIMING=1
-	Debug      bool   // equivalent to ONIX_DEBUG=1
-	DisableRun bool   // set true to block the run builtin
+	AliasDir     string // override aliases directory; empty = use default (~/.onix/aliases)
+	Editor       string // override editor; empty = use EDITOR env
+	Shell        string // override shell binary; empty = cmd.exe (Windows) / $SHELL (Unix)
+	ClipboardCmd string // command to pipe path to clipboard (print builtin); empty = "clip" on Windows
+	LastVar      string // env var set by print builtin; empty = "ONIX_LAST"
+	Timing       bool   // equivalent to ONIX_TIMING=1
+	Debug        bool   // equivalent to ONIX_DEBUG=1
+	DisableRun   bool   // set true to block the run builtin
 }
 
 // Module describes one installable module.
@@ -178,11 +182,14 @@ func Load() (*Config, error) {
 
 	if st, ok := tbl.RawGetString("settings").(*lua.LTable); ok {
 		cfg.Settings = Settings{
-			AliasDir:   luaStr(st, "alias_dir"),
-			Editor:     luaStr(st, "editor"),
-			Timing:     luaBool(st, "timing"),
-			Debug:      luaBool(st, "debug"),
-			DisableRun: luaBool(st, "disable_run"),
+			AliasDir:     luaStr(st, "alias_dir"),
+			Editor:       luaStr(st, "editor"),
+			Shell:        luaStr(st, "shell"),
+			ClipboardCmd: luaStr(st, "clipboard_cmd"),
+			LastVar:      luaStr(st, "last_var"),
+			Timing:       luaBool(st, "timing"),
+			Debug:        luaBool(st, "debug"),
+			DisableRun:   luaBool(st, "disable_run"),
 		}
 	}
 
@@ -204,6 +211,7 @@ func Load() (*Config, error) {
 				cfg.Actions = append(cfg.Actions, Action{
 					Name:    luaStr(t, "name"),
 					Builtin: luaStr(t, "builtin"),
+					Lua:     luaStr(t, "lua"),
 				})
 			}
 		}
@@ -259,19 +267,28 @@ func Save(cfg *Config) error {
 
 	b.WriteString("  settings = {\n")
 	if cfg.Settings.AliasDir != "" {
-		fmt.Fprintf(&b, "    alias_dir   = %q,\n", cfg.Settings.AliasDir)
+		fmt.Fprintf(&b, "    alias_dir     = %q,\n", cfg.Settings.AliasDir)
 	}
 	if cfg.Settings.Editor != "" {
-		fmt.Fprintf(&b, "    editor      = %q,\n", cfg.Settings.Editor)
+		fmt.Fprintf(&b, "    editor        = %q,\n", cfg.Settings.Editor)
+	}
+	if cfg.Settings.Shell != "" {
+		fmt.Fprintf(&b, "    shell         = %q,\n", cfg.Settings.Shell)
+	}
+	if cfg.Settings.ClipboardCmd != "" {
+		fmt.Fprintf(&b, "    clipboard_cmd = %q,\n", cfg.Settings.ClipboardCmd)
+	}
+	if cfg.Settings.LastVar != "" {
+		fmt.Fprintf(&b, "    last_var      = %q,\n", cfg.Settings.LastVar)
 	}
 	if cfg.Settings.Timing {
-		b.WriteString("    timing      = true,\n")
+		b.WriteString("    timing        = true,\n")
 	}
 	if cfg.Settings.Debug {
-		b.WriteString("    debug       = true,\n")
+		b.WriteString("    debug         = true,\n")
 	}
 	if cfg.Settings.DisableRun {
-		b.WriteString("    disable_run = true,\n")
+		b.WriteString("    disable_run   = true,\n")
 	}
 	b.WriteString("  },\n\n")
 
@@ -301,7 +318,11 @@ func Save(cfg *Config) error {
 	if len(cfg.Actions) > 0 {
 		b.WriteString("  actions = {\n")
 		for _, a := range cfg.Actions {
-			fmt.Fprintf(&b, "    { name = %q, builtin = %q },\n", a.Name, a.Builtin)
+			if a.Lua != "" {
+				fmt.Fprintf(&b, "    { name = %q, lua = %q },\n", a.Name, a.Lua)
+			} else {
+				fmt.Fprintf(&b, "    { name = %q, builtin = %q },\n", a.Name, a.Builtin)
+			}
 		}
 		b.WriteString("  },\n\n")
 	}
@@ -364,6 +385,29 @@ func (c *Config) ResolveEditor() string {
 	return "nvim"
 }
 
+// ResolveShell returns the configured shell, or empty string (callers use platform default).
+func (c *Config) ResolveShell() string {
+	return strings.TrimSpace(c.Settings.Shell)
+}
+
+// ResolveClipboardCmd returns the clipboard command for the print builtin.
+// Defaults to "clip" when unset (built-in on Windows).
+func (c *Config) ResolveClipboardCmd() string {
+	if s := strings.TrimSpace(c.Settings.ClipboardCmd); s != "" {
+		return s
+	}
+	return "clip"
+}
+
+// ResolveLastVar returns the env var name set by the print builtin.
+// Defaults to "ONIX_LAST".
+func (c *Config) ResolveLastVar() string {
+	if s := strings.TrimSpace(c.Settings.LastVar); s != "" {
+		return s
+	}
+	return "ONIX_LAST"
+}
+
 // FindAction returns the action with the given name, checking DefaultActions
 // when no actions are declared. Returns nil when not found.
 func (c *Config) FindAction(name string) *Action {
@@ -418,11 +462,14 @@ const Starter = `-- ~/.onix/config.lua
 
 return {
   settings = {
-    -- alias_dir   = "",       -- default: ~/.onix/aliases/  (each alias is a <name>.lua file)
-    -- editor      = "",       -- default: $EDITOR env var, then nvim
-    -- timing      = false,
-    -- debug       = false,
-    -- disable_run = false,    -- set true to block the run builtin (shell execution)
+    -- alias_dir     = "",            -- default: ~/.onix/aliases/
+    -- editor        = "",            -- default: $EDITOR env var, then nvim
+    -- shell         = "",            -- default: cmd.exe (Windows) / $SHELL (Unix)
+    -- clipboard_cmd = "clip",        -- command to copy path to clipboard (print builtin)
+    -- last_var      = "ONIX_LAST",   -- env var set to the resolved path (print builtin)
+    -- timing        = false,
+    -- debug         = false,
+    -- disable_run   = false,         -- set true to block the run builtin
   },
 
   -- Context resolved at runtime for subalias@alias navigation.
@@ -440,12 +487,17 @@ return {
   -- When no actions are declared the built-in defaults are used:
   --   shell, editor, explore, print, files, run
   --
+  -- Builtin action:
+  --   { name = "editor", builtin = "editor" },
+  --
+  -- Inline Lua action (function receives target path and args table):
+  --   { name = "myaction", lua = "function(target, args) os.execute('start ' .. target) end" },
+  --
   -- actions = {
   --   { name = "editor", builtin = "editor" },
   -- },
 
   -- Declare modules below. onix will prompt to install them on first use.
-  -- Run "onix add <user/repo>" to register a module, then "onix install" to build it.
   --
   -- modules = {
   --   {
@@ -454,8 +506,6 @@ return {
   --     ref     = "main",
   --     enabled = true,
   --     config  = { key = "value" },  -- passed as ONIX_MODULE_CONFIG (JSON)
-  --                                   -- do NOT store secrets here;
-  --                                   -- env vars are visible to all child processes
   --   },
   -- },
 }

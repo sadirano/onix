@@ -145,18 +145,18 @@ func parseAllSegments(input string) (segments []string, aliasName string) {
 	return segments, aliasName
 }
 
-// resolveBuiltin maps an ONIX_COMMAND value to the builtin identifier used by
-// executeAction. Returns "shell" when cmdName is empty (direct onix invocation).
+// resolveAction maps an ONIX_COMMAND value to its Action definition.
+// Returns a default shell action when cmdName is empty (direct onix invocation).
 // Calls fatal when cmdName is set but not found in config.
-func resolveBuiltin(cmdName string, cfg *config.Config) string {
+func resolveAction(cmdName string, cfg *config.Config) *config.Action {
 	if cmdName == "" {
-		return "shell"
+		return &config.Action{Name: "shell", Builtin: "shell"}
 	}
 	action := cfg.FindAction(cmdName)
 	if action == nil {
-		errs.Fatal("unknown command %q — check [[action]] blocks in config", cmdName)
+		errs.Fatal("unknown command %q — check actions in config", cmdName)
 	}
-	return action.Builtin
+	return action
 }
 
 // printHelp writes the usage message to stdout.

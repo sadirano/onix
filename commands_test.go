@@ -69,22 +69,22 @@ func TestParseAllSegments(t *testing.T) {
 	}
 }
 
-func TestResolveBuiltin(t *testing.T) {
-	t.Run("empty cmdName returns shell", func(t *testing.T) {
+func TestResolveAction(t *testing.T) {
+	t.Run("empty cmdName returns shell action", func(t *testing.T) {
 		cfg := &config.Config{}
-		if got := resolveBuiltin("", cfg); got != "shell" {
+		if got := resolveAction("", cfg).Builtin; got != "shell" {
 			t.Errorf("got %q, want shell", got)
 		}
 	})
 	t.Run("default editor action", func(t *testing.T) {
 		cfg := &config.Config{}
-		if got := resolveBuiltin("editor", cfg); got != "editor" {
+		if got := resolveAction("editor", cfg).Builtin; got != "editor" {
 			t.Errorf("got %q, want editor", got)
 		}
 	})
 	t.Run("default explore action", func(t *testing.T) {
 		cfg := &config.Config{}
-		if got := resolveBuiltin("explore", cfg); got != "explorer" {
+		if got := resolveAction("explore", cfg).Builtin; got != "explorer" {
 			t.Errorf("got %q, want explorer", got)
 		}
 	})
@@ -94,8 +94,19 @@ func TestResolveBuiltin(t *testing.T) {
 				{Name: "myshell", Builtin: "shell"},
 			},
 		}
-		if got := resolveBuiltin("myshell", cfg); got != "shell" {
+		if got := resolveAction("myshell", cfg).Builtin; got != "shell" {
 			t.Errorf("got %q, want shell", got)
+		}
+	})
+	t.Run("inline Lua action", func(t *testing.T) {
+		cfg := &config.Config{
+			Actions: []config.Action{
+				{Name: "myaction", Lua: "function(t, a) end"},
+			},
+		}
+		act := resolveAction("myaction", cfg)
+		if act.Lua != "function(t, a) end" {
+			t.Errorf("got Lua=%q, want function(t, a) end", act.Lua)
 		}
 	})
 }

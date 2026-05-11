@@ -20,6 +20,8 @@ type Entry struct {
 	Path     string                          // resolved target directory
 	Context  config.ContextConfig            // optional alias-level context
 	Segments map[string]config.ContextConfig // optional per-segment contexts, keyed by segment name
+	JoinSrc  string                          // Lua source of join function (survives Save round-trips)
+	Join     *lua.LFunction                  // compiled join fn; non-nil when JoinSrc set or function literal used
 }
 
 // Dir returns the aliases directory path.
@@ -112,6 +114,20 @@ func Load(name string) (*Entry, error) {
 		})
 	}
 
+	// Parse optional join function — supports both a function literal and a string.
+	switch jv := tbl.RawGetString("join").(type) {
+	case *lua.LFunction:
+		e.Join = jv
+	case lua.LString:
+		e.JoinSrc = string(jv)
+		if err2 := L.DoString(string(jv)); err2 == nil {
+			if fn, ok2 := L.Get(-1).(*lua.LFunction); ok2 {
+				e.Join = fn
+			}
+			L.SetTop(0)
+		}
+	}
+
 	L.SetTop(0) // clear stack — return value consumed, VM reused next call
 	entries.Store(name, e)
 	return e, nil
@@ -142,6 +158,14 @@ func Save(name string, e *Entry) error {
 			b.WriteString(",\n")
 		}
 		b.WriteString("  },\n")
+	}
+
+	if e.JoinSrc != "" {
+		if strings.Contains(e.JoinSrc, "\n") {
+			fmt.Fprintf(&b, "  join = [[\n%s\n  ]],\n", e.JoinSrc)
+		} else {
+			fmt.Fprintf(&b, "  join = %q,\n", e.JoinSrc)
+		}
 	}
 
 	b.WriteString("}\n")
@@ -190,6 +214,28 @@ func Resolve(input string, debug bool) (string, error) {
 	}
 
 	return "", fmt.Errorf("unknown alias %q — create ~/.onix/aliases/%s.lua with path = \"...\"", input, input)
+}
+
+// CallJoin calls the entry's join function with (base, part) and returns the
+// combined path. Uses the shared VM — must only be called from one goroutine.
+func CallJoin(fn *lua.LFunction, base, part string) (string, error) {
+	L := sharedVM()
+	err := L.CallByParam(lua.P{
+		Fn:      fn,
+		NRet:    1,
+		Protect: true,
+	}, lua.LString(base), lua.LString(part))
+	if err != nil {
+		L.SetTop(0)
+		return "", fmt.Errorf("join function: %w", err)
+	}
+	result := L.Get(-1)
+	L.SetTop(0)
+	s, ok := result.(lua.LString)
+	if !ok {
+		return "", fmt.Errorf("join function must return a string, got %T", result)
+	}
+	return string(s), nil
 }
 
 // OpenInEditor opens the aliases directory in the given editor.

@@ -9,12 +9,14 @@ import (
 
 func launchedFromRunner() bool { return false }
 
-func openShellAt(dir string) error {
-	sh := os.Getenv("SHELL")
-	if sh == "" {
-		sh = "/bin/sh"
+func openShellAt(dir, shell string) error {
+	if shell == "" {
+		shell = os.Getenv("SHELL")
+		if shell == "" {
+			shell = "/bin/sh"
+		}
 	}
-	cmd := exec.Command(sh)
+	cmd := exec.Command(shell)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -138,16 +138,33 @@ func launchedFromRunner() bool {
 	return hasC && !hasK
 }
 
-// openShellAt opens an interactive cmd.exe at dir. For UNC paths it uses
-// pushd to map the share to a temporary drive letter, since cmd.exe cannot
-// cd to a UNC path directly.
-func openShellAt(dir string) error {
+// openShellAt opens an interactive shell at dir.
+// shell selects the binary; empty defaults to cmd.exe.
+// PowerShell/pwsh use -NoExit; everything else uses /K (cmd-style).
+// For UNC paths, cmd uses pushd to map a temporary drive letter.
+func openShellAt(dir, shell string) error {
+	if shell == "" {
+		shell = "cmd.exe"
+	}
+	base := strings.ToLower(strings.TrimSuffix(filepath.Base(shell), ".exe"))
+
 	var cmd *exec.Cmd
-	if isUNCPath(dir) {
-		cmd = exec.Command("cmd.exe", "/K", fmt.Sprintf(`pushd "%s"`, dir))
-	} else {
-		cmd = exec.Command("cmd.exe", "/K")
-		cmd.Dir = dir
+	switch base {
+	case "powershell", "pwsh":
+		if isUNCPath(dir) {
+			cmd = exec.Command(shell, "-NoExit", "-Command",
+				fmt.Sprintf(`Set-Location "%s"`, dir))
+		} else {
+			cmd = exec.Command(shell, "-NoExit")
+			cmd.Dir = dir
+		}
+	default:
+		if isUNCPath(dir) {
+			cmd = exec.Command(shell, "/K", fmt.Sprintf(`pushd "%s"`, dir))
+		} else {
+			cmd = exec.Command(shell, "/K")
+			cmd.Dir = dir
+		}
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

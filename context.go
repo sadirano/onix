@@ -253,6 +253,7 @@ func contextFromCmd(command string) (string, error) {
 // When a segment has no context config the user is prompted to configure one,
 // which is then saved for future invocations.
 func walkSegments(segments []string, aliasName string, target string, cfg *config.Config, debugEnabled bool) string {
+	root, _ := alias.Load(aliasName) // load once for optional join function
 	for i := len(segments) - 1; i >= 0; i-- {
 		seg := segments[i]
 		key := seg + "@" + aliasName
@@ -268,6 +269,19 @@ func walkSegments(segments []string, aliasName string, target string, cfg *confi
 		part, err := applySegment(seg, key, cfg, debugEnabled)
 		if err != nil {
 			errs.FatalCode(errs.ExitErr, "%v", err)
+		}
+		if root != nil && root.Join != nil {
+			joined, jerr := alias.CallJoin(root.Join, target, part)
+			if jerr == nil {
+				if debugEnabled {
+					fmt.Printf("[ONIX] join(%q, %q) → %q\n", target, part, joined)
+				}
+				target = joined
+				continue
+			}
+			if debugEnabled {
+				fmt.Printf("[ONIX] join function error for %q: %v — falling back to filepath.Join\n", aliasName, jerr)
+			}
 		}
 		target = filepath.Join(target, part)
 	}

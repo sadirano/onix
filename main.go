@@ -100,14 +100,14 @@ func main() {
 	if args[0] == "-a" || args[0] == "--alias" {
 		destination := registerAlias(args)
 		if cmdName != "" {
-			builtin := resolveBuiltin(cmdName, cfg)
+			act := resolveAction(cmdName, cfg)
 			if !isUNCPath(destination) {
 				if err := os.MkdirAll(destination, 0o755); err != nil {
 					errs.FatalCode(errs.ExitErr, "create target: %v", err)
 				}
 			}
 			t.mark("action after register")
-			if err := executeAction(builtin, destination, nil, cfg, t); err != nil {
+			if err := executeAction(act, destination, nil, cfg, t); err != nil {
 				handleActionErr(err)
 			}
 		}
@@ -165,8 +165,8 @@ func main() {
 	}
 	t.mark("chdir")
 
-	builtin := resolveBuiltin(cmdName, cfg)
-	if err := executeAction(builtin, target, extras, cfg, t); err != nil {
+	act := resolveAction(cmdName, cfg)
+	if err := executeAction(act, target, extras, cfg, t); err != nil {
 		handleActionErr(err)
 	}
 }
