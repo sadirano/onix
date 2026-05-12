@@ -65,6 +65,9 @@ func (c *AddCmd) Run(e *env) error {
 		return fmt.Errorf("absolutise %q: %w", p, err)
 	}
 
+	// MkdirAll is idempotent and lets `o newalias /new/path` work for
+	// directories that don't exist yet — registering the alias and
+	// creating the directory are a single intent from the user's view.
 	if err := os.MkdirAll(abs, 0o755); err != nil {
 		return fmt.Errorf("create directory %q: %w", abs, err)
 	}
@@ -77,7 +80,11 @@ func (c *AddCmd) Run(e *env) error {
 	if err := SaveStore(e.Home, s); err != nil {
 		return err
 	}
-	fmt.Printf("registered %s -> %s\n", strings.ToLower(c.Alias), abs)
+	// Human-readable confirmation goes to stderr so callers (the `o`
+	// shell wrapper, scripts) can capture the resolved path from stdout
+	// — same output contract as `onix resolve`.
+	fmt.Fprintf(os.Stderr, "registered %s -> %s\n", strings.ToLower(c.Alias), abs)
+	fmt.Println(abs)
 	return nil
 }
 

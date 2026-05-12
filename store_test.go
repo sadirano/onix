@@ -95,6 +95,63 @@ func TestStore_DeleteUnknown(t *testing.T) {
 	}
 }
 
+// TestValidateNames locks the character rules that prevent unresolvable
+// aliases (and the segment-name counterpart). The rule set is shared, so
+// both functions are exercised with the same fixtures.
+//
+// Highlights:
+//   - empty / whitespace-only names are rejected (would TOML-quote as "")
+//   - '/' and '\' would collide with path separators inside subdir chains
+//   - '@' is the segment separator, so "foo@bar" would never resolve as an
+//     alias of that literal name (the parser strips the '@bar' suffix)
+//   - whitespace and control bytes break shell completion and function
+//     definitions emitted by writeShellSnippet
+func TestValidateNames(t *testing.T) {
+	t.Run("alias", func(t *testing.T) {
+		runValidatorTable(t, ValidateAliasName, "alias")
+	})
+	t.Run("segment", func(t *testing.T) {
+		runValidatorTable(t, ValidateSegmentName, "segment")
+	})
+}
+
+func runValidatorTable(t *testing.T, fn func(string) error, kind string) {
+	t.Helper()
+	ok := []string{
+		"acme",
+		"acme-2",
+		"acme_v2",
+		"FooBar",
+		"a",
+	}
+	for _, name := range ok {
+		if err := fn(name); err != nil {
+			t.Errorf("%s %q: unexpected error: %v", kind, name, err)
+		}
+	}
+	bad := map[string]string{
+		"":            "empty",
+		"   ":         "empty",
+		"foo bar":     "whitespace",
+		"foo\tbar":    "whitespace",
+		"foo\nbar":    "whitespace",
+		"foo/bar":     "path",
+		"foo\\bar":    "path",
+		"foo@bar":     "@",
+		"\x00bar":     "control",
+	}
+	for name, hint := range bad {
+		err := fn(name)
+		if err == nil {
+			t.Errorf("%s %q (%s): expected error, got nil", kind, name, hint)
+			continue
+		}
+		if !strings.Contains(err.Error(), kind) {
+			t.Errorf("%s %q: error %q should name the kind", kind, name, err)
+		}
+	}
+}
+
 // TestStore_AtomicWrite confirms that the saved file ends up readable and
 // that we don't leave temp .aliases.*.toml droppings behind on success.
 // A scan of the directory is the cheapest way to verify the cleanup path.

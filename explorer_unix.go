@@ -3,7 +3,7 @@
 package main
 
 import (
-	"fmt"
+	"os/exec"
 	"runtime"
 )
 
@@ -13,6 +13,7 @@ import (
 // silently no-op so anyone running this on Linux knows the action isn't
 // wired yet.
 func openInExplorer(target string) error {
-	_ = target
-	return fmt.Errorf("explore action is not implemented on %s yet", runtime.GOOS)
+	// We use Start() rather than Run() so onix doesn't block while the
+	// explorer window is open.
+	return exec.Command("xdg-open", target).Start()
 }

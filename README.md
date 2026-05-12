@@ -19,17 +19,26 @@ onix init
 ## Use
 
 ```powershell
-onix add acme C:\Users\dev\projects\acme   # register an alias
+onix add acme C:\Users\dev\projects\acme   # register an alias (auto-creates the dir if missing)
 o acme                                     # cd into it (in your current shell)
+o acme C:\Users\dev\projects\acme          # register + cd in one step (dir auto-created)
+o                                          # no args: open aliases.toml in your editor
 n acme                                     # open it in your editor
 s acme                                     # open it in Explorer
 y acme                                     # print the path and copy to clipboard
 r acme go test ./...                       # run a command at that path
 onix list                                  # show every alias
+onix aliases                               # open aliases.toml in your editor
 onix remove acme                           # forget it
 ```
 
-The `o` command changes the **current** shell's working directory — it does not spawn a new shell. Everything else (`n`, `s`, `y`, `r`) invokes `onix` directly, so they don't need shell integration to work.
+The `o` command changes the **current** shell's working directory — it does not spawn a new shell. Three forms:
+
+- `o <alias>` — resolve and cd. If the alias is unknown, `o` prompts for a destination, registers, and cds.
+- `o <alias> <path>` — register (or update) the alias to point at `<path>` and cd there. The directory is auto-created if it doesn't exist.
+- `o` (no args) — open `aliases.toml` in `$EDITOR`. Use `onix list` if you want a tabular dump to stdout instead.
+
+Everything else (`n`, `s`, `y`, `r`) invokes `onix` directly, so those don't need shell integration to work.
 
 ## Configuration
 
@@ -126,7 +135,9 @@ Every command that takes an alias (`o`, `n`, `s`, `y`, `r`, plus your custom act
 
 ## Diagnostics
 
-If `onix doctor` warns that PowerShell `$PROFILE` does not source the snippet, run `onix init` again without `--skip-profile`. If it warns that `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (or wherever your `go install` puts binaries) to PATH and restart PowerShell.
+If `onix doctor` warns that your shell profile does not source the snippet, run `onix init` again without `--skip-profile`. On Windows this updates `$PROFILE`; on Linux/macOS it appends a `[ -f ... ] && . ...` line to `.bashrc` and/or `.zshrc`.
+
+If `doctor` warns that `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin` (Linux/macOS) to PATH and restart your shell. Shortcuts (`o`, `n`, `s`, `y`, `r`) work without `onix` on PATH because the snippet pins the binary location at install time; `PATH` only matters when you type `onix` directly. Zsh tab completion additionally requires `compinit` to be loaded in `.zshrc` before sourcing the snippet — without it, completion silently skips registration rather than erroring.
 
 Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The included `scripts/smoke.ps1` does exactly that — it builds, runs every command against a throwaway home, and measures the hot path.
 

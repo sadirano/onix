@@ -118,15 +118,12 @@ cmd  = "s2"
 
 Onix will generate separate `.cmd` wrappers for each entry. When invoked via a wrapper, `ONIX_ENTRY` will be set to the `name` field, and that name will also be passed as the first argument to your binary.
 
-## 5. Internal Package Pattern
+## 5. Core Codebase Conventions
 
-When contributing to the core `onix` codebase (under `internal/`), follow these rules:
+When contributing to the core `onix` binary itself, the code lives directly in `package main` (one file per concern: `commands.go`, `store.go`, `segments.go`, etc.) rather than under `internal/`. The conventions are:
 
-1.  **Surgical Responsibility**: Each package should do exactly one thing (e.g., `alias` for resolution, `config` for TOML).
-2.  **Error Handling**:
-    - Return `error` from functions.
-    - Use `%w` to wrap errors.
-    - Use `internal/errs` for fatal exits only in `main.go` or top-level dispatchers.
-3.  **No Global State**: Prefer structs and methods over global variables to keep packages testable.
-4.  **Testing**: Every package MUST have a `_test.go` file with high coverage.
-5.  **Paths**: Use `internal/config` to get standard paths (`config.Dir()`, `config.BinDir()`) instead of hardcoding.
+1. **One file, one concern.** `store.go` owns alias persistence; `segments.go` owns the subdir registry; `plugin_cmd.go` owns plugin dispatch. Add a new file rather than growing an existing one past its scope.
+2. **Error handling.** Return `error` from functions; wrap with `%w` when adding context. Only `main` exits.
+3. **No global state** beyond a couple of explicit kong-bound singletons (the `env` struct in `main.go`).
+4. **Testing.** Every non-trivial source file gets a `_test.go` companion. The hot paths (`fastresolve.go`, `store.go`, `segments.go`) carry extra benchmarks.
+5. **Paths.** Helpers in `paths.go` (`shellPath`, `bashShellPath`, `aliasesPath`, `configPath`, `segmentsConfigPath`) return canonical filenames — call them instead of hand-rolling `filepath.Join` chains.

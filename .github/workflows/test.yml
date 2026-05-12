@@ -2,28 +2,33 @@ name: Test
 
 on:
   push:
-    branches: [ master ]
   pull_request:
-    branches: [ master ]
 
 jobs:
   test:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        go: ['1.23', '1.24']
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.go }}
+          cache: true
 
       - name: Vet
         run: go vet ./...
 
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
       - name: Test
         run: go test ./...
 
-      # Hot-path benchmark — informational only, not gated. If we ever want
-      # to fail on a regression we'd parse the output and assert ns/op.
+      # Hot-path benchmark — informational only, not gated.
       - name: Bench
         run: go test -bench=. -benchmem -run=^$ ./...

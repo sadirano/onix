@@ -57,14 +57,24 @@ const snippetTemplate = `$onixAliasCompleter = {
 
 function global:o {
     [CmdletBinding()]
-    param([Parameter(Position=0, Mandatory=$false)][string]$Alias)
+    param(
+        [Parameter(Position=0, Mandatory=$false)][string]$Alias,
+        [Parameter(Position=1, Mandatory=$false)][string]$Path
+    )
     if (-not $Alias) {
         & $global:onixExe aliases
         return
     }
-    $path = & $global:onixExe resolve $Alias
+    if ($Path) {
+        # 'o foo C:\some\path' — register (or update) the alias and cd
+        # into it. The directory is auto-created by 'onix add' if it
+        # doesn't exist.
+        $resolved = & $global:onixExe add $Alias $Path
+    } else {
+        $resolved = & $global:onixExe resolve $Alias
+    }
     if ($LASTEXITCODE -eq 0) {
-        Set-Location -LiteralPath $path
+        Set-Location -LiteralPath $resolved
     }
 }
 
@@ -103,7 +113,13 @@ const bashSnippetTemplate = `o() {
         return
     fi
     local path
-    path=$("$ONIX_EXE" resolve "$1")
+    if [ -n "$2" ]; then
+        # 'o foo /some/path' — register (or update) the alias and cd into
+        # it. The directory is auto-created by 'onix add' if missing.
+        path=$("$ONIX_EXE" add "$1" "$2")
+    else
+        path=$("$ONIX_EXE" resolve "$1")
+    fi
     if [ $? -eq 0 ]; then
         cd "$path"
     fi
@@ -118,36 +134,56 @@ r() {
     "$ONIX_EXE" run "$alias" -- "$@"
 }
 
+# Tab completion. We read names one per line into an array rather than
+# relying on word-splitting on $(...), so aliases containing odd
+# characters (in practice ValidateAliasName rejects them, but defence in
+# depth is cheap) don't get split into multiple completion entries.
+# Zsh uses compdef, which requires the user to have called compinit in
+# .zshrc beforehand — we gate on its availability so users without
+# compinit just lose completion instead of seeing an error on every
+# shell start. The zsh body uses portable 'while read' rather than zsh
+# parameter flags so bash can parse the function definition at source
+# time even though bash never runs it.
 if [ -n "$BASH_VERSION" ]; then
     _onix_completer() {
         local cur=${COMP_WORDS[COMP_CWORD]}
-        local names=$("$ONIX_EXE" list-names 2>/dev/null)
-        COMPREPLY=( $(compgen -W "$names" -- "$cur") )
+        local names
+        mapfile -t names < <("$ONIX_EXE" list-names 2>/dev/null)
+        COMPREPLY=( $(compgen -W "${names[*]}" -- "$cur") )
     }
-elif [ -n "$ZSH_VERSION" ]; then
+elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
     _onix_zsh_completer() {
-        local names=($($ONIX_EXE list-names 2>/dev/null))
-        compadd "${names[@]}"
+        local line names=()
+        while IFS= read -r line; do
+            names+=("$line")
+        done < <("$ONIX_EXE" list-names 2>/dev/null)
+        compadd -- "${names[@]}"
     }
 fi
 
 `
 
-// writeShellSnippet regenerates ~/.onix/shell/onix.ps1 from the current
-// config. Always rewrites the file in full — this is generated content
-// and any user-side customisation belongs in $PROFILE wrapping our
-// functions, not in this file. We accept the actions and plugins lists
-// as parameters rather than reloading config here so callers can validate
-// first and fail before clobbering the snippet.
+// writeShellSnippet regenerates the host-platform shell snippet from the
+// current config. Always rewrites the file in full — this is generated
+// content and any user-side customisation belongs in the shell profile
+// wrapping our functions, not in this file. We accept the actions and
+// plugins lists as parameters rather than reloading config here so callers
+// can validate first and fail before clobbering the snippet.
 //
 // The generated snippet hard-codes the absolute path of the currently
 // running onix binary. Without this pin, a v1 onix on PATH would silently
 // intercept every shell-function call, leading to opaque errors. The
 // downside is that moving the binary requires `onix install-actions` to
 // regenerate; we trust that's a rare event compared to PATH ambiguity.
+//
+// On Windows we write onix.ps1; on Linux/macOS we write onix.sh. We
+// deliberately avoid writing both — a pin baked into a PowerShell snippet
+// on Linux points at a binary the shell can't run, which is just noise
+// for `onix doctor` and a footgun for users who copy ~/.onix between
+// machines.
 func writeShellSnippet(home string, actions []Action, plugins []Plugin) error {
-	if err := writePwshShellSnippet(home, actions, plugins); err != nil {
-		return err
+	if runtime.GOOS == "windows" {
+		return writePwshShellSnippet(home, actions, plugins)
 	}
 	return writeBashShellSnippet(home, actions, plugins)
 }
@@ -359,9 +395,13 @@ func writeCompleterRegistrationBash(b *strings.Builder, actions []Action, plugin
 			names = append(names, e.EffectiveCmd())
 		}
 	}
+	// The zsh branch only fires when compdef exists — see the matching
+	// guard around _onix_zsh_completer in bashSnippetTemplate. Without
+	// this guard, users without compinit in .zshrc would see a
+	// "compdef: command not found" warning on every shell start.
 	fmt.Fprintf(b, `if [ -n "$BASH_VERSION" ]; then
     complete -F _onix_completer %s
-elif [ -n "$ZSH_VERSION" ]; then
+elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
     compdef _onix_zsh_completer %s
 fi
 `, strings.Join(names, " "), strings.Join(names, " "))

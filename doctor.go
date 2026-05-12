@@ -335,35 +335,63 @@ func checkBashLikeProfile(home string) checkResult {
 }
 
 // extractSnippetPin parses the generated shell snippet for the binary pin
-// line and returns the path inside the single quotes.
+// line and returns the path inside the single quotes. Returns "" when the
+// file is missing or the pin line isn't present.
+//
+// We branch on runtime.GOOS rather than reading both snippets: writeShellSnippet
+// only writes the host-platform snippet, and reading the other one (if it
+// exists from a copied ~/.onix) would yield a pin for the wrong OS.
 func extractSnippetPin(home string) string {
-	// Try PowerShell first
-	if data, err := os.ReadFile(shellPath(home)); err == nil {
-		const prefix = `$global:onixExe = '`
-		for _, raw := range strings.Split(string(data), "\n") {
-			line := strings.TrimSpace(raw)
-			if strings.HasPrefix(line, prefix) {
-				rest := strings.TrimPrefix(line, prefix)
-				end := strings.LastIndex(rest, "'")
-				if end >= 0 {
-					return strings.ReplaceAll(rest[:end], `''`, `'`)
-				}
-			}
-		}
+	if runtime.GOOS == "windows" {
+		return extractPwshSnippetPin(home)
 	}
-	// Then Bash
-	if data, err := os.ReadFile(bashShellPath(home)); err == nil {
-		const prefix = `export ONIX_EXE='`
-		for _, raw := range strings.Split(string(data), "\n") {
-			line := strings.TrimSpace(raw)
-			if strings.HasPrefix(line, prefix) {
-				rest := strings.TrimPrefix(line, prefix)
-				end := strings.LastIndex(rest, "'")
-				if end >= 0 {
-					return rest[:end]
-				}
-			}
+	return extractBashSnippetPin(home)
+}
+
+// extractPwshSnippetPin reads $global:onixExe = '<path>' from onix.ps1.
+// We trust the snippet's own formatting because it's machine-generated:
+// the prefix is exact, single quotes are literal, and `''` is the only
+// possible quote escape — so a small string search is fine here.
+func extractPwshSnippetPin(home string) string {
+	data, err := os.ReadFile(shellPath(home))
+	if err != nil {
+		return ""
+	}
+	const prefix = `$global:onixExe = '`
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, prefix) {
+			continue
 		}
+		rest := strings.TrimPrefix(line, prefix)
+		end := strings.LastIndex(rest, "'")
+		if end < 0 {
+			return ""
+		}
+		// Reverse the PowerShell single-quote escape (`''` -> `'`).
+		return strings.ReplaceAll(rest[:end], `''`, `'`)
+	}
+	return ""
+}
+
+// extractBashSnippetPin reads export ONIX_EXE='<path>' from onix.sh.
+func extractBashSnippetPin(home string) string {
+	data, err := os.ReadFile(bashShellPath(home))
+	if err != nil {
+		return ""
+	}
+	const prefix = `export ONIX_EXE='`
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(line, prefix)
+		end := strings.LastIndex(rest, "'")
+		if end < 0 {
+			return ""
+		}
+		return rest[:end]
 	}
 	return ""
 }

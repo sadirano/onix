@@ -10,7 +10,25 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            suffix: .exe
+            pkg_cmd: powershell
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            suffix: ""
+            pkg_cmd: bash
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            suffix: ""
+            pkg_cmd: bash
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
@@ -24,25 +42,35 @@ jobs:
           go build
           -trimpath
           -ldflags "-s -w -X main.buildVersion=${{ github.ref_name }}"
-          -o onix.exe
+          -o onix${{ matrix.suffix }}
           .
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
 
-      - name: Package
+      - name: Package (Windows)
+        if: matrix.goos == 'windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist | Out-Null
           Copy-Item onix.exe dist\
-
-          $zip = "onix-${{ github.ref_name }}-windows-amd64.zip"
+          $zip = "onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
           Compress-Archive -Path dist\* -DestinationPath $zip
-          Write-Host "Created $zip"
-
-          # SHA256 for the Scoop manifest.
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           Write-Host "SHA256: $hash"
+
+      - name: Package (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          mkdir -p dist
+          cp onix dist/
+          tar -czf "onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" -C dist .
+          sha256sum "onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: onix-${{ github.ref_name }}-windows-amd64.zip
+          files: |
+            onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+            onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
           generate_release_notes: true

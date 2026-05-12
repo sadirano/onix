@@ -3,9 +3,39 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// snippetPathForOS returns the snippet file the host platform actually
+// reads/writes. The tests drive the public extractSnippetPin /
+// checkSnippetPin entry points, which now branch on runtime.GOOS, so the
+// test setup has to write whichever file those functions will look at.
+func snippetPathForOS(home string) string {
+	if runtime.GOOS == "windows" {
+		return shellPath(home)
+	}
+	return bashShellPath(home)
+}
+
+// staleSnippetBody returns a snippet body in the host platform's format
+// that does NOT contain the pin line, used by the "missing pin" test.
+func staleSnippetBody() string {
+	if runtime.GOOS == "windows" {
+		return "# stale snippet\nfunction global:o { }\n"
+	}
+	return "# stale snippet\no() { :; }\n"
+}
+
+// missingPinBody returns a snippet body in the host platform's format with
+// the pin line pointing at a path that definitely does not exist.
+func missingPinBody() string {
+	if runtime.GOOS == "windows" {
+		return "$global:onixExe = 'C:\\nope\\does-not-exist.exe'\n"
+	}
+	return "export ONIX_EXE='/nope/does-not-exist'\n"
+}
 
 // TestExtractSnippetPin covers the parser's three branches: a snippet
 // written by writeShellSnippet (the happy path), a snippet missing the
@@ -38,12 +68,11 @@ func TestExtractSnippetPin(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(dir, "shell"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		body := "# stale snippet\nfunction global:o { }"
-		if err := os.WriteFile(shellPath(dir), []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(snippetPathForOS(dir), []byte(staleSnippetBody()), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		if pin := extractSnippetPin(dir); pin != "" {
-			t.Errorf("pin = %q, want empty for snippet without $global:onixExe", pin)
+			t.Errorf("pin = %q, want empty for snippet without pin line", pin)
 		}
 	})
 
@@ -82,8 +111,7 @@ func TestCheckSnippetPin(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(dir, "shell"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		body := "$global:onixExe = 'C:\\nope\\does-not-exist.exe'\n"
-		if err := os.WriteFile(shellPath(dir), []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(snippetPathForOS(dir), []byte(missingPinBody()), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		r := checkSnippetPin(dir)
@@ -92,6 +120,59 @@ func TestCheckSnippetPin(t *testing.T) {
 		}
 		if !strings.Contains(r.detail, "missing") {
 			t.Errorf("detail = %q, want it to mention 'missing'", r.detail)
+		}
+	})
+}
+
+// TestCheckBashLikeProfile exercises the three branches of the Linux
+// shell-profile check: no rc files found, rc file present but doesn't
+// source the snippet, rc file sources the snippet.
+//
+// We point USERPROFILE/HOME at a tempdir so the real user's rc files
+// never participate. On Windows the function still reads $HOME via
+// os.UserHomeDir; the t.Setenv calls cover both variants.
+func TestCheckBashLikeProfile(t *testing.T) {
+	t.Run("warn when no rc files", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		r := checkBashLikeProfile(home)
+		if r.status != "warn" {
+			t.Errorf("status = %q, want warn (no rc files)", r.status)
+		}
+		if !strings.Contains(r.detail, "neither") {
+			t.Errorf("detail = %q, want it to mention missing rc files", r.detail)
+		}
+	})
+
+	t.Run("warn when rc files exist but don't source", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		if err := os.WriteFile(filepath.Join(home, ".bashrc"), []byte("# unrelated rc\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkBashLikeProfile(home)
+		if r.status != "warn" {
+			t.Errorf("status = %q, want warn (not sourced)", r.status)
+		}
+		if !strings.Contains(r.detail, "onix init") {
+			t.Errorf("detail = %q, want it to suggest 'onix init'", r.detail)
+		}
+	})
+
+	t.Run("ok when rc sources the snippet", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", home)
+		// .zshrc references the absolute path that bashShellPath would return.
+		body := "# onix\n. '" + bashShellPath(home) + "'\n"
+		if err := os.WriteFile(filepath.Join(home, ".zshrc"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkBashLikeProfile(home)
+		if r.status != "ok" {
+			t.Errorf("status = %q (detail=%s), want ok", r.status, r.detail)
 		}
 	})
 }

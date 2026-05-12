@@ -163,8 +163,9 @@ src  = "source"
 			if err != nil {
 				t.Fatalf("resolve: %v", err)
 			}
-			if got != tc.want {
-				t.Errorf("resolve(%q) = %q, want %q", tc.in, got, tc.want)
+			want := filepath.FromSlash(tc.want)
+			if got != want {
+				t.Errorf("resolve(%q) = %q, want %q", tc.in, got, want)
 			}
 		})
 	}

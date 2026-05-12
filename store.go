@@ -225,23 +225,40 @@ func lowerKeys(in map[string]Alias) (bool, map[string]Alias) {
 }
 
 // ValidateAliasName returns an error if name is not a legal alias name.
+//
+// Rejected characters: '/', '\', '@', and any whitespace or control byte.
+// '/' and '\' would collide with path separators when the alias appears
+// in a navigation chain. '@' is the segment separator (sub@alias), so an
+// alias literally named "foo@bar" would never resolve — the parser would
+// always read "foo" as a segment of "bar". Whitespace breaks shell
+// completion and the bash function definitions that the snippet emits.
 func ValidateAliasName(name string) error {
-	if strings.Contains(name, "/") {
-		return fmt.Errorf("alias name cannot contain slashes ('/'): %q", name)
-	}
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("alias name cannot be empty")
-	}
-	return nil
+	return validateName("alias", name)
 }
 
 // ValidateSegmentName returns an error if name is not a legal segment name.
+// Same rule set as alias names: segment names appear next to alias names in
+// the same lookup string ("sub@alias"), and need to round-trip through TOML
+// keys and shell argv, so they share the same character restrictions.
 func ValidateSegmentName(name string) error {
-	if strings.Contains(name, "/") {
-		return fmt.Errorf("segment name cannot contain slashes ('/'): %q", name)
-	}
+	return validateName("segment", name)
+}
+
+// validateName centralises the rule set shared by aliases and segments.
+// Kind is the noun used in error messages ("alias" or "segment").
+func validateName(kind, name string) error {
 	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("segment name cannot be empty")
+		return fmt.Errorf("%s name cannot be empty", kind)
+	}
+	for _, r := range name {
+		switch {
+		case r == '/' || r == '\\':
+			return fmt.Errorf("%s name cannot contain path separators ('/' or '\\'): %q", kind, name)
+		case r == '@':
+			return fmt.Errorf("%s name cannot contain '@' (the segment separator): %q", kind, name)
+		case r <= ' ' || r == 0x7f:
+			return fmt.Errorf("%s name cannot contain whitespace or control characters: %q", kind, name)
+		}
 	}
 	return nil
 }
