@@ -64,6 +64,19 @@ func LoadSegments(home string) (*SegmentsFile, error) {
 	if err := toml.Unmarshal(data, sf); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
 	}
+
+	for seg := range sf.Subdirs {
+		if err := ValidateSegmentName(seg); err != nil {
+			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+	}
+
+	for _, cd := range sf.Contexts {
+		if err := ValidateSegmentName(cd.Segment); err != nil {
+			return nil, fmt.Errorf("%s: context: %w", p, err)
+		}
+	}
+
 	if sf.Subdirs == nil {
 		sf.Subdirs = map[string]string{}
 	}

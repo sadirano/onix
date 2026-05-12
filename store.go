@@ -70,6 +70,18 @@ func LoadStore(home string) (*Store, error) {
 	if err := toml.Unmarshal(data, &s.Aliases); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
 	}
+
+	for name, a := range s.Aliases {
+		if err := ValidateAliasName(name); err != nil {
+			return nil, fmt.Errorf("%s: %w", p, err)
+		}
+		for seg := range a.Subdirs {
+			if err := ValidateSegmentName(seg); err != nil {
+				return nil, fmt.Errorf("%s: alias %q: %w", p, name, err)
+			}
+		}
+	}
+
 	// Normalise keys to lowercase on load so the in-memory map matches the
 	// canonical lookup form. If a user hand-edits the file with mixed case
 	// we still find the entry without a second pass at lookup time.
@@ -138,11 +150,19 @@ func SaveStore(home string, s *Store) error {
 	b.WriteString("# onix aliases — edit with care, prefer `onix add` / `onix rm`\n\n")
 	for _, name := range s.Names() {
 		a := s.Aliases[name]
-		fmt.Fprintf(&b, "[%s]\n", name)
+		if isBareKey(name) {
+			fmt.Fprintf(&b, "[%s]\n", name)
+		} else {
+			fmt.Fprintf(&b, "[%q]\n", name)
+		}
 		fmt.Fprintf(&b, "path = %q\n", a.Path)
 		if len(a.Subdirs) > 0 {
 			b.WriteString("\n")
-			fmt.Fprintf(&b, "[%s.subdirs]\n", name)
+			if isBareKey(name) {
+				fmt.Fprintf(&b, "[%s.subdirs]\n", name)
+			} else {
+				fmt.Fprintf(&b, "[%q.subdirs]\n", name)
+			}
 			// Sort the subdir keys too so re-saves produce identical
 			// output for unchanged input — that's what keeps the file
 			// reviewable in git.
@@ -152,7 +172,11 @@ func SaveStore(home string, s *Store) error {
 			}
 			sort.Strings(keys)
 			for _, k := range keys {
-				fmt.Fprintf(&b, "%s = %q\n", k, a.Subdirs[k])
+				if isBareKey(k) {
+					fmt.Fprintf(&b, "%s = %q\n", k, a.Subdirs[k])
+				} else {
+					fmt.Fprintf(&b, "%q = %q\n", k, a.Subdirs[k])
+				}
 			}
 		}
 		b.WriteString("\n")
@@ -198,4 +222,45 @@ func lowerKeys(in map[string]Alias) (bool, map[string]Alias) {
 		out[strings.ToLower(k)] = v
 	}
 	return true, out
+}
+
+// ValidateAliasName returns an error if name is not a legal alias name.
+func ValidateAliasName(name string) error {
+	if strings.Contains(name, "/") {
+		return fmt.Errorf("alias name cannot contain slashes ('/'): %q", name)
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("alias name cannot be empty")
+	}
+	return nil
+}
+
+// ValidateSegmentName returns an error if name is not a legal segment name.
+func ValidateSegmentName(name string) error {
+	if strings.Contains(name, "/") {
+		return fmt.Errorf("segment name cannot contain slashes ('/'): %q", name)
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("segment name cannot be empty")
+	}
+	return nil
+}
+
+// isBareKey reports whether s can be used as a bare key in TOML.
+// Bare keys only contain A-Z, a-z, 0-9, _, and -.
+func isBareKey(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case c >= 'a' && c <= 'z':
+		case c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9':
+		case c == '_' || c == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
