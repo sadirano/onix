@@ -1,15 +1,20 @@
 # onix
 
-Fast directory alias resolver for Windows PowerShell. Type `o acme` from any prompt; your shell jumps to the project root. One TOML file holds every alias, one binary serves every command, and the hot path adds about 0.6 ms on top of the OS process-spawn floor.
+Fast directory alias resolver for Windows PowerShell and Linux (Bash/Zsh). Type `o acme` from any prompt; your shell jumps to the project root. One TOML file holds every alias, one binary serves every command, and the hot path adds about 0.6 ms on top of the OS process-spawn floor.
 
 ## Install
 
-```powershell
+```bash
+# On Windows (PowerShell)
+go install github.com/sadirano/onix@latest
+onix init
+
+# On Linux (Bash/Zsh)
 go install github.com/sadirano/onix@latest
 onix init
 ```
 
-`onix init` creates `~/.onix/`, writes a PowerShell snippet to `~/.onix/shell/onix.ps1`, and sources it from your `$PROFILE`. Restart PowerShell (or run `. $PROFILE`) once and the short commands below are live.
+`onix init` creates `~/.onix/`, writes a shell snippet to `~/.onix/shell/`, and sources it from your shell profile (`$PROFILE` on Windows, `.bashrc` or `.zshrc` on Linux). Restart your shell (or source your profile) once and the short commands below are live.
 
 ## Use
 
@@ -127,7 +132,7 @@ Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The include
 
 ## Status and scope
 
-This release covers Windows + PowerShell, with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, sub-alias subdir shortcuts from `segments.toml`, and PowerShell tab completion. Linux/macOS shells, sub-alias context resolvers (env/cmd/file segments with templates), search shortcuts (`sg`, `ff`) as first-party features, and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
+This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, sub-alias subdir shortcuts from `segments.toml`, and cross-platform tab completion. Sub-alias context resolvers (env/cmd/file segments with templates), search shortcuts (`sg`, `ff`) as first-party features, and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
 
 ## License
 
