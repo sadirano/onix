@@ -49,6 +49,9 @@ type AddCmd struct {
 }
 
 func (c *AddCmd) Run(e *env) error {
+	if err := ValidateAliasName(c.Alias); err != nil {
+		return err
+	}
 	p := strings.TrimSpace(c.Path)
 	if p == "" {
 		cwd, err := os.Getwd()
@@ -60,6 +63,10 @@ func (c *AddCmd) Run(e *env) error {
 	abs, err := filepath.Abs(expandTilde(p))
 	if err != nil {
 		return fmt.Errorf("absolutise %q: %w", p, err)
+	}
+
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return fmt.Errorf("create directory %q: %w", abs, err)
 	}
 
 	s, err := LoadStore(e.Home)
@@ -122,6 +129,25 @@ func (c *ListCmd) Run(e *env) error {
 		fmt.Fprintf(w, "%s\t%s\n", n, s.Aliases[n].Path)
 	}
 	return w.Flush()
+}
+
+// -----------------------------------------------------------------------------
+// aliases — open the aliases.toml file in your editor.
+// -----------------------------------------------------------------------------
+
+type AliasesCmd struct{}
+
+func (c *AliasesCmd) Run(e *env) error {
+	path := aliasesPath(e.Home)
+	ed := resolveEditor()
+	cmd := exec.Command(ed, path)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("editor %s: %w", ed, err)
+	}
+	return nil
 }
 
 // -----------------------------------------------------------------------------
@@ -415,9 +441,34 @@ func resolveAliasPath(e *env, name string) (string, error) {
 	}
 	a, ok := s.Lookup(name)
 	if !ok {
-		return "", fmt.Errorf("unknown alias %q (run: onix list)", name)
+		if err := ValidateAliasName(name); err != nil {
+			return "", err
+		}
+		dest := promptDestination(name)
+		if dest == "" {
+			return "", fmt.Errorf("unknown alias %q (run: onix list)", name)
+		}
+		abs, err := filepath.Abs(expandTilde(dest))
+		if err != nil {
+			return "", fmt.Errorf("absolutise %q: %w", dest, err)
+		}
+		a = Alias{Path: filepath.ToSlash(abs)}
+		s.Set(name, a)
+		if err := SaveStore(e.Home, s); err != nil {
+			return "", err
+		}
+		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return "", fmt.Errorf("create directory %q: %w", abs, err)
+		}
+		fmt.Fprintf(os.Stderr, "registered %s -> %s\n", strings.ToLower(name), abs)
+		return abs, nil
 	}
-	return filepath.FromSlash(a.Path), nil
+
+	target := filepath.FromSlash(a.Path)
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return "", fmt.Errorf("create directory %q: %w", target, err)
+	}
+	return target, nil
 }
 
 // resolveEditor returns the editor to invoke for `onix edit`.

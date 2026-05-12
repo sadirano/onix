@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -85,6 +86,9 @@ func fastResolve(home, name string) error {
 
 	target := strings.ToLower(strings.TrimSpace(name))
 	if p, ok := scanForAlias(data, target); ok {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			return fmt.Errorf("create directory %q: %w", p, err)
+		}
 		// Print exactly one line — same contract as the kong path so the
 		// PowerShell `o` wrapper doesn't need to care which we took.
 		fmt.Println(p)
@@ -100,7 +104,31 @@ func fastResolve(home, name string) error {
 	}
 	a, ok := s.Lookup(name)
 	if !ok {
-		return fmt.Errorf("unknown alias %q (run: onix list)", name)
+		if err := ValidateAliasName(name); err != nil {
+			return err
+		}
+		dest := promptDestination(name)
+		if dest == "" {
+			return fmt.Errorf("unknown alias %q (run: onix list)", name)
+		}
+		abs, err := filepath.Abs(expandTilde(dest))
+		if err != nil {
+			return fmt.Errorf("absolutise %q: %w", dest, err)
+		}
+		a = Alias{Path: filepath.ToSlash(abs)}
+		s.Set(name, a)
+		if err := SaveStore(home, s); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return fmt.Errorf("create directory %q: %w", abs, err)
+		}
+		fmt.Fprintf(os.Stderr, "registered %s -> %s\n", strings.ToLower(name), abs)
+		fmt.Println(abs)
+		return nil
+	}
+	if err := os.MkdirAll(a.Path, 0o755); err != nil {
+		return fmt.Errorf("create directory %q: %w", a.Path, err)
 	}
 	fmt.Println(a.Path)
 	return nil
@@ -163,6 +191,11 @@ func resolveSegmentedToPath(home, input string) (string, error) {
 		// consumer side (or PowerShell's native handling) sorts out the
 		// separator if needed.
 		target = strings.TrimRight(target, "/") + "/" + strings.Trim(part, "/")
+	}
+
+	target = filepath.FromSlash(target)
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return "", fmt.Errorf("create directory %q: %w", target, err)
 	}
 	return target, nil
 }

@@ -27,6 +27,7 @@ type CLI struct {
 	Add    AddCmd    `cmd:"" help:"Register or update an alias."`
 	Remove RemoveCmd `cmd:"" aliases:"rm" help:"Remove an alias."`
 	List   ListCmd   `cmd:"" aliases:"ls" help:"List all aliases."`
+	Aliases AliasesCmd `cmd:"" help:"Open the aliases.toml file in your editor."`
 
 	// Actions that operate on the resolved directory.
 	Edit    EditCmd    `cmd:"" help:"Open the alias directory in your editor."`
