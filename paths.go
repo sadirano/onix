@@ -43,6 +43,11 @@ func shellPath(home string) string {
 	return filepath.Join(home, "shell", "onix.ps1")
 }
 
+// bashShellPath returns ~/.onix/shell/onix.sh (the Bash/Zsh integration snippet).
+func bashShellPath(home string) string {
+	return filepath.Join(home, "shell", "onix.sh")
+}
+
 // configPath returns ~/.onix/config.toml — the file that holds [[actions]]
 // and (eventually) other user-tunable settings. Aliases live separately in
 // aliases.toml so the hot path doesn't have to skip past action declarations.
