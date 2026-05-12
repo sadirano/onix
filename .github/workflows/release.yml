@@ -20,7 +20,12 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build -ldflags "-X main.buildVersion=${{ github.ref_name }}" -o onix.exe .
+        run: >
+          go build
+          -trimpath
+          -ldflags "-s -w -X main.buildVersion=${{ github.ref_name }}"
+          -o onix.exe
+          .
 
       - name: Package
         shell: pwsh
@@ -28,14 +33,11 @@ jobs:
           New-Item -ItemType Directory -Path dist | Out-Null
           Copy-Item onix.exe dist\
 
-          # Themes must be flat next to onix.exe (code globs the exe dir directly)
-          Get-ChildItem themes\*.toml | Copy-Item -Destination dist\
-
           $zip = "onix-${{ github.ref_name }}-windows-amd64.zip"
           Compress-Archive -Path dist\* -DestinationPath $zip
           Write-Host "Created $zip"
 
-          # Print SHA256 for updating the Scoop manifest hash after release
+          # SHA256 for the Scoop manifest.
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           Write-Host "SHA256: $hash"
 

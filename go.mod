@@ -2,6 +2,7 @@ module github.com/sadirano/onix
 
 go 1.23
 
-toolchain go1.24.7
-
-require github.com/yuin/gopher-lua v1.1.2
+require (
+	github.com/alecthomas/kong v1.6.0
+	github.com/pelletier/go-toml/v2 v2.2.3
+)

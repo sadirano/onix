@@ -2,194 +2,459 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
-
-	"github.com/sadirano/onix/internal/alias"
-	"github.com/sadirano/onix/internal/config"
-	"github.com/sadirano/onix/internal/errs"
-	"github.com/sadirano/onix/internal/installer"
+	"text/tabwriter"
 )
 
-// handleManagementCommand executes a built-in onix subcommand (install, add,
-// remove, …) and returns true. Returns false when args[0] is not a management
-// command, so the caller can fall through to alias resolution.
-func handleManagementCommand(args []string, cfg *config.Config, t *timer, debugEnabled bool) bool {
-	switch args[0] {
-	case "install":
-		t.mark("config loaded")
-		var installModule, installProfile string
-		for _, a := range args[1:] {
-			if strings.HasPrefix(a, "-") {
-				installProfile = strings.TrimPrefix(a, "-")
-			} else {
-				installModule = a
-			}
-		}
-		if installModule != "" {
-			if err := installer.Install(installModule, cfg); err != nil {
-				errs.Fatal("%v", err)
-			}
-		} else {
-			if err := installer.InstallAll(cfg); err != nil {
-				errs.Fatal("%v", err)
-			}
-		}
-		if err := installer.InstallShortcutsProfile(installProfile, cfg); err != nil {
-			errs.Fatal("%v", err)
-		}
-		t.mark("install")
+// -----------------------------------------------------------------------------
+// resolve — the hot path.
+//
+// `onix resolve <alias>` reads aliases.toml, looks up <alias>, prints its
+// absolute path to stdout, exits. The PowerShell `o` function wraps this in
+// Set-Location, which is why this command must stay extremely lean: no
+// directory creation, no chdir, no env mutation. Anything heavier than a
+// file read + map lookup belongs in a different command.
+// -----------------------------------------------------------------------------
 
-	case "update":
-		t.mark("config loaded")
-		name := ""
-		if len(args) > 1 {
-			name = args[1]
-		}
-		if err := installer.Update(name, cfg); err != nil {
-			errs.Fatal("%v", err)
-		}
-		if err := installer.InstallShortcuts(cfg); err != nil {
-			errs.Fatal("%v", err)
-		}
-		t.mark("update")
-
-	case "list":
-		installer.List(cfg)
-
-	case "init":
-		if err := installer.Init(); err != nil {
-			errs.Fatal("%v", err)
-		}
-
-	case "-h", "--help", "help":
-		printHelp()
-
-	default:
-		return false
-	}
-	return true
+type ResolveCmd struct {
+	Alias string `arg:"" help:"Alias name (case-insensitive). Supports <seg>@<alias> segmented lookups."`
 }
 
-// registerAlias parses -a/-d/-s flags, writes the alias, and returns the
-// resolved destination path. Calls fatal on any missing required flag.
-func registerAlias(args []string) string {
-	var aliasName, destination, subdir string
-
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "-a", "--alias":
-			if i+1 < len(args) {
-				aliasName = args[i+1]
-				i++
-			}
-		case "-d", "--destination":
-			if i+1 < len(args) {
-				destination = args[i+1]
-				i++
-			}
-		case "-s", "--subdir":
-			if i+1 < len(args) {
-				subdir = args[i+1]
-				i++
-			}
-		}
-	}
-
-	if subdir != "" {
-		destination = filepath.Join(destination, subdir)
-	}
-	if err := alias.Register(aliasName, destination); err != nil {
-		errs.Fatal("register alias: %v", err)
-	}
-	fmt.Printf("Registered \"%s\" -> \"%s\"\n", aliasName, destination)
-	return destination
+func (c *ResolveCmd) Run(e *env) error {
+	// We forward to fastResolve so the kong path and the bypass path
+	// produce byte-identical output. fastResolve handles both plain
+	// aliases and `<seg>@<alias>` segmented forms; this Run only exists
+	// for kong-driven invocations (--help, scripting that passes flags),
+	// which don't take the hot-path shortcut in main.go.
+	return fastResolve(e.Home, c.Alias)
 }
 
-// parseExtras extracts an optional subdir (-s/--subdir) and positional extras
-// from the tail of an alias invocation. The action is now carried by the
-// ONIX_COMMAND environment variable set by the .cmd wrapper, not by a flag.
-func parseExtras(args []string) (subdir string, extras []string) {
-	for i := 0; i < len(args); i++ {
-		if args[i] == "-s" || args[i] == "--subdir" {
-			if i+1 < len(args) {
-				subdir = args[i+1]
-				i++
-			}
-		} else {
-			extras = append(extras, args[i])
-		}
-	}
-	return
+// -----------------------------------------------------------------------------
+// add — register or update an alias.
+//
+// We accept either `onix add <alias> <path>` or `onix add <alias>` (uses CWD).
+// The path is absolutised here so the store always holds a canonical form;
+// users can later move the project and re-add without needing to remember
+// what form they originally entered.
+// -----------------------------------------------------------------------------
+
+type AddCmd struct {
+	Alias string `arg:"" help:"Alias name."`
+	Path  string `arg:"" optional:"" help:"Directory path (default: current working directory)."`
 }
 
-// parseAllSegments splits "seg1@seg2@alias" into (["seg1","seg2"], "alias").
-// The alias is always the last token (after the last @). Segments are returned
-// in left-to-right order as written by the user; callers process them
-// right-to-left to build the path innermost-first.
-// Returns (nil, input) when no "@" is present.
-func parseAllSegments(input string) (segments []string, aliasName string) {
-	i := strings.LastIndex(input, "@")
-	if i < 0 {
-		return nil, input
-	}
-	raw, aliasName := input[:i], input[i+1:]
-	if raw == "" {
-		return nil, aliasName
-	}
-	for _, s := range strings.Split(raw, "@") {
-		if s != "" {
-			segments = append(segments, s)
+func (c *AddCmd) Run(e *env) error {
+	p := strings.TrimSpace(c.Path)
+	if p == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("get cwd: %w", err)
 		}
+		p = cwd
 	}
-	return segments, aliasName
+	abs, err := filepath.Abs(expandTilde(p))
+	if err != nil {
+		return fmt.Errorf("absolutise %q: %w", p, err)
+	}
+
+	s, err := LoadStore(e.Home)
+	if err != nil {
+		return err
+	}
+	s.Set(c.Alias, Alias{Path: filepath.ToSlash(abs)})
+	if err := SaveStore(e.Home, s); err != nil {
+		return err
+	}
+	fmt.Printf("registered %s -> %s\n", strings.ToLower(c.Alias), abs)
+	return nil
 }
 
-// resolveAction maps an ONIX_COMMAND value to its Action definition.
-// Returns a default shell action when cmdName is empty (direct onix invocation).
-// Calls fatal when cmdName is set but not found in config.
-func resolveAction(cmdName string, cfg *config.Config) *config.Action {
-	if cmdName == "" {
-		return &config.Action{Name: "shell", Builtin: "shell"}
+// -----------------------------------------------------------------------------
+// remove — delete an alias.
+// -----------------------------------------------------------------------------
+
+type RemoveCmd struct {
+	Alias string `arg:"" help:"Alias name."`
+}
+
+func (c *RemoveCmd) Run(e *env) error {
+	s, err := LoadStore(e.Home)
+	if err != nil {
+		return err
 	}
-	action := cfg.FindAction(cmdName)
+	if !s.Delete(c.Alias) {
+		return fmt.Errorf("unknown alias %q", c.Alias)
+	}
+	if err := SaveStore(e.Home, s); err != nil {
+		return err
+	}
+	fmt.Printf("removed %s\n", strings.ToLower(c.Alias))
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+// list — print aliases in a stable, scannable table.
+//
+// We use tabwriter rather than fixed-width fmt so long names/paths align
+// without truncation. JSON output comes later when we wire scripting helpers.
+// -----------------------------------------------------------------------------
+
+type ListCmd struct{}
+
+func (c *ListCmd) Run(e *env) error {
+	s, err := LoadStore(e.Home)
+	if err != nil {
+		return err
+	}
+	names := s.Names()
+	if len(names) == 0 {
+		fmt.Println("no aliases registered (run: onix add <name> [path])")
+		return nil
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ALIAS\tPATH")
+	for _, n := range names {
+		fmt.Fprintf(w, "%s\t%s\n", n, s.Aliases[n].Path)
+	}
+	return w.Flush()
+}
+
+// -----------------------------------------------------------------------------
+// edit — open the alias directory in the user's editor.
+//
+// Editor precedence: $EDITOR > "nvim". We pass "." as the path so the editor
+// opens the directory as a project, not as a file. We inherit stdin/stdout/
+// stderr because terminal editors (nvim, vim) need a real tty.
+// -----------------------------------------------------------------------------
+
+type EditCmd struct {
+	Alias string `arg:"" help:"Alias name."`
+}
+
+func (c *EditCmd) Run(e *env) error {
+	target, err := resolveAliasPath(e, c.Alias)
+	if err != nil {
+		return err
+	}
+	ed := resolveEditor()
+	cmd := exec.Command(ed, ".")
+	cmd.Dir = target
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("editor %s: %w", ed, err)
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+// explore — open the OS file manager at the alias directory.
+//
+// Windows uses explorer.exe directly (no cmd.exe wrapper, no /e flag — both
+// add startup overhead or hide bugs). Unix builds get this in M3; we error
+// loudly until then so a user on Linux knows we haven't shipped it.
+// -----------------------------------------------------------------------------
+
+type ExploreCmd struct {
+	Alias string `arg:"" help:"Alias name."`
+}
+
+func (c *ExploreCmd) Run(e *env) error {
+	target, err := resolveAliasPath(e, c.Alias)
+	if err != nil {
+		return err
+	}
+	return openInExplorer(target)
+}
+
+// -----------------------------------------------------------------------------
+// yank — print path + copy to clipboard.
+//
+// Two side effects on stdout: the path itself (so it composes in pipes) and
+// the clipboard copy (so the user can paste it elsewhere). We don't persist
+// to ONIX_LAST anymore — setx was Windows-only, slow, and never worked for
+// the current shell anyway. The shell function story is the replacement.
+// -----------------------------------------------------------------------------
+
+type YankCmd struct {
+	Alias string `arg:"" help:"Alias name."`
+}
+
+func (c *YankCmd) Run(e *env) error {
+	target, err := resolveAliasPath(e, c.Alias)
+	if err != nil {
+		return err
+	}
+	fmt.Println(target)
+	if err := copyToClipboard(target); err != nil {
+		// Non-fatal — we already printed the path so the user can copy it
+		// manually. Warn so they know the clipboard step didn't work.
+		fmt.Fprintf(os.Stderr, "warning: clipboard copy failed: %v\n", err)
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+// run — execute a command in the alias directory.
+//
+// `onix run acme -- go test ./...`
+//
+// kong's `Cmd []string \`arg:"" passthrough:""\`` semantics let us capture
+// everything after the `--` literally, which keeps quoting predictable.
+// We do NOT invoke a shell here — extras are exec'd as argv directly. This
+// is a deliberate change from v1, where `r acme "go test"` round-tripped
+// through cmd.exe and re-parsed quoting unpredictably.
+// -----------------------------------------------------------------------------
+
+// RunCmd uses a single positional slice (rather than separate Alias+Cmd
+// fields) because kong's passthrough mode requires exactly one positional
+// argument on the command. We split the alias off ourselves below — a tiny
+// bit of extra code in exchange for argv that passes through cleanly
+// regardless of what the user types after the alias.
+type RunCmd struct {
+	Args []string `arg:"" name:"args" help:"<alias> <cmd> [args...]"`
+}
+
+func (c *RunCmd) Run(e *env) error {
+	if len(c.Args) < 2 {
+		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
+	}
+	alias := c.Args[0]
+	target, err := resolveAliasPath(e, alias)
+	if err != nil {
+		return err
+	}
+	// Kong's passthrough mode usually swallows the "--" separator, but the
+	// behaviour shifts between releases and the PowerShell shell function
+	// inserts one unconditionally. Strip it defensively so users get the
+	// same argv regardless of how they invoked us.
+	argv := c.Args[1:]
+	if len(argv) > 0 && argv[0] == "--" {
+		argv = argv[1:]
+	}
+	if len(argv) == 0 {
+		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = target
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		// Propagate child exit codes verbatim. Without this a `go test`
+		// failure inside `onix run` would surface as a generic exit 1.
+		if ee, ok := err.(*exec.ExitError); ok {
+			os.Exit(ee.ExitCode())
+		}
+		return fmt.Errorf("run %s: %w", argv[0], err)
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+// exec — run a custom action declared in config.toml.
+//
+// Same argv shape as run: `onix exec <action> <alias> [-- extras...]`.
+// The PowerShell shell functions generated by `onix install-actions` call
+// this; users rarely type it directly. We separate exec from run because
+// run takes an arbitrary command, whereas exec looks up a named action
+// from config — different semantics, different error messages.
+// -----------------------------------------------------------------------------
+
+type ExecCmd struct {
+	Args []string `arg:"" name:"args" help:"<action> <alias> [args...]"`
+}
+
+func (c *ExecCmd) Run(e *env) error {
+	if len(c.Args) < 2 {
+		return fmt.Errorf("usage: onix exec <action> <alias> [args...]")
+	}
+	actionName := c.Args[0]
+	aliasName := c.Args[1]
+	extras := c.Args[2:]
+	// Same passthrough quirk as RunCmd — strip the leading "--" the
+	// PowerShell wrapper inserts so action args see clean argv.
+	if len(extras) > 0 && extras[0] == "--" {
+		extras = extras[1:]
+	}
+
+	cfg, err := LoadConfig(e.Home)
+	if err != nil {
+		return err
+	}
+	action := cfg.FindAction(actionName)
 	if action == nil {
-		errs.Fatal("unknown command %q — check actions in config", cmdName)
+		return fmt.Errorf("unknown action %q (declared in %s)", actionName, configPath(e.Home))
 	}
-	return action
+
+	target, err := resolveAliasPath(e, aliasName)
+	if err != nil {
+		return err
+	}
+
+	argv := ExpandAction(action, filepath.ToSlash(target), strings.ToLower(aliasName), extras)
+	if len(argv) == 0 {
+		return fmt.Errorf("action %q produced empty argv", actionName)
+	}
+
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = target
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			os.Exit(ee.ExitCode())
+		}
+		return fmt.Errorf("exec %s %s: %w", actionName, argv[0], err)
+	}
+	return nil
 }
 
-// printHelp writes the usage message to stdout.
-func printHelp() {
-	fmt.Print(`Onix — modular directory navigator
+// -----------------------------------------------------------------------------
+// install-actions — regenerate the PowerShell snippet.
+//
+// Separate from `init` because users will edit config.toml multiple times
+// over a session and we don't want to keep re-touching $PROFILE on each
+// edit. install-actions only rewrites ~/.onix/shell/onix.ps1; the dot-source
+// line in $PROFILE already points at it.
+// -----------------------------------------------------------------------------
 
-Usage:
-  onix                          open alias file in editor
-  onix <alias>                  open shell in target directory
-  onix -a <alias> -d <path>     register an alias
-  onix install [name] [-profile] install one or all modules; -profile applies a named shortcut set
-  onix update [name]            update one or all modules
-  onix list                     list declared modules
-  onix shortcuts                install .cmd wrappers in ~/.onix/bin/
-  onix init                     initialise ~/.onix/ structure
-  onix help                     show this message
+type InstallActionsCmd struct{}
 
-Action invocation (via generated wrappers):
-  <action> <alias> [args...]    e.g. editor myproject
+func (c *InstallActionsCmd) Run(e *env) error {
+	// Read both config.toml and plugins.toml first so we can list what
+	// the regenerated snippet covers; regenerateShellSnippet does the
+	// actual file write.
+	cfg, err := LoadConfig(e.Home)
+	if err != nil {
+		return err
+	}
+	pf, err := LoadPlugins(e.Home)
+	if err != nil {
+		return err
+	}
+	if err := regenerateShellSnippet(e.Home); err != nil {
+		return err
+	}
+	fmt.Printf("regenerated %s\n", shellPath(e.Home))
+	if len(cfg.Actions) > 0 {
+		names := make([]string, 0, len(cfg.Actions))
+		for _, a := range cfg.Actions {
+			names = append(names, a.Name)
+		}
+		fmt.Printf("custom actions: %s\n", strings.Join(names, " "))
+	}
+	if len(pf.Plugins) > 0 {
+		names := make([]string, 0, len(pf.Plugins))
+		for _, p := range pf.Plugins {
+			names = append(names, p.Name)
+			for _, entry := range p.Entries {
+				// Renamed from `e` to avoid shadowing the outer env parameter.
+				// The inner loop only cares about the entry's wrapper name.
+				names = append(names, entry.EffectiveCmd())
+			}
+		}
+		fmt.Printf("plugin wrappers: %s\n", strings.Join(names, " "))
+	}
+	fmt.Println("re-source $PROFILE (or restart PowerShell) to pick up changes")
+	return nil
+}
 
-Module invocation (via generated wrappers):
-  <module> <alias> [args...]    e.g. mymodule myproject foo bar
+// -----------------------------------------------------------------------------
+// list-names — print alias names, one per line.
+//
+// This is what tab-completion calls under the hood. The fast path in
+// main.go bypasses kong for the most common shape (`onix list-names`),
+// but the subcommand registration here keeps `onix --help` accurate.
+// -----------------------------------------------------------------------------
 
-Environment:
-  ONIX_COMMAND       set by action .cmd wrappers
-  ONIX_MODULE        set by module .cmd wrappers
-  ONIX_DEBUG=1       verbose trace
-  ONIX_TIMING=1      print phase timings to stderr
-  ONIX_ALIAS_DIR     override aliases directory path
-  EDITOR             preferred editor (default: nvim)
+type ListNamesCmd struct{}
 
-Config:  ~/.onix/config.lua
-Modules: ~/.onix/modules/
-Bin:     ~/.onix/bin/   ← add this to PATH
-`)
+func (c *ListNamesCmd) Run(e *env) error {
+	s, err := LoadStore(e.Home)
+	if err != nil {
+		return err
+	}
+	for _, n := range s.Names() {
+		fmt.Println(n)
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------------
+// shared helpers
+// -----------------------------------------------------------------------------
+
+// resolveAliasPath is the common prefix for every action that operates on
+// the resolved directory. We centralise the lookup so the error message
+// is consistent and the store-read happens exactly once per command.
+//
+// Segmented input (`<seg>@<alias>` or longer) is delegated to the segment
+// walker, which loads the global subdirs registry and respects per-alias
+// overrides. Both shapes return a host-native path (FromSlash) because
+// downstream Cmd.Dir and exec.Command want platform separators.
+func resolveAliasPath(e *env, name string) (string, error) {
+	if strings.Contains(name, "@") {
+		p, err := resolveSegmentedToPath(e.Home, name)
+		if err != nil {
+			return "", err
+		}
+		return filepath.FromSlash(p), nil
+	}
+
+	s, err := LoadStore(e.Home)
+	if err != nil {
+		return "", err
+	}
+	a, ok := s.Lookup(name)
+	if !ok {
+		return "", fmt.Errorf("unknown alias %q (run: onix list)", name)
+	}
+	return filepath.FromSlash(a.Path), nil
+}
+
+// resolveEditor returns the editor to invoke for `onix edit`.
+// Lookup order: $EDITOR, then nvim. Trim so a trailing newline in the env
+// var (which happens with naive bash exports) doesn't make exec fail.
+func resolveEditor() string {
+	if e := strings.TrimSpace(os.Getenv("EDITOR")); e != "" {
+		return e
+	}
+	return "nvim"
+}
+
+// copyToClipboard pipes s into the platform clipboard utility. On Windows we
+// use built-in clip.exe; Unix support comes later (pbcopy / xclip / wl-copy).
+func copyToClipboard(s string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("clip.exe")
+	default:
+		return fmt.Errorf("clipboard not supported on %s yet", runtime.GOOS)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(stdin, s); err != nil {
+		_ = stdin.Close()
+		_ = cmd.Wait()
+		return err
+	}
+	if err := stdin.Close(); err != nil {
+		_ = cmd.Wait()
+		return err
+	}
+	return cmd.Wait()
 }

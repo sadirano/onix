@@ -2,7 +2,7 @@ name: Test
 
 on:
   push:
-    branches: [ master, refactor/extract-packages ]
+    branches: [ master ]
   pull_request:
     branches: [ master ]
 
@@ -22,3 +22,8 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      # Hot-path benchmark — informational only, not gated. If we ever want
+      # to fail on a regression we'd parse the output and assert ns/op.
+      - name: Bench
+        run: go test -bench=. -benchmem -run=^$ ./...
