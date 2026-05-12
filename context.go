@@ -2,347 +2,177 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
+	"sort"
 	"strings"
-
-	"github.com/sadirano/onix/internal/alias"
-	"github.com/sadirano/onix/internal/config"
-	"github.com/sadirano/onix/internal/errs"
-	"github.com/sadirano/onix/internal/opener"
+	"text/tabwriter"
 )
 
-// splitContextKey splits a key of the form "seg@alias" into (aliasName, segName).
-// When there is no "@", the whole key is treated as the alias name and segName is "".
-func splitContextKey(key string) (aliasName, segName string) {
-	if i := strings.Index(key, "@"); i >= 0 {
-		return key[i+1:], key[:i]
-	}
-	return key, ""
+// ContextCmd groups the segment-context subcommands under `onix context`.
+//
+// The primary consumer is the `o` shell function which calls
+// `onix context apply <alias>` after every Set-Location. The list/edit
+// commands are for humans managing their segments.toml.
+type ContextCmd struct {
+	Apply ContextApplyCmd `cmd:"" name:"apply" help:"Print PowerShell context statements for a segmented alias (called by the o shell function)."`
+	List  ContextListCmd  `cmd:"" name:"list" help:"List all segment contexts defined in segments.toml."`
+	Edit  ContextEditCmd  `cmd:"" name:"edit" help:"Open segments.toml in your editor."`
 }
 
-// writeAliasContextConfig persists cc into the alias's Lua file.
-// key is either "seg@alias" (segment-level) or "alias" (alias-level context).
-func writeAliasContextConfig(key string, cc config.ContextConfig) error {
-	aliasName, segName := splitContextKey(key)
-	e, err := alias.Load(aliasName)
+// ContextApplyCmd is the hot-path command invoked by the `o` shell function
+// after every cd. For plain aliases (no '@') it prints nothing. For segmented
+// aliases it prints PowerShell statements that the caller evaluates via
+// Invoke-Expression — setting env vars and running any post-cd exec command.
+type ContextApplyCmd struct {
+	Alias string `arg:"" help:"Alias (plain or segmented). Plain aliases produce no output."`
+}
+
+func (c *ContextApplyCmd) Run(e *env) error {
+	return applyContexts(e.Home, c.Alias, os.Stdout)
+}
+
+// ContextListCmd prints every context defined in segments.toml in a
+// scannable table: segment name, env keys (sorted), exec command.
+type ContextListCmd struct{}
+
+func (c *ContextListCmd) Run(e *env) error {
+	sf, err := LoadSegments(e.Home)
 	if err != nil {
 		return err
 	}
-	if e == nil {
-		e = &alias.Entry{}
-	}
-	if segName != "" {
-		if e.Segments == nil {
-			e.Segments = make(map[string]config.ContextConfig)
-		}
-		e.Segments[segName] = cc
-	} else {
-		e.Context = cc
-	}
-	return alias.Save(aliasName, e)
-}
-
-// loadAliasContextConfig reads context config from the alias's Lua file.
-// key is either "seg@alias" (segment-level) or "alias" (alias-level context).
-// Returns (zero, false) when no config exists.
-func loadAliasContextConfig(key string) (config.ContextConfig, bool) {
-	aliasName, segName := splitContextKey(key)
-	e, err := alias.Load(aliasName)
-	if err != nil || e == nil {
-		return config.ContextConfig{}, false
-	}
-	if segName != "" {
-		cc, ok := e.Segments[segName]
-		return cc, ok
-	}
-	if e.Context == (config.ContextConfig{}) {
-		return config.ContextConfig{}, false
-	}
-	return e.Context, true
-}
-
-// clearAliasContext removes the context config for key from the alias's Lua file.
-func clearAliasContext(key string) error {
-	aliasName, segName := splitContextKey(key)
-	e, err := alias.Load(aliasName)
-	if err != nil || e == nil {
+	if len(sf.Contexts) == 0 {
+		fmt.Println("(no contexts defined — add [[contexts]] blocks to ~/.onix/segments.toml)")
+		fmt.Println("run: onix context edit")
 		return nil
 	}
-	if segName != "" {
-		delete(e.Segments, segName)
-	} else {
-		e.Context = config.ContextConfig{}
-	}
-	return alias.Save(aliasName, e)
-}
-
-// aliasFilePath returns the path to the Lua file for the given alias.
-// key may be "seg@alias" or a plain alias name.
-func aliasFilePath(key string) string {
-	aliasName, _ := splitContextKey(key)
-	return filepath.Join(alias.Dir(), aliasName+".lua")
-}
-
-
-// contextVarName returns the identifier to use as a named placeholder in
-// templates: the var name for env source, the file path for file source, and
-// the cmd string for cmd source. Returns "" when no meaningful name exists.
-func contextVarName(cc config.ContextConfig) string {
-	switch cc.Source {
-	case "file":
-		return cc.File
-	case "cmd":
-		return cc.Cmd
-	default:
-		return cc.Var
-	}
-}
-
-// applyContextTemplate substitutes placeholders in template with value.
-// Supports both {value} (generic) and {varName} (the configured var/cmd/file name).
-// Leading/trailing path separators are stripped so the result can be safely
-// joined with filepath.Join. When template is empty, value is returned as-is.
-func applyContextTemplate(template, varName, value string) string {
-	if template == "" {
-		return value
-	}
-	result := strings.ReplaceAll(template, "{value}", value)
-	if varName != "" {
-		result = strings.ReplaceAll(result, "{"+varName+"}", value)
-	}
-	return strings.Trim(result, "/\\")
-}
-
-// resolveContext returns the active context string for a segment.
-// Checks the per-segment config file first, then falls back to the global
-// context section in config.lua.
-func resolveContext(segmentName string, cfg *config.Config) (string, error) {
-	if cc, ok := loadAliasContextConfig(segmentName); ok {
-		return resolveContextConfig(cc)
-	}
-	if !cfg.HasContext() {
-		return "", nil
-	}
-	return resolveContextConfig(cfg.Context)
-}
-
-// resolveContextConfig resolves a context value from a ContextConfig.
-func resolveContextConfig(cc config.ContextConfig) (string, error) {
-	var val string
-	var err error
-
-	switch cc.Source {
-	case "file":
-		val, err = contextFromFile(cc.File)
-	case "cmd":
-		val, err = contextFromCmd(cc.Cmd)
-	case "alias":
-		val, err = contextFromAlias(cc.Path)
-	default: // "env"
-		val, err = contextFromEnv(cc.Var)
-	}
-
-	if err != nil {
-		return "", err
-	}
-	return sanitizeContextValue(val), nil
-}
-
-// sanitizeContextValue removes whitespace, wrapping quotes, and characters
-// that are illegal in Windows path segments.
-func sanitizeContextValue(v string) string {
-	v = strings.TrimSpace(v)
-	v = strings.Trim(v, `"'`)
-	v = strings.TrimSpace(v)
-	// Strip characters that are illegal in Windows filenames/paths.
-	// We keep / and \ as they may be intentional subdirectories.
-	bad := []string{`"`, `*`, `?`, `<`, `>`, `|`}
-	for _, b := range bad {
-		v = strings.ReplaceAll(v, b, "")
-	}
-	return v
-}
-
-// applySegment resolves a single @ segment using its context config, returning
-// the path part to append. key is the storage key (seg@alias); seg is used only
-// for display. Returns an error when no context config exists.
-func applySegment(seg, key string, cfg *config.Config, debugEnabled bool) (string, error) {
-	cc, ok := loadAliasContextConfig(key)
-	if !ok {
-		return "", fmt.Errorf("segment %q: no context configured", seg)
-	}
-	if cc.Source == "alias" {
-		part := strings.Trim(sanitizeContextValue(cc.Path), "/\\")
-		if debugEnabled {
-			fmt.Printf("[ONIX] segment %q → alias=%q\n", seg, part)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "SEGMENT\tENV\tEXEC")
+	for _, cd := range sf.Contexts {
+		envKeys := make([]string, 0, len(cd.Env))
+		for k := range cd.Env {
+			envKeys = append(envKeys, k)
 		}
-		return part, nil
-	}
-	val, err := resolveContextConfig(cc)
-	if err != nil {
-		return "", fmt.Errorf("segment %q: %w", seg, err)
-	}
-	part := applyContextTemplate(cc.Template, contextVarName(cc), val)
-	if debugEnabled {
-		fmt.Printf("[ONIX] segment %q → template=%q value=%q → %q\n", seg, cc.Template, val, part)
-	}
-	return part, nil
-}
-
-func contextFromAlias(path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("[context] alias path is empty")
-	}
-	return path, nil
-}
-
-func contextFromEnv(name string) (string, error) {
-	if name == "" {
-		return "", fmt.Errorf("[context] var not configured")
-	}
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		return "", fmt.Errorf("context env var %q is not set", name)
-	}
-	return v, nil
-}
-
-func contextFromFile(path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("[context] file not configured")
-	}
-	b, err := os.ReadFile(expandTilde(path))
-	if err != nil {
-		return "", fmt.Errorf("read context file %q: %w", path, err)
-	}
-	v := strings.TrimSpace(string(b))
-	if v == "" {
-		return "", fmt.Errorf("context file %q is empty", path)
-	}
-	return v, nil
-}
-
-func contextFromCmd(command string) (string, error) {
-	if command == "" {
-		return "", fmt.Errorf("[context] cmd not configured")
-	}
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd.exe", "/C", command)
-	} else {
-		cmd = exec.Command("sh", "-c", command)
-	}
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("context command %q: %w", command, err)
-	}
-	v := strings.TrimSpace(string(out))
-	if v == "" {
-		return "", fmt.Errorf("context command %q produced no output", command)
-	}
-	return v, nil
-}
-
-// walkSegments resolves each @ segment against target right-to-left, returning
-// the final target path. aliasName is the root alias (after the last @) and is
-// combined with each segment name to form the storage key (e.g. "sg@play"),
-// keeping configs for the same segment name under different aliases separate.
-// When a segment has no context config the user is prompted to configure one,
-// which is then saved for future invocations.
-func walkSegments(segments []string, aliasName string, target string, cfg *config.Config, debugEnabled bool) string {
-	root, _ := alias.Load(aliasName) // load once for optional join function
-	for i := len(segments) - 1; i >= 0; i-- {
-		seg := segments[i]
-		key := seg + "@" + aliasName
-		if _, ok := loadAliasContextConfig(key); !ok {
-			cc, ok := promptContextConfig(seg)
-			if !ok {
-				os.Exit(errs.ExitOK)
-			}
-			if err := writeAliasContextConfig(key, cc); err != nil {
-				errs.FatalCode(errs.ExitErr, "save context for %q: %v", key, err)
-			}
+		sort.Strings(envKeys)
+		envStr := "-"
+		if len(envKeys) > 0 {
+			envStr = strings.Join(envKeys, ", ")
 		}
-		part, err := applySegment(seg, key, cfg, debugEnabled)
-		if err != nil {
-			errs.FatalCode(errs.ExitErr, "%v", err)
+		execStr := "-"
+		if len(cd.Exec) > 0 {
+			execStr = strings.Join(cd.Exec, " ")
 		}
-		if root != nil && root.Join != nil {
-			joined, jerr := alias.CallJoin(root.Join, target, part)
-			if jerr == nil {
-				if debugEnabled {
-					fmt.Printf("[ONIX] join(%q, %q) → %q\n", target, part, joined)
-				}
-				target = joined
-				continue
-			}
-			if debugEnabled {
-				fmt.Printf("[ONIX] join function error for %q: %v — falling back to filepath.Join\n", aliasName, jerr)
-			}
-		}
-		target = filepath.Join(target, part)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", cd.Segment, envStr, execStr)
 	}
-	return target
+	return w.Flush()
 }
 
-// handleCtxCommand executes a context operation for key (e.g. "sg@play").
-// seg is the segment name used in messages. args are the sub-arguments after "ctx":
+// ContextEditCmd opens segments.toml in the user's $EDITOR, creating the
+// file with a commented starter template if it doesn't exist yet.
+type ContextEditCmd struct{}
+
+func (c *ContextEditCmd) Run(e *env) error {
+	p := segmentsConfigPath(e.Home)
+	if _, err := os.Stat(p); os.IsNotExist(err) {
+		const starter = `# onix segment registry — @-segment subdirs and shell contexts.
+# After editing, changes are picked up immediately (no reload needed).
+#
+# [subdirs]
+# docs = "documentation"
+# src  = "source"
+#
+# [[contexts]]
+# segment = "src"
+# env     = { GO111MODULE = "on", GOFLAGS = "-tags=integration" }
+# exec    = ["make", "dev-env"]
+`
+		if err := os.WriteFile(p, []byte(starter), 0o644); err != nil {
+			return fmt.Errorf("create %s: %w", p, err)
+		}
+	}
+	ed := resolveEditor()
+	cmd := exec.Command(ed, p)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("editor %s: %w", ed, err)
+	}
+	return nil
+}
+
+// applyContexts is the core of `onix context apply`. It is kept as a
+// standalone function (rather than inlined in Run) so the hot-path bypass
+// in main.go can call it directly without going through kong.
 //
-//	(none)                      open context file in editor
-//	--clear                     remove context config
-//	env <var> [tmpl]            write env-source config
-//	cmd <command> [tmpl]        write cmd-source config
-//	file <path> [tmpl]          write file-source config
-//	alias <subdir>              write alias-source config
-func handleCtxCommand(key, seg string, args []string, cfg *config.Config) {
-	switch {
-	case len(args) == 0:
-		p := aliasFilePath(key)
-		if err := opener.RunEditorCommand(cfg.ResolveEditor(), filepath.Dir(p), filepath.Base(p)); err != nil {
-			errs.Fatal("%v", err)
-		}
-	case args[0] == "--clear":
-		if err := clearAliasContext(key); err != nil {
-			errs.Fatal("clear context: %v", err)
-		}
-		fmt.Printf("Context for %q cleared\n", key)
-	case args[0] == "env" || args[0] == "cmd" || args[0] == "file" || args[0] == "alias":
-		if len(args) < 2 {
-			errs.FatalCode(errs.ExitUsage, "usage: ctx %s <value> [template]", args[0])
-		}
-		cc := config.ContextConfig{Source: args[0]}
-		switch args[0] {
-		case "env":
-			cc.Var = args[1]
-		case "cmd":
-			cc.Cmd = args[1]
-		case "file":
-			cc.File = args[1]
-		case "alias":
-			cc.Path = args[1]
-		}
-		if len(args) >= 3 {
-			cc.Template = args[2]
-		}
-		if err := writeAliasContextConfig(key, cc); err != nil {
-			errs.Fatal("write context: %v", err)
-		}
-		fmt.Printf("Context for %q: source=%s value=%s template=%s\n", key, cc.Source, args[1], cc.Template)
-	default:
-		errs.FatalCode(errs.ExitUsage, "unknown ctx arg %q — use env, cmd, file, alias, or --clear", args[0])
+// For plain aliases (no '@') it returns immediately — no file I/O, no
+// allocations. For segmented aliases it loads segments.toml, finds any
+// matching [[contexts]] entries, and writes PowerShell env-var setters
+// and exec invocations to w in innermost-first segment order.
+//
+// Output shape (one statement per line, single-quoted PS literals):
+//
+//	$env:GO111MODULE = 'on'
+//	$env:GOFLAGS = '-tags=integration'
+//	& 'make' 'dev-env'
+func applyContexts(home, input string, w io.Writer) error {
+	if !strings.Contains(input, "@") {
+		return nil // plain alias — no context possible, skip all I/O
 	}
+	segments, _ := ParseSegmentedAlias(input)
+	if len(segments) == 0 {
+		return nil
+	}
+	sf, err := LoadSegments(home)
+	if err != nil {
+		return err
+	}
+	if len(sf.Contexts) == 0 {
+		return nil
+	}
+
+	// Build a segment→ContextDef lookup. First-defined wins for duplicates
+	// so the TOML author controls precedence by ordering their [[contexts]].
+	ctxMap := make(map[string]*ContextDef, len(sf.Contexts))
+	for i := range sf.Contexts {
+		cd := &sf.Contexts[i]
+		key := strings.ToLower(cd.Segment)
+		if _, exists := ctxMap[key]; !exists {
+			ctxMap[key] = cd
+		}
+	}
+
+	// Apply in innermost-first order (right-to-left in the segments slice)
+	// to mirror the path-building direction from M4.
+	for i := len(segments) - 1; i >= 0; i-- {
+		cd, ok := ctxMap[strings.ToLower(segments[i])]
+		if !ok {
+			continue
+		}
+		// Env vars in sorted key order for deterministic output.
+		keys := make([]string, 0, len(cd.Env))
+		for k := range cd.Env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(w, "$env:%s = %s\n", k, psSingleQuote(cd.Env[k]))
+		}
+		// Exec: each argument individually quoted.
+		if len(cd.Exec) > 0 {
+			quoted := make([]string, len(cd.Exec))
+			for j, arg := range cd.Exec {
+				quoted[j] = psSingleQuote(arg)
+			}
+			fmt.Fprintf(w, "& %s\n", strings.Join(quoted, " "))
+		}
+	}
+	return nil
 }
 
-func expandTilde(path string) string {
-	if !strings.HasPrefix(path, "~") {
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return path
-	}
-	return home + path[1:]
+// psSingleQuote wraps s in PowerShell single quotes, escaping any embedded
+// single quotes by doubling them (the only escape in a PS literal string).
+func psSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

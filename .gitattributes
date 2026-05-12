@@ -1,0 +1,7 @@
+# Normalize all text files to LF on commit and checkout.
+# This silences the "LF will be replaced by CRLF" warning on Windows
+# and keeps diffs clean regardless of which OS edits the file.
+* text=auto eol=lf
+
+# PowerShell files stay LF too — pwsh handles both, and LF is smaller.
+*.ps1 text eol=lf

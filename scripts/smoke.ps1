@@ -343,7 +343,7 @@ New-Item -ItemType Directory -Force -Path $helloDir | Out-Null
 $helloSrc = Join-Path $helloDir "main.go"
 @'
 package main
-func main() { println("hi") }
+func main() {}
 '@ | Set-Content -Path $helloSrc
 
 Push-Location $helloDir
@@ -358,7 +358,7 @@ $helloExe = Join-Path $helloDir "hello.exe"
 
 $baseline = @()
 for ($i = 0; $i -lt 10; $i++) {
-    $t = Measure-Command { & $helloExe | Out-Null }
+    $t = Measure-Command { & $helloExe 2>$null | Out-Null }
     $baseline += $t.TotalMilliseconds
 }
 $bAvg = ($baseline | Measure-Object -Average).Average

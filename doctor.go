@@ -104,10 +104,10 @@ func checkSegmentsFile(home string) checkResult {
 	if err != nil {
 		return checkResult{"segments.toml", "err", err.Error()}
 	}
-	if len(sf.Subdirs) == 0 {
-		return checkResult{"segments.toml", "ok", fmt.Sprintf("%s (no subdirs)", p)}
+	if len(sf.Subdirs) == 0 && len(sf.Contexts) == 0 {
+		return checkResult{"segments.toml", "ok", fmt.Sprintf("%s (no subdirs or contexts)", p)}
 	}
-	return checkResult{"segments.toml", "ok", fmt.Sprintf("%d subdir(s)", len(sf.Subdirs))}
+	return checkResult{"segments.toml", "ok", fmt.Sprintf("%d subdir(s), %d context(s)", len(sf.Subdirs), len(sf.Contexts))}
 }
 
 // checkPluginsFile validates plugins.toml parses and reports the plugin

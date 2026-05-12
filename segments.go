@@ -10,23 +10,40 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// SegmentsFile is the on-disk shape of ~/.onix/segments.toml. Today only
-// [subdirs] is populated; the file reserves room for [[contexts]] in a
-// future milestone (env/cmd/file resolvers, templates). Keeping them in
-// the same file means users have one place to look for everything
-// related to @-segment resolution.
+// ContextDef is one [[contexts]] entry in segments.toml. It declares
+// what the shell should do after cd-ing into a segmented alias whose
+// leading segment matches Segment. Env vars are set in the calling shell
+// (via Invoke-Expression of the printed PowerShell statements); Exec, if
+// present, is run after the env vars are applied.
+//
+// First-defined wins when multiple entries share the same Segment name.
+type ContextDef struct {
+	Segment string            `toml:"segment"`
+	Env     map[string]string `toml:"env,omitempty"`
+	Exec    []string          `toml:"exec,omitempty"`
+}
+
+// SegmentsFile is the on-disk shape of ~/.onix/segments.toml. [subdirs]
+// maps segment names to path fragments; [[contexts]] declares what the
+// shell does after landing in a segmented directory. Both live in the
+// same file so users have one place for everything @-segment related.
 //
 // Layout:
 //
 //	[subdirs]
 //	docs = "documentation"
 //	src  = "source"
-//	ts   = "tests"
 //
-// Per-alias overrides live on the Alias struct itself (aliases.toml) so
-// the override is visually attached to the thing being overridden.
+//	[[contexts]]
+//	segment = "src"
+//	env     = { GO111MODULE = "on" }
+//	exec    = ["make", "dev-env"]
+//
+// Per-alias path overrides live on the Alias struct itself (aliases.toml)
+// so the override is visually attached to the alias being overridden.
 type SegmentsFile struct {
-	Subdirs map[string]string `toml:"subdirs,omitempty"`
+	Subdirs  map[string]string `toml:"subdirs,omitempty"`
+	Contexts []ContextDef      `toml:"contexts,omitempty"`
 }
 
 // LoadSegments reads ~/.onix/segments.toml. A missing file is fine — it
