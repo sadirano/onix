@@ -40,6 +40,8 @@ func (c *DoctorCmd) Run(e *env) error {
 	checks = append(checks, checkInstalledPlugins(e.Home)...)
 	if runtime.GOOS == "windows" {
 		checks = append(checks, checkPowerShellProfile(e.Home))
+	} else {
+		checks = append(checks, checkBashLikeProfile(e.Home))
 	}
 
 	var hadErr bool
@@ -202,6 +204,9 @@ func checkConfigFile(home string) checkResult {
 
 func checkShellSnippet(home string) checkResult {
 	p := shellPath(home)
+	if runtime.GOOS != "windows" {
+		p = bashShellPath(home)
+	}
 	if _, err := os.Stat(p); err != nil {
 		return checkResult{"shell snippet", "warn", fmt.Sprintf("%s missing — run: onix init", p)}
 	}
@@ -214,14 +219,18 @@ func checkShellSnippet(home string) checkResult {
 // fails with "term not recognised" — the right fix is `onix install-actions`
 // from the binary's new location.
 func checkSnippetPin(home string) checkResult {
-	if _, err := os.Stat(shellPath(home)); err != nil {
+	p := shellPath(home)
+	if runtime.GOOS != "windows" {
+		p = bashShellPath(home)
+	}
+	if _, err := os.Stat(p); err != nil {
 		// Snippet absence is already reported by checkShellSnippet; skip.
 		return checkResult{}
 	}
 	pin := extractSnippetPin(home)
 	if pin == "" {
 		return checkResult{"snippet pin", "warn",
-			"no $global:onixExe in snippet — run: onix install-actions"}
+			"no binary pin in snippet — run: onix install-actions"}
 	}
 	if _, err := os.Stat(pin); err != nil {
 		return checkResult{"snippet pin", "warn",
@@ -296,35 +305,65 @@ func checkPowerShellProfile(home string) checkResult {
 	return checkResult{"PowerShell $PROFILE", "ok", profile}
 }
 
-// extractSnippetPin parses the generated PowerShell snippet for the
-// `$global:onixExe = '<path>'` line and returns the path inside the
-// single quotes. Returns "" when the file is missing or the pin line
-// isn't present (e.g. a hand-edited snippet or a v1-shaped one).
-//
-// We trust the snippet's own formatting because it's machine-generated:
-// the prefix is exact, single quotes are literal, and `''` is the only
-// possible quote escape — so a small string search is fine here.
-func extractSnippetPin(home string) string {
-	data, err := os.ReadFile(shellPath(home))
+func checkBashLikeProfile(home string) checkResult {
+	h, err := os.UserHomeDir()
 	if err != nil {
-		return ""
+		return checkResult{"Bash/Zsh profile", "warn", "could not determine home dir"}
 	}
-	const prefix = `$global:onixExe = '`
-	for _, raw := range strings.Split(string(data), "\n") {
-		line := strings.TrimSpace(raw)
-		if !strings.HasPrefix(line, prefix) {
+	snippet := bashShellPath(home)
+	files := []string{".bashrc", ".zshrc"}
+	var found, sourced bool
+	for _, f := range files {
+		p := filepath.Join(h, f)
+		data, err := os.ReadFile(p)
+		if err != nil {
 			continue
 		}
-		rest := strings.TrimPrefix(line, prefix)
-		end := strings.LastIndex(rest, "'")
-		if end < 0 {
-			return ""
+		found = true
+		if strings.Contains(string(data), snippet) {
+			sourced = true
+			break
 		}
-		// Reverse the PowerShell single-quote escape: `''` -> `'`. In
-		// practice this almost never triggers because Windows paths
-		// don't typically contain quotes, but the snippet generator
-		// emits the escape, so the parser should accept it.
-		return strings.ReplaceAll(rest[:end], `''`, `'`)
+	}
+	if !found {
+		return checkResult{"Bash/Zsh profile", "warn", "neither .bashrc nor .zshrc found"}
+	}
+	if !sourced {
+		return checkResult{"Bash/Zsh profile", "warn", fmt.Sprintf("no .bashrc/.zshrc sources %s — run: onix init", snippet)}
+	}
+	return checkResult{"Bash/Zsh profile", "ok", "sourced in .bashrc or .zshrc"}
+}
+
+// extractSnippetPin parses the generated shell snippet for the binary pin
+// line and returns the path inside the single quotes.
+func extractSnippetPin(home string) string {
+	// Try PowerShell first
+	if data, err := os.ReadFile(shellPath(home)); err == nil {
+		const prefix = `$global:onixExe = '`
+		for _, raw := range strings.Split(string(data), "\n") {
+			line := strings.TrimSpace(raw)
+			if strings.HasPrefix(line, prefix) {
+				rest := strings.TrimPrefix(line, prefix)
+				end := strings.LastIndex(rest, "'")
+				if end >= 0 {
+					return strings.ReplaceAll(rest[:end], `''`, `'`)
+				}
+			}
+		}
+	}
+	// Then Bash
+	if data, err := os.ReadFile(bashShellPath(home)); err == nil {
+		const prefix = `export ONIX_EXE='`
+		for _, raw := range strings.Split(string(data), "\n") {
+			line := strings.TrimSpace(raw)
+			if strings.HasPrefix(line, prefix) {
+				rest := strings.TrimPrefix(line, prefix)
+				end := strings.LastIndex(rest, "'")
+				if end >= 0 {
+					return rest[:end]
+				}
+			}
+		}
 	}
 	return ""
 }
