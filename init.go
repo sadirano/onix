@@ -57,7 +57,11 @@ const snippetTemplate = `$onixAliasCompleter = {
 
 function global:o {
     [CmdletBinding()]
-    param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
+    param([Parameter(Position=0, Mandatory=$false)][string]$Alias)
+    if (-not $Alias) {
+        & $global:onixExe aliases
+        return
+    }
     $path = & $global:onixExe resolve $Alias
     if ($LASTEXITCODE -eq 0) {
         Set-Location -LiteralPath $path
@@ -93,6 +97,42 @@ function global:r {
 
 `
 
+const bashSnippetTemplate = `o() {
+    if [ -z "$1" ]; then
+        "$ONIX_EXE" aliases
+        return
+    fi
+    local path
+    path=$("$ONIX_EXE" resolve "$1")
+    if [ $? -eq 0 ]; then
+        cd "$path"
+    fi
+}
+
+n() { "$ONIX_EXE" edit "$1"; }
+s() { "$ONIX_EXE" explore "$1"; }
+y() { "$ONIX_EXE" yank "$1"; }
+r() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" run "$alias" -- "$@"
+}
+
+if [ -n "$BASH_VERSION" ]; then
+    _onix_completer() {
+        local cur=${COMP_WORDS[COMP_CWORD]}
+        local names=$("$ONIX_EXE" list-names 2>/dev/null)
+        COMPREPLY=( $(compgen -W "$names" -- "$cur") )
+    }
+elif [ -n "$ZSH_VERSION" ]; then
+    _onix_zsh_completer() {
+        local names=($($ONIX_EXE list-names 2>/dev/null))
+        compadd "${names[@]}"
+    }
+fi
+
+`
+
 // writeShellSnippet regenerates ~/.onix/shell/onix.ps1 from the current
 // config. Always rewrites the file in full — this is generated content
 // and any user-side customisation belongs in $PROFILE wrapping our
@@ -106,6 +146,13 @@ function global:r {
 // downside is that moving the binary requires `onix install-actions` to
 // regenerate; we trust that's a rare event compared to PATH ambiguity.
 func writeShellSnippet(home string, actions []Action, plugins []Plugin) error {
+	if err := writePwshShellSnippet(home, actions, plugins); err != nil {
+		return err
+	}
+	return writeBashShellSnippet(home, actions, plugins)
+}
+
+func writePwshShellSnippet(home string, actions []Action, plugins []Plugin) error {
 	path := shellPath(home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -145,6 +192,42 @@ func writeShellSnippet(home string, actions []Action, plugins []Plugin) error {
 	// list is built dynamically so newly-declared actions and plugins get
 	// completion for free without any further user action.
 	writeCompleterRegistration(&b, actions, plugins)
+
+	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+func writeBashShellSnippet(home string, actions []Action, plugins []Plugin) error {
+	path := bashShellPath(home)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+	}
+
+	exe, err := resolveOnixExe()
+	if err != nil {
+		return err
+	}
+
+	var b strings.Builder
+	b.WriteString("# onix shell integration (generated; do not edit — run 'onix install-actions')\n")
+	fmt.Fprintf(&b, "export ONIX_EXE='%s'\n\n", exe)
+
+	// Body: completer + built-in functions.
+	b.WriteString(bashSnippetTemplate)
+
+	// Custom actions.
+	for _, a := range actions {
+		writeActionFunctionBash(&b, a)
+	}
+
+	// Plugin wrappers.
+	for _, p := range plugins {
+		writePluginFunctionBash(&b, p.Name, p.Name, "")
+		for _, e := range p.Entries {
+			writePluginFunctionBash(&b, e.EffectiveCmd(), p.Name, e.Name)
+		}
+	}
+
+	writeCompleterRegistrationBash(&b, actions, plugins)
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
@@ -245,6 +328,45 @@ func writeCompleterRegistration(b *strings.Builder, actions []Action, plugins []
 		strings.Join(names, ","))
 }
 
+func writeActionFunctionBash(b *strings.Builder, a Action) {
+	fmt.Fprintf(b, `%s() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" exec %s "$alias" -- "$@"
+}
+
+`, a.Name, a.Name)
+}
+
+func writePluginFunctionBash(b *strings.Builder, wrapperName, pluginName, entryName string) {
+	fmt.Fprintf(b, `%s() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" plugin-exec %s %q "$alias" -- "$@"
+}
+
+`, wrapperName, pluginName, entryName)
+}
+
+func writeCompleterRegistrationBash(b *strings.Builder, actions []Action, plugins []Plugin) {
+	names := []string{"o", "n", "s", "y", "r"}
+	for _, a := range actions {
+		names = append(names, a.Name)
+	}
+	for _, p := range plugins {
+		names = append(names, p.Name)
+		for _, e := range p.Entries {
+			names = append(names, e.EffectiveCmd())
+		}
+	}
+	fmt.Fprintf(b, `if [ -n "$BASH_VERSION" ]; then
+    complete -F _onix_completer %s
+elif [ -n "$ZSH_VERSION" ]; then
+    compdef _onix_zsh_completer %s
+fi
+`, strings.Join(names, " "), strings.Join(names, " "))
+}
+
 // InitCmd creates ~/.onix and installs PowerShell shell integration.
 //
 // Steps in order: directory tree, snippet (built-ins + whatever custom
@@ -294,14 +416,63 @@ func (c *InitCmd) Run(e *env) error {
 		return nil
 	}
 	if runtime.GOOS != "windows" {
-		// On non-Windows the snippet is PowerShell — useful only for users
-		// of PowerShell Core (pwsh). We still wrote the file in case they
-		// want to source it themselves; we just don't try to find $PROFILE.
-		fmt.Println("non-Windows host: source the snippet manually from your shell rc")
-		return nil
+		return sourceFromBashLike(bashShellPath(e.Home))
 	}
 
 	return sourceFromProfile(shellPath(e.Home))
+}
+
+// sourceFromBashLike appends a source line to .bashrc and/or .zshrc.
+func sourceFromBashLike(snippet string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	// We look for both .bashrc and .zshrc. If they exist, we append the source
+	// line. This is broader than checking $SHELL but ensures that a user
+	// who switches between shells is covered.
+	files := []string{".bashrc", ".zshrc"}
+	var updated []string
+	var found bool
+
+	// We use [ -f ... ] so the rc file doesn't error if onix is uninstalled
+	// but the source line remains.
+	sourceLine := fmt.Sprintf("[ -f '%s' ] && . '%s'", snippet, snippet)
+
+	for _, f := range files {
+		p := filepath.Join(home, f)
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		found = true
+
+		existing, _ := os.ReadFile(p)
+		if strings.Contains(string(existing), snippet) {
+			fmt.Printf("%s already sources %s\n", f, snippet)
+			continue
+		}
+
+		file, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not open %s: %v\n", p, err)
+			continue
+		}
+		if _, err := fmt.Fprintf(file, "\n# Added by 'onix init'\n%s\n", sourceLine); err != nil {
+			file.Close()
+			return fmt.Errorf("append to %s: %w", f, err)
+		}
+		file.Close()
+		updated = append(updated, f)
+	}
+
+	if len(updated) > 0 {
+		fmt.Printf("updated: %s\n", strings.Join(updated, ", "))
+		fmt.Println("restart your shell (or source the updated file) to activate o/n/s/r/y")
+	} else if !found {
+		fmt.Printf("no .bashrc or .zshrc found — add this to your shell rc manually:\n  %s\n", sourceLine)
+	}
+	return nil
 }
 
 // sourceFromProfile appends a `. "<snippet>"` line to PowerShell's $PROFILE
