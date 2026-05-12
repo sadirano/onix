@@ -18,7 +18,7 @@ func isUNCPath(path string) bool {
 // readLine prints prompt and reads one line from stdin.
 // Returns ("", false) when the user cancels with Ctrl+C or a stream error occurs.
 func readLine(prompt string) (string, bool) {
-	fmt.Print(prompt)
+	fmt.Fprint(os.Stderr, prompt)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
