@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/sadirano/onix/internal/config"
 )
 
 // TestConfig_RoundTrip writes a TOML config by hand, reads it via
@@ -28,7 +30,7 @@ args = ["pr", "view", "{extras}", "--web"]
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := LoadConfig(dir)
+	cfg, err := config.LoadConfig(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -48,7 +50,7 @@ args = ["pr", "view", "{extras}", "--web"]
 // file means "no custom actions", not an error. The rest of the binary
 // relies on Config never being nil.
 func TestConfig_LoadMissingReturnsEmpty(t *testing.T) {
-	cfg, err := LoadConfig(t.TempDir())
+	cfg, err := config.LoadConfig(t.TempDir())
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -109,7 +111,7 @@ exec = "x"`,
 			if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(tc.body), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			_, err := LoadConfig(dir)
+			_, err := config.LoadConfig(dir)
 			if err == nil {
 				t.Fatalf("want error containing %q, got nil", tc.want)
 			}
@@ -126,7 +128,7 @@ exec = "x"`,
 func TestExpandAction(t *testing.T) {
 	tests := []struct {
 		name   string
-		action Action
+		action config.Action
 		target string
 		alias  string
 		extras []string
@@ -134,30 +136,30 @@ func TestExpandAction(t *testing.T) {
 	}{
 		{
 			name:   "no template, extras appended",
-			action: Action{Exec: "go", Args: []string{"test", "./..."}},
+			action: config.Action{Exec: "go", Args: []string{"test", "./..."}},
 			extras: []string{"-v"},
 			want:   []string{"go", "test", "./...", "-v"},
 		},
 		{
 			name:   "no template, no extras",
-			action: Action{Exec: "go", Args: []string{"test", "./..."}},
+			action: config.Action{Exec: "go", Args: []string{"test", "./..."}},
 			want:   []string{"go", "test", "./..."},
 		},
 		{
 			name:   "{extras} as whole arg splices",
-			action: Action{Exec: "gh", Args: []string{"pr", "view", "{extras}", "--web"}},
+			action: config.Action{Exec: "gh", Args: []string{"pr", "view", "{extras}", "--web"}},
 			extras: []string{"42", "--state", "open"},
 			want:   []string{"gh", "pr", "view", "42", "--state", "open", "--web"},
 		},
 		{
 			name:   "{extras} substring joins with space",
-			action: Action{Exec: "rg", Args: []string{"--glob={extras}"}},
+			action: config.Action{Exec: "rg", Args: []string{"--glob={extras}"}},
 			extras: []string{"*.go", "src/"},
 			want:   []string{"rg", "--glob=*.go src/"},
 		},
 		{
 			name:   "target and alias substitution",
-			action: Action{Exec: "echo", Args: []string{"{alias}@{target}"}},
+			action: config.Action{Exec: "echo", Args: []string{"{alias}@{target}"}},
 			target: "C:/projects/acme",
 			alias:  "acme",
 			want:   []string{"echo", "acme@C:/projects/acme"},
@@ -165,7 +167,7 @@ func TestExpandAction(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ExpandAction(&tc.action, tc.target, tc.alias, tc.extras)
+			got := config.ExpandAction(&tc.action, tc.target, tc.alias, tc.extras)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("ExpandAction = %v, want %v", got, tc.want)
 			}

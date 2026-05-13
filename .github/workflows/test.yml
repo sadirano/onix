@@ -31,4 +31,12 @@ jobs:
 
       # Hot-path benchmark — informational only, not gated.
       - name: Bench
-        run: go test -bench=. -benchmem -run=^$ ./...
+        run: |
+          go test -bench=. -benchmem -run=^$ ./... > bench_current.txt
+          cat bench_current.txt
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Benchstat (current)
+        run: benchstat bench_current.txt

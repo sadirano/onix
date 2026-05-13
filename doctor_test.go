@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/sadirano/onix/internal/snippet"
 )
 
 // snippetPathForOS returns the snippet file the host platform actually
@@ -14,9 +16,9 @@ import (
 // test setup has to write whichever file those functions will look at.
 func snippetPathForOS(home string) string {
 	if runtime.GOOS == "windows" {
-		return shellPath(home)
+		return snippet.PwshPath(home)
 	}
-	return bashShellPath(home)
+	return snippet.BashPath(home)
 }
 
 // staleSnippetBody returns a snippet body in the host platform's format
@@ -44,7 +46,7 @@ func missingPinBody() string {
 func TestExtractSnippetPin(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := writeShellSnippet(dir, nil, nil); err != nil {
+		if err := snippet.WriteShellSnippet(dir, nil, nil, nil); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 		pin := extractSnippetPin(dir)
@@ -89,19 +91,19 @@ func TestExtractSnippetPin(t *testing.T) {
 func TestCheckSnippetPin(t *testing.T) {
 	t.Run("ok when snippet is fresh", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := writeShellSnippet(dir, nil, nil); err != nil {
+		if err := snippet.WriteShellSnippet(dir, nil, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 		r := checkSnippetPin(dir)
-		if r.status != "ok" {
-			t.Errorf("status = %q, want ok (detail=%s)", r.status, r.detail)
+		if r.Status != "ok" {
+			t.Errorf("Status = %q, want ok (Detail=%s)", r.Status, r.Detail)
 		}
 	})
 
 	t.Run("skipped when snippet missing", func(t *testing.T) {
 		dir := t.TempDir()
 		r := checkSnippetPin(dir)
-		if r.name != "" {
+		if r.Name != "" {
 			t.Errorf("expected zero-value result when snippet absent, got %+v", r)
 		}
 	})
@@ -115,11 +117,11 @@ func TestCheckSnippetPin(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := checkSnippetPin(dir)
-		if r.status != "warn" {
-			t.Errorf("status = %q, want warn (detail=%s)", r.status, r.detail)
+		if r.Status != "warn" {
+			t.Errorf("status = %q, want warn (detail=%s)", r.Status, r.Detail)
 		}
-		if !strings.Contains(r.detail, "missing") {
-			t.Errorf("detail = %q, want it to mention 'missing'", r.detail)
+		if !strings.Contains(r.Detail, "missing") {
+			t.Errorf("detail = %q, want it to mention 'missing'", r.Detail)
 		}
 	})
 }
@@ -137,11 +139,11 @@ func TestCheckBashLikeProfile(t *testing.T) {
 		t.Setenv("HOME", home)
 		t.Setenv("USERPROFILE", home)
 		r := checkBashLikeProfile(home)
-		if r.status != "warn" {
-			t.Errorf("status = %q, want warn (no rc files)", r.status)
+		if r.Status != "warn" {
+			t.Errorf("status = %q, want warn (no rc files)", r.Status)
 		}
-		if !strings.Contains(r.detail, "neither") {
-			t.Errorf("detail = %q, want it to mention missing rc files", r.detail)
+		if !strings.Contains(r.Detail, "neither") {
+			t.Errorf("detail = %q, want it to mention missing rc files", r.Detail)
 		}
 	})
 
@@ -153,11 +155,11 @@ func TestCheckBashLikeProfile(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := checkBashLikeProfile(home)
-		if r.status != "warn" {
-			t.Errorf("status = %q, want warn (not sourced)", r.status)
+		if r.Status != "warn" {
+			t.Errorf("status = %q, want warn (not sourced)", r.Status)
 		}
-		if !strings.Contains(r.detail, "onix init") {
-			t.Errorf("detail = %q, want it to suggest 'onix init'", r.detail)
+		if !strings.Contains(r.Detail, "onix init") {
+			t.Errorf("detail = %q, want it to suggest 'onix init'", r.Detail)
 		}
 	})
 
@@ -165,14 +167,14 @@ func TestCheckBashLikeProfile(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
 		t.Setenv("USERPROFILE", home)
-		// .zshrc references the absolute path that bashShellPath would return.
-		body := "# onix\n. '" + bashShellPath(home) + "'\n"
+		// .zshrc references the absolute path that snippet.BashPath would return.
+		body := "# onix\n. '" + snippet.BashPath(home) + "'\n"
 		if err := os.WriteFile(filepath.Join(home, ".zshrc"), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		r := checkBashLikeProfile(home)
-		if r.status != "ok" {
-			t.Errorf("status = %q (detail=%s), want ok", r.status, r.detail)
+		if r.Status != "ok" {
+			t.Errorf("status = %q (detail=%s), want ok", r.Status, r.Detail)
 		}
 	})
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +10,77 @@ import (
 	"runtime"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/sadirano/onix/internal/config"
+	"github.com/sadirano/onix/internal/plugins"
+	"github.com/sadirano/onix/internal/snippet"
+	"github.com/sadirano/onix/internal/store"
 )
+
+// -----------------------------------------------------------------------------
+// import — pull aliases from other tools.
+// -----------------------------------------------------------------------------
+
+type ImportCmd struct {
+	Zoxide bool `help:"Import from zoxide (requires 'zoxide' on PATH)."`
+}
+
+func (c *ImportCmd) Run(e *env) error {
+	if !c.Zoxide {
+		return fmt.Errorf("please specify a source (e.g. --zoxide)")
+	}
+
+	if c.Zoxide {
+		return importZoxide(e)
+	}
+
+	return nil
+}
+
+func importZoxide(e *env) error {
+	cmd := exec.Command("zoxide", "query", "-l")
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("call zoxide: %w (ensure it's on PATH)", err)
+	}
+
+	s, err := store.LoadStore(e.Home)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(out), "\n")
+	count := 0
+	for _, line := range lines {
+		path := strings.TrimSpace(line)
+		if path == "" {
+			continue
+		}
+		name := strings.ToLower(filepath.Base(path))
+		if name == "" || name == "." || name == "/" {
+			continue
+		}
+
+		if _, exists := s.Lookup(name); exists {
+			continue
+		}
+
+		if err := store.ValidateAliasName(name); err != nil {
+			continue
+		}
+
+		s.Set(name, store.Alias{Path: filepath.ToSlash(path)})
+		count++
+	}
+
+	if err := store.SaveStore(e.Home, s); err != nil {
+		return err
+	}
+
+	fmt.Printf("imported %d aliases from zoxide\n", count)
+	return nil
+}
+
 
 // -----------------------------------------------------------------------------
 // resolve — the hot path.
@@ -26,12 +97,24 @@ type ResolveCmd struct {
 }
 
 func (c *ResolveCmd) Run(e *env) error {
-	// We forward to fastResolve so the kong path and the bypass path
-	// produce byte-identical output. fastResolve handles both plain
-	// aliases and `<seg>@<alias>` segmented forms; this Run only exists
-	// for kong-driven invocations (--help, scripting that passes flags),
-	// which don't take the hot-path shortcut in main.go.
-	return fastResolve(e.Home, c.Alias)
+	path, err := resolveAliasPath(e, c.Alias)
+	if err != nil {
+		return err
+	}
+	if e.JSON {
+		return printJSON(struct {
+			Alias string `json:"alias"`
+			Path  string `json:"path"`
+		}{c.Alias, path})
+	}
+	fmt.Println(path)
+	return nil
+}
+
+func printJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }
 
 // -----------------------------------------------------------------------------
@@ -49,7 +132,7 @@ type AddCmd struct {
 }
 
 func (c *AddCmd) Run(e *env) error {
-	if err := ValidateAliasName(c.Alias); err != nil {
+	if err := store.ValidateAliasName(c.Alias); err != nil {
 		return err
 	}
 	p := strings.TrimSpace(c.Path)
@@ -72,12 +155,12 @@ func (c *AddCmd) Run(e *env) error {
 		return fmt.Errorf("create directory %q: %w", abs, err)
 	}
 
-	s, err := LoadStore(e.Home)
+	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return err
 	}
-	s.Set(c.Alias, Alias{Path: filepath.ToSlash(abs)})
-	if err := SaveStore(e.Home, s); err != nil {
+	s.Set(c.Alias, store.Alias{Path: filepath.ToSlash(abs)})
+	if err := store.SaveStore(e.Home, s); err != nil {
 		return err
 	}
 	// Human-readable confirmation goes to stderr so callers (the `o`
@@ -97,14 +180,14 @@ type RemoveCmd struct {
 }
 
 func (c *RemoveCmd) Run(e *env) error {
-	s, err := LoadStore(e.Home)
+	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return err
 	}
 	if !s.Delete(c.Alias) {
 		return fmt.Errorf("unknown alias %q", c.Alias)
 	}
-	if err := SaveStore(e.Home, s); err != nil {
+	if err := store.SaveStore(e.Home, s); err != nil {
 		return err
 	}
 	fmt.Printf("removed %s\n", strings.ToLower(c.Alias))
@@ -121,11 +204,30 @@ func (c *RemoveCmd) Run(e *env) error {
 type ListCmd struct{}
 
 func (c *ListCmd) Run(e *env) error {
-	s, err := LoadStore(e.Home)
+	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return err
 	}
 	names := s.Names()
+
+	if e.JSON {
+		type aliasInfo struct {
+			Name    string            `json:"name"`
+			Path    string            `json:"path"`
+			Subdirs map[string]string `json:"subdirs,omitempty"`
+		}
+		out := make([]aliasInfo, 0, len(names))
+		for _, n := range names {
+			a, _ := s.Lookup(n)
+			out = append(out, aliasInfo{
+				Name:    n,
+				Path:    a.Path,
+				Subdirs: a.Subdirs,
+			})
+		}
+		return printJSON(out)
+	}
+
 	if len(names) == 0 {
 		fmt.Println("no aliases registered (run: onix add <name> [path])")
 		return nil
@@ -133,7 +235,8 @@ func (c *ListCmd) Run(e *env) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ALIAS\tPATH")
 	for _, n := range names {
-		fmt.Fprintf(w, "%s\t%s\n", n, s.Aliases[n].Path)
+		a, _ := s.Lookup(n)
+		fmt.Fprintf(w, "%s\t%s\n", n, a.Path)
 	}
 	return w.Flush()
 }
@@ -145,7 +248,7 @@ func (c *ListCmd) Run(e *env) error {
 type AliasesCmd struct{}
 
 func (c *AliasesCmd) Run(e *env) error {
-	path := aliasesPath(e.Home)
+	path := store.AliasesPath(e.Home)
 	ed := resolveEditor()
 	cmd := exec.Command(ed, path)
 	cmd.Stdin = os.Stdin
@@ -317,13 +420,13 @@ func (c *ExecCmd) Run(e *env) error {
 		extras = extras[1:]
 	}
 
-	cfg, err := LoadConfig(e.Home)
+	cfg, err := config.LoadConfig(e.Home)
 	if err != nil {
 		return err
 	}
 	action := cfg.FindAction(actionName)
 	if action == nil {
-		return fmt.Errorf("unknown action %q (declared in %s)", actionName, configPath(e.Home))
+		return fmt.Errorf("unknown action %q (declared in %s)", actionName, config.Path(e.Home))
 	}
 
 	target, err := resolveAliasPath(e, aliasName)
@@ -331,7 +434,7 @@ func (c *ExecCmd) Run(e *env) error {
 		return err
 	}
 
-	argv := ExpandAction(action, filepath.ToSlash(target), strings.ToLower(aliasName), extras)
+	argv := config.ExpandAction(action, filepath.ToSlash(target), strings.ToLower(aliasName), extras)
 	if len(argv) == 0 {
 		return fmt.Errorf("action %q produced empty argv", actionName)
 	}
@@ -365,18 +468,18 @@ func (c *InstallActionsCmd) Run(e *env) error {
 	// Read both config.toml and plugins.toml first so we can list what
 	// the regenerated snippet covers; regenerateShellSnippet does the
 	// actual file write.
-	cfg, err := LoadConfig(e.Home)
+	cfg, err := config.LoadConfig(e.Home)
 	if err != nil {
 		return err
 	}
-	pf, err := LoadPlugins(e.Home)
+	pf, err := plugins.LoadPlugins(e.Home)
 	if err != nil {
 		return err
 	}
-	if err := regenerateShellSnippet(e.Home); err != nil {
+	if err := snippet.RegenerateShellSnippet(e.Home); err != nil {
 		return err
 	}
-	fmt.Printf("regenerated %s\n", shellPath(e.Home))
+	fmt.Printf("regenerated %s\n", snippet.PwshPath(e.Home))
 	if len(cfg.Actions) > 0 {
 		names := make([]string, 0, len(cfg.Actions))
 		for _, a := range cfg.Actions {
@@ -411,7 +514,7 @@ func (c *InstallActionsCmd) Run(e *env) error {
 type ListNamesCmd struct{}
 
 func (c *ListNamesCmd) Run(e *env) error {
-	s, err := LoadStore(e.Home)
+	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return err
 	}
@@ -442,13 +545,13 @@ func resolveAliasPath(e *env, name string) (string, error) {
 		return filepath.FromSlash(p), nil
 	}
 
-	s, err := LoadStore(e.Home)
+	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return "", err
 	}
 	a, ok := s.Lookup(name)
 	if !ok {
-		if err := ValidateAliasName(name); err != nil {
+		if err := store.ValidateAliasName(name); err != nil {
 			return "", err
 		}
 		dest := promptDestination(name)
@@ -459,9 +562,9 @@ func resolveAliasPath(e *env, name string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("absolutise %q: %w", dest, err)
 		}
-		a = Alias{Path: filepath.ToSlash(abs)}
+		a = store.Alias{Path: filepath.ToSlash(abs)}
 		s.Set(name, a)
-		if err := SaveStore(e.Home, s); err != nil {
+		if err := store.SaveStore(e.Home, s); err != nil {
 			return "", err
 		}
 		if err := os.MkdirAll(abs, 0o755); err != nil {

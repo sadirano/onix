@@ -6,12 +6,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/sadirano/onix/internal/segments"
+	"github.com/sadirano/onix/internal/store"
 )
 
-// TestParseSegmentedAlias locks the parser contract: the alias is the
-// token *after* the last '@', segments are everything before in
-// left-to-right order, and empty segments (from leading or duplicated
-// '@') are dropped.
+// TestParseSegmentedAlias locks the parser contract.
 func TestParseSegmentedAlias(t *testing.T) {
 	tests := []struct {
 		in       string
@@ -22,12 +22,12 @@ func TestParseSegmentedAlias(t *testing.T) {
 		{"docs@acme", []string{"docs"}, "acme"},
 		{"task@client@place", []string{"task", "client"}, "place"},
 		{"a@b@c@d", []string{"a", "b", "c"}, "d"},
-		{"@trailing", nil, "trailing"},               // leading @ drops empty seg
-		{"a@@b", []string{"a"}, "b"},                 // duplicate @ skips empty seg
+		{"@trailing", nil, "trailing"},
+		{"a@@b", []string{"a"}, "b"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			segs, als := ParseSegmentedAlias(tc.in)
+			segs, als := segments.ParseSegmentedAlias(tc.in)
 			if !reflect.DeepEqual(segs, tc.wantSegs) {
 				t.Errorf("segments = %v, want %v", segs, tc.wantSegs)
 			}
@@ -38,51 +38,48 @@ func TestParseSegmentedAlias(t *testing.T) {
 	}
 }
 
-// TestResolveSegment_PrecedenceChain captures the three-tier lookup
-// rules: per-alias subdirs first, then global subdirs, then literal
-// fallback. Each subtest exercises one tier.
+// TestResolveSegment_PrecedenceChain captures the lookup rules.
 func TestResolveSegment_PrecedenceChain(t *testing.T) {
 	aliasSubs := map[string]string{"docs": "doc-internal"}
 	globalSubs := map[string]string{"docs": "documentation", "src": "source"}
 
 	t.Run("per-alias wins over global", func(t *testing.T) {
-		got := ResolveSegment("docs", aliasSubs, globalSubs)
+		got := segments.ResolveSegment("docs", aliasSubs, globalSubs)
 		if got != "doc-internal" {
 			t.Errorf("docs = %q, want doc-internal", got)
 		}
 	})
 
 	t.Run("global wins when no per-alias", func(t *testing.T) {
-		got := ResolveSegment("src", aliasSubs, globalSubs)
+		got := segments.ResolveSegment("src", aliasSubs, globalSubs)
 		if got != "source" {
 			t.Errorf("src = %q, want source", got)
 		}
 	})
 
 	t.Run("literal fallback when unmapped", func(t *testing.T) {
-		got := ResolveSegment("undocumented", aliasSubs, globalSubs)
+		got := segments.ResolveSegment("undocumented", aliasSubs, globalSubs)
 		if got != "undocumented" {
 			t.Errorf("undocumented = %q, want literal fallback", got)
 		}
 	})
 
 	t.Run("case-insensitive match", func(t *testing.T) {
-		got := ResolveSegment("SRC", aliasSubs, globalSubs)
+		got := segments.ResolveSegment("SRC", aliasSubs, globalSubs)
 		if got != "source" {
 			t.Errorf("SRC = %q, want source (case-insensitive lookup)", got)
 		}
 	})
 
 	t.Run("empty per-alias value falls through to global", func(t *testing.T) {
-		got := ResolveSegment("docs", map[string]string{"docs": " "}, globalSubs)
+		got := segments.ResolveSegment("docs", map[string]string{"docs": " "}, globalSubs)
 		if got != "documentation" {
 			t.Errorf("docs = %q, want documentation (empty override skipped)", got)
 		}
 	})
 }
 
-// TestSegments_LoadRoundTrip writes a segments.toml by hand and confirms
-// the loader builds the map go-toml exposes.
+// TestSegments_LoadRoundTrip writes a segments.toml by hand.
 func TestSegments_LoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	body := `
@@ -91,10 +88,10 @@ docs = "documentation"
 src  = "source"
 ts   = "tests"
 `
-	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(segments.Path(dir), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	sf, err := LoadSegments(dir)
+	sf, err := segments.LoadSegments(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -108,7 +105,7 @@ ts   = "tests"
 
 // TestSegments_LoadMissingReturnsEmpty is the first-run path.
 func TestSegments_LoadMissingReturnsEmpty(t *testing.T) {
-	sf, err := LoadSegments(t.TempDir())
+	sf, err := segments.LoadSegments(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,26 +114,23 @@ func TestSegments_LoadMissingReturnsEmpty(t *testing.T) {
 	}
 }
 
-// TestResolveSegmentedToPath is the end-to-end path-builder test. We
-// stand up an aliases.toml with a per-alias override, a segments.toml
-// with a global mapping, and assert the walk produces the right path
-// for several segment shapes.
+// TestResolveSegmentedToPath is the end-to-end path-builder test.
 func TestResolveSegmentedToPath(t *testing.T) {
 	dir := t.TempDir()
 
 	// Aliases: one with a per-alias subdir override.
-	store := &Store{Aliases: map[string]Alias{}}
-	store.Set("acme", Alias{
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("acme", store.Alias{
 		Path:    "C:/projects/acme",
 		Subdirs: map[string]string{"docs": "doc-internal"},
 	})
-	store.Set("vanilla", Alias{Path: "C:/projects/vanilla"})
-	if err := SaveStore(dir, store); err != nil {
+	s.Set("vanilla", store.Alias{Path: "C:/projects/vanilla"})
+	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
 
 	// Global subdirs.
-	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`
+	if err := os.WriteFile(segments.Path(dir), []byte(`
 [subdirs]
 docs = "documentation"
 src  = "source"
@@ -171,20 +165,18 @@ src  = "source"
 	}
 }
 
-// TestStore_SubdirsRoundTrip locks the on-disk shape for per-alias
-// subdir overrides: a [<alias>.subdirs] subtable per alias, keys sorted
-// for stable diffs.
+// TestStore_SubdirsRoundTrip locks the on-disk shape for per-alias subdir overrides.
 func TestStore_SubdirsRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	s := &Store{Aliases: map[string]Alias{}}
-	s.Set("acme", Alias{
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("acme", store.Alias{
 		Path:    "C:/projects/acme",
 		Subdirs: map[string]string{"docs": "doc-internal", "src": "source-acme"},
 	})
-	if err := SaveStore(dir, s); err != nil {
+	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	body, err := os.ReadFile(filepath.Join(dir, "aliases.toml"))
+	body, err := os.ReadFile(store.AliasesPath(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +189,7 @@ func TestStore_SubdirsRoundTrip(t *testing.T) {
 	}
 
 	// Reload and confirm the map survived.
-	s2, err := LoadStore(dir)
+	s2, err := store.LoadStore(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

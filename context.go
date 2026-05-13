@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/sadirano/onix/internal/segments"
 )
 
 // ContextCmd groups the segment-context subcommands under `onix context`.
@@ -38,7 +40,7 @@ func (c *ContextApplyCmd) Run(e *env) error {
 type ContextListCmd struct{}
 
 func (c *ContextListCmd) Run(e *env) error {
-	sf, err := LoadSegments(e.Home)
+	sf, err := segments.LoadSegments(e.Home)
 	if err != nil {
 		return err
 	}
@@ -73,7 +75,7 @@ func (c *ContextListCmd) Run(e *env) error {
 type ContextEditCmd struct{}
 
 func (c *ContextEditCmd) Run(e *env) error {
-	p := segmentsConfigPath(e.Home)
+	p := segments.Path(e.Home)
 	if _, err := os.Stat(p); os.IsNotExist(err) {
 		const starter = `# onix segment registry — @-segment subdirs and shell contexts.
 # After editing, changes are picked up immediately (no reload needed).
@@ -120,11 +122,11 @@ func applyContexts(home, input string, w io.Writer) error {
 	if !strings.Contains(input, "@") {
 		return nil // plain alias — no context possible, skip all I/O
 	}
-	segments, _ := ParseSegmentedAlias(input)
-	if len(segments) == 0 {
+	segs, _ := segments.ParseSegmentedAlias(input)
+	if len(segs) == 0 {
 		return nil
 	}
-	sf, err := LoadSegments(home)
+	sf, err := segments.LoadSegments(home)
 	if err != nil {
 		return err
 	}
@@ -134,7 +136,7 @@ func applyContexts(home, input string, w io.Writer) error {
 
 	// Build a segment→ContextDef lookup. First-defined wins for duplicates
 	// so the TOML author controls precedence by ordering their [[contexts]].
-	ctxMap := make(map[string]*ContextDef, len(sf.Contexts))
+	ctxMap := make(map[string]*segments.ContextDef, len(sf.Contexts))
 	for i := range sf.Contexts {
 		cd := &sf.Contexts[i]
 		key := strings.ToLower(cd.Segment)
@@ -145,8 +147,8 @@ func applyContexts(home, input string, w io.Writer) error {
 
 	// Apply in innermost-first order (right-to-left in the segments slice)
 	// to mirror the path-building direction from M4.
-	for i := len(segments) - 1; i >= 0; i-- {
-		cd, ok := ctxMap[strings.ToLower(segments[i])]
+	for i := len(segs) - 1; i >= 0; i-- {
+		cd, ok := ctxMap[strings.ToLower(segs[i])]
 		if !ok {
 			continue
 		}

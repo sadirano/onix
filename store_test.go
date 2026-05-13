@@ -2,9 +2,10 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sadirano/onix/internal/store"
 )
 
 // TestStore_RoundTrip writes a few aliases, reads them back, and confirms
@@ -13,14 +14,14 @@ import (
 func TestStore_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
-	s := &Store{Aliases: map[string]Alias{}}
-	s.Set("acme", Alias{Path: "C:/projects/acme"})
-	s.Set("sms", Alias{Path: "D:/work/sms"})
-	if err := SaveStore(dir, s); err != nil {
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("acme", store.Alias{Path: "C:/projects/acme"})
+	s.Set("sms", store.Alias{Path: "D:/work/sms"})
+	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	loaded, err := LoadStore(dir)
+	loaded, err := store.LoadStore(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -47,12 +48,12 @@ func TestStore_RoundTrip(t *testing.T) {
 // also normalise on load.
 func TestStore_LookupCaseInsensitive(t *testing.T) {
 	dir := t.TempDir()
-	s := &Store{Aliases: map[string]Alias{}}
-	s.Set("Acme", Alias{Path: "C:/projects/acme"})
-	if err := SaveStore(dir, s); err != nil {
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("Acme", store.Alias{Path: "C:/projects/acme"})
+	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	loaded, err := LoadStore(dir)
+	loaded, err := store.LoadStore(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestStore_LookupCaseInsensitive(t *testing.T) {
 // fail with "unknown alias" but Load itself should not.
 func TestStore_LoadMissingReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
-	s, err := LoadStore(dir)
+	s, err := store.LoadStore(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestStore_LoadMissingReturnsEmpty(t *testing.T) {
 // TestStore_DeleteUnknown confirms Delete returns false when the alias
 // isn't present, so the CLI can surface the right message.
 func TestStore_DeleteUnknown(t *testing.T) {
-	s := &Store{Aliases: map[string]Alias{"acme": {Path: "C:/x"}}}
+	s := &store.Store{Aliases: map[string]store.Alias{"acme": {Path: "C:/x"}}}
 	if s.Delete("nope") {
 		t.Error("Delete(nope) returned true on a missing alias")
 	}
@@ -108,10 +109,10 @@ func TestStore_DeleteUnknown(t *testing.T) {
 //     definitions emitted by writeShellSnippet
 func TestValidateNames(t *testing.T) {
 	t.Run("alias", func(t *testing.T) {
-		runValidatorTable(t, ValidateAliasName, "alias")
+		runValidatorTable(t, store.ValidateAliasName, "alias")
 	})
 	t.Run("segment", func(t *testing.T) {
-		runValidatorTable(t, ValidateSegmentName, "segment")
+		runValidatorTable(t, store.ValidateSegmentName, "segment")
 	})
 }
 
@@ -157,8 +158,8 @@ func runValidatorTable(t *testing.T, fn func(string) error, kind string) {
 // A scan of the directory is the cheapest way to verify the cleanup path.
 func TestStore_AtomicWrite(t *testing.T) {
 	dir := t.TempDir()
-	s := &Store{Aliases: map[string]Alias{"a": {Path: "C:/a"}}}
-	if err := SaveStore(dir, s); err != nil {
+	s := &store.Store{Aliases: map[string]store.Alias{"a": {Path: "C:/a"}}}
+	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	entries, err := os.ReadDir(dir)
@@ -172,7 +173,7 @@ func TestStore_AtomicWrite(t *testing.T) {
 		}
 	}
 	// And the canonical file should exist.
-	if _, err := os.Stat(filepath.Join(dir, "aliases.toml")); err != nil {
+	if _, err := os.Stat(store.AliasesPath(dir)); err != nil {
 		t.Errorf("aliases.toml not present after save: %v", err)
 	}
 }

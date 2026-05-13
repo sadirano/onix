@@ -145,6 +145,35 @@ Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The include
 
 This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, sub-alias subdir shortcuts from `segments.toml`, and cross-platform tab completion. Sub-alias context resolvers (env/cmd/file segments with templates), search shortcuts (`sg`, `ff`) as first-party features, and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
 
+## Architecture
+
+Onix is designed for extreme performance on the hot path (`resolve`) while maintaining a clean, modular structure for management commands.
+
+```mermaid
+graph TD
+    CLI[CLI / main.go] --> Commands[commands.go]
+    CLI --> FastPath[fastresolve.go]
+    
+    Commands --> Store[internal/store]
+    Commands --> Config[internal/config]
+    Commands --> Plugins[internal/plugins]
+    Commands --> Snippet[internal/snippet]
+    
+    FastPath --> Store
+    FastPath --> Segments[internal/segments]
+    
+    Snippet --> Config
+    Snippet --> Plugins
+```
+
+### Core Packages
+
+- **`internal/store`**: Manages `aliases.toml`, the primary database of name-to-path mappings. Includes atomic write logic and name validation.
+- **`internal/segments`**: Handles `@`-segment resolution and global subdirectory mappings in `segments.toml`.
+- **`internal/config`**: Manages `config.toml`, where users define custom action wrappers with template substitution.
+- **`internal/plugins`**: Handles external plugin installation, verification (SHA pinning), and execution environment.
+- **`internal/snippet`**: Generates the PowerShell and Bash/Zsh glue code that integrates Onix into your shell.
+
 ## License
 
 MIT.

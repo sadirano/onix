@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+	"github.com/sadirano/onix/internal/plugins"
 )
 
 // gitClone clones repo into dir. `repo` may be:
@@ -51,7 +52,7 @@ func resolveRepoURL(repo string) string {
 	if strings.HasPrefix(r, "/") || strings.HasPrefix(r, `\\`) {
 		return r
 	}
-	return "https://github.com/" + normalizeRepo(r) + ".git"
+	return "https://github.com/" + plugins.NormalizeRepo(r) + ".git"
 }
 
 // gitFetch updates an existing checkout. We do a deep-ish fetch (50
@@ -144,7 +145,7 @@ func buildPlugin(srcDir, binaryName string) error {
 // once entries are cached into our own plugins.toml we don't reread the
 // plugin's manifest.
 type pluginManifest struct {
-	Entries []PluginEntry `toml:"entry"`
+	Entries []plugins.PluginEntry `toml:"entry"`
 }
 
 // readPluginManifest loads a plugin's onix.toml when present. Missing
@@ -152,7 +153,7 @@ type pluginManifest struct {
 // itself is the wrapper). Bad TOML is a real error: the plugin author
 // shipped something we can't parse, and we'd rather fail install than
 // silently install with a broken entry list.
-func readPluginManifest(srcDir string) ([]PluginEntry, error) {
+func readPluginManifest(srcDir string) ([]plugins.PluginEntry, error) {
 	p := filepath.Join(srcDir, "onix.toml")
 	data, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
@@ -172,7 +173,7 @@ func readPluginManifest(srcDir string) ([]PluginEntry, error) {
 // true when the user confirms; false when they decline or hit Ctrl+C.
 // We accept `--yes` from the caller to skip this entirely — that's the
 // path automation should take.
-func confirmInstall(repo, name, sha, message string, entries []PluginEntry, unpinned bool) bool {
+func confirmInstall(repo, name, sha, message string, entries []plugins.PluginEntry, unpinned bool) bool {
 	fmt.Println()
 	fmt.Printf("  repo:    https://github.com/%s\n", repo)
 	fmt.Printf("  wrapper: %s\n", name)

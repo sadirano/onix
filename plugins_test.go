@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sadirano/onix/internal/config"
+	"github.com/sadirano/onix/internal/plugins"
 )
 
 // TestPlugins_RoundTrip writes a plugins.toml by hand (so we exercise the
@@ -35,7 +38,7 @@ cmd  = "t-stop"
 	if err := os.WriteFile(filepath.Join(dir, "plugins.toml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pf, err := LoadPlugins(dir)
+	pf, err := plugins.LoadPlugins(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -60,10 +63,10 @@ cmd  = "t-stop"
 	}
 
 	// Save round-trip — the rewritten file must reload to the same shape.
-	if err := SavePlugins(dir, pf); err != nil {
+	if err := plugins.SavePlugins(dir, pf); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	pf2, err := LoadPlugins(dir)
+	pf2, err := plugins.LoadPlugins(dir)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -77,7 +80,7 @@ cmd  = "t-stop"
 
 // TestPlugins_LoadMissingReturnsEmpty is the first-run path.
 func TestPlugins_LoadMissingReturnsEmpty(t *testing.T) {
-	pf, err := LoadPlugins(t.TempDir())
+	pf, err := plugins.LoadPlugins(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,26 +93,26 @@ func TestPlugins_LoadMissingReturnsEmpty(t *testing.T) {
 // wrapper names cannot shadow built-ins, custom actions, or each other.
 // Each subtest is one collision shape we want to surface clearly.
 func TestValidatePlugins_Collisions(t *testing.T) {
-	actions := []Action{{Name: "test", Exec: "go", Args: []string{"test"}}}
+	actions := []config.Action{{Name: "test", Exec: "go", Args: []string{"test"}}}
 
 	tests := []struct {
 		name    string
-		plugins []Plugin
+		plugins []plugins.Plugin
 		want    string // substring expected in error
 	}{
 		{
 			name:    "shadows builtin o",
-			plugins: []Plugin{{Name: "o", Repo: "x/o", SHA: "abc"}},
+			plugins: []plugins.Plugin{{Name: "o", Repo: "x/o", SHA: "abc"}},
 			want:    "builtin",
 		},
 		{
 			name:    "shadows custom action test",
-			plugins: []Plugin{{Name: "test", Repo: "x/y", SHA: "abc"}},
+			plugins: []plugins.Plugin{{Name: "test", Repo: "x/y", SHA: "abc"}},
 			want:    "action:test",
 		},
 		{
 			name: "duplicate plugin name",
-			plugins: []Plugin{
+			plugins: []plugins.Plugin{
 				{Name: "tts", Repo: "x/a", SHA: "abc"},
 				{Name: "tts", Repo: "x/b", SHA: "def"},
 			},
@@ -117,26 +120,26 @@ func TestValidatePlugins_Collisions(t *testing.T) {
 		},
 		{
 			name: "entry collides with builtin",
-			plugins: []Plugin{{
+			plugins: []plugins.Plugin{{
 				Name: "timer", Repo: "x/t", SHA: "abc",
-				Entries: []PluginEntry{{Name: "r"}}, // r is built-in
+				Entries: []plugins.PluginEntry{{Name: "r"}}, // r is built-in
 			}},
 			want: "builtin",
 		},
 		{
 			name: "missing sha without unpinned",
-			plugins: []Plugin{{Name: "p", Repo: "x/p"}},
+			plugins: []plugins.Plugin{{Name: "p", Repo: "x/p"}},
 			want:   "sha is required",
 		},
 		{
 			name:    "bad name characters",
-			plugins: []Plugin{{Name: "bad name", Repo: "x/y", SHA: "abc"}},
+			plugins: []plugins.Plugin{{Name: "bad name", Repo: "x/y", SHA: "abc"}},
 			want:    "name must be",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validatePlugins(&PluginsFile{Plugins: tc.plugins}, actions)
+			err := plugins.ValidatePlugins(&plugins.PluginsFile{Plugins: tc.plugins}, actions)
 			if err == nil {
 				t.Fatalf("want error containing %q, got nil", tc.want)
 			}
@@ -150,15 +153,15 @@ func TestValidatePlugins_Collisions(t *testing.T) {
 // TestValidatePlugins_HappyPath covers the case the smoke script will hit:
 // a real plugin definition with a SHA, no entries, and no collisions.
 func TestValidatePlugins_HappyPath(t *testing.T) {
-	pf := &PluginsFile{Plugins: []Plugin{
+	pf := &plugins.PluginsFile{Plugins: []plugins.Plugin{
 		{Name: "tts", Repo: "sadirano/onix-tts", SHA: "abc123"},
 		{Name: "timer", Repo: "sadirano/onix-timer", SHA: "def456",
-			Entries: []PluginEntry{
+			Entries: []plugins.PluginEntry{
 				{Name: "start", Cmd: "t-start"},
 				{Name: "stop", Cmd: "t-stop"},
 			}},
 	}}
-	if err := validatePlugins(pf, nil); err != nil {
+	if err := plugins.ValidatePlugins(pf, nil); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -174,7 +177,7 @@ func TestDefaultWrapperName(t *testing.T) {
 		"github.com/x/onix-anything":  "anything",
 	}
 	for in, want := range cases {
-		if got := defaultWrapperName(in); got != want {
+		if got := plugins.DefaultWrapperName(in); got != want {
 			t.Errorf("defaultWrapperName(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -183,7 +186,7 @@ func TestDefaultWrapperName(t *testing.T) {
 // TestPluginBinaryPath asserts the layout we promise: plugins live under
 // home/plugins/<user>/<repo>/<basename>.exe.
 func TestPluginBinaryPath(t *testing.T) {
-	got := pluginBinaryPath("C:/home", "sadirano/onix-tts")
+	got := plugins.BinaryPath("C:/home", "sadirano/onix-tts")
 	want := filepath.Join("C:/home", "plugins", "sadirano", "onix-tts", "onix-tts.exe")
 	if got != want {
 		t.Errorf("pluginBinaryPath = %q, want %q", got, want)

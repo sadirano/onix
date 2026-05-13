@@ -33,28 +33,6 @@ func resolveHome(override string) (string, error) {
 	return filepath.Join(home, ".onix"), nil
 }
 
-// aliasesPath returns ~/.onix/aliases.toml.
-func aliasesPath(home string) string {
-	return filepath.Join(home, "aliases.toml")
-}
-
-// shellPath returns ~/.onix/shell/onix.ps1 (the PowerShell integration snippet).
-func shellPath(home string) string {
-	return filepath.Join(home, "shell", "onix.ps1")
-}
-
-// bashShellPath returns ~/.onix/shell/onix.sh (the Bash/Zsh integration snippet).
-func bashShellPath(home string) string {
-	return filepath.Join(home, "shell", "onix.sh")
-}
-
-// configPath returns ~/.onix/config.toml — the file that holds [[actions]]
-// and (eventually) other user-tunable settings. Aliases live separately in
-// aliases.toml so the hot path doesn't have to skip past action declarations.
-func configPath(home string) string {
-	return filepath.Join(home, "config.toml")
-}
-
 // expandTilde expands a leading ~ to the user home directory.
 // Pure cosmetic helper — only the first character is examined.
 func expandTilde(p string) string {

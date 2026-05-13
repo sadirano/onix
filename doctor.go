@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +9,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/sadirano/onix/internal/config"
+	"github.com/sadirano/onix/internal/plugins"
+	"github.com/sadirano/onix/internal/segments"
+	"github.com/sadirano/onix/internal/snippet"
+	"github.com/sadirano/onix/internal/store"
 )
 
 // DoctorCmd runs a quick health check and prints a short report. The goal
@@ -20,9 +27,9 @@ import (
 type DoctorCmd struct{}
 
 type checkResult struct {
-	name   string
-	status string // "ok" | "warn" | "err"
-	detail string
+	Name   string `json:"name"`
+	Status string `json:"status"` // "ok" | "warn" | "err"
+	Detail string `json:"detail"`
 }
 
 func (c *DoctorCmd) Run(e *env) error {
@@ -44,21 +51,27 @@ func (c *DoctorCmd) Run(e *env) error {
 		checks = append(checks, checkBashLikeProfile(e.Home))
 	}
 
+	if e.JSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(checks)
+	}
+
 	var hadErr bool
 	for _, r := range checks {
-		if r.name == "" {
+		if r.Name == "" {
 			// Empty check results are signals from helpers that "this
 			// case is already covered upstream — please skip me." Saves
 			// callers from writing if/else around every conditional check.
 			continue
 		}
-		switch r.status {
+		switch r.Status {
 		case "ok":
-			fmt.Printf("  ok   %-22s  %s\n", r.name, r.detail)
+			fmt.Printf("  ok   %-22s  %s\n", r.Name, r.Detail)
 		case "warn":
-			fmt.Printf("  warn %-22s  %s\n", r.name, r.detail)
+			fmt.Printf("  warn %-22s  %s\n", r.Name, r.Detail)
 		case "err":
-			fmt.Printf("  err  %-22s  %s\n", r.name, r.detail)
+			fmt.Printf("  err  %-22s  %s\n", r.Name, r.Detail)
 			hadErr = true
 		}
 	}
@@ -80,11 +93,11 @@ func checkHome(home string) checkResult {
 }
 
 func checkAliasesFile(home string) checkResult {
-	p := aliasesPath(home)
+	p := store.AliasesPath(home)
 	if _, err := os.Stat(p); err != nil {
 		return checkResult{"aliases.toml", "warn", fmt.Sprintf("%s missing — run: onix init", p)}
 	}
-	if _, err := LoadStore(home); err != nil {
+	if _, err := store.LoadStore(home); err != nil {
 		return checkResult{"aliases.toml", "err", err.Error()}
 	}
 	return checkResult{"aliases.toml", "ok", p}
@@ -95,14 +108,14 @@ func checkAliasesFile(home string) checkResult {
 // Bad TOML is a real error since a syntax problem would silently drop
 // subdir overrides on every `<seg>@<alias>` resolve.
 func checkSegmentsFile(home string) checkResult {
-	p := segmentsConfigPath(home)
+	p := segments.Path(home)
 	if _, err := os.Stat(p); err != nil {
 		if os.IsNotExist(err) {
 			return checkResult{"segments.toml", "ok", "absent (no global subdirs)"}
 		}
 		return checkResult{"segments.toml", "warn", fmt.Sprintf("%s: %v", p, err)}
 	}
-	sf, err := LoadSegments(home)
+	sf, err := segments.LoadSegments(home)
 	if err != nil {
 		return checkResult{"segments.toml", "err", err.Error()}
 	}
@@ -117,23 +130,23 @@ func checkSegmentsFile(home string) checkResult {
 // declared). validation runs against the current config.toml actions so
 // collisions surface in doctor instead of waiting for the next install.
 func checkPluginsFile(home string) checkResult {
-	p := pluginsConfigPath(home)
+	p := plugins.ConfigPath(home)
 	if _, err := os.Stat(p); err != nil {
 		if os.IsNotExist(err) {
 			return checkResult{"plugins.toml", "ok", "absent (no plugins installed)"}
 		}
 		return checkResult{"plugins.toml", "warn", fmt.Sprintf("%s: %v", p, err)}
 	}
-	pf, err := LoadPlugins(home)
+	pf, err := plugins.LoadPlugins(home)
 	if err != nil {
 		return checkResult{"plugins.toml", "err", err.Error()}
 	}
-	cfg, _ := LoadConfig(home)
-	var actions []Action
+	cfg, _ := config.LoadConfig(home)
+	var actions []config.Action
 	if cfg != nil {
 		actions = cfg.Actions
 	}
-	if err := validatePlugins(pf, actions); err != nil {
+	if err := plugins.ValidatePlugins(pf, actions); err != nil {
 		return checkResult{"plugins.toml", "err", err.Error()}
 	}
 	if len(pf.Plugins) == 0 {
@@ -148,14 +161,14 @@ func checkPluginsFile(home string) checkResult {
 // Returns nil when no plugins are declared so doctor doesn't pad the
 // output with empty entries.
 func checkInstalledPlugins(home string) []checkResult {
-	pf, err := LoadPlugins(home)
+	pf, err := plugins.LoadPlugins(home)
 	if err != nil || len(pf.Plugins) == 0 {
 		return nil
 	}
 	out := make([]checkResult, 0, len(pf.Plugins))
 	for _, p := range pf.Plugins {
 		label := "plugin:" + p.Name
-		bin := pluginBinaryPath(home, p.Repo)
+		bin := plugins.BinaryPath(home, p.Repo)
 		if _, err := os.Stat(bin); err != nil {
 			out = append(out, checkResult{label, "err",
 				fmt.Sprintf("binary missing at %s — run: onix plugin update %s", bin, p.Name)})
@@ -185,14 +198,14 @@ func shortSHA(s string) string {
 // actions are declared. A missing file is fine (no custom actions); a
 // parse error is real — that's what stops `onix exec` from working.
 func checkConfigFile(home string) checkResult {
-	p := configPath(home)
+	p := config.Path(home)
 	if _, err := os.Stat(p); err != nil {
 		if os.IsNotExist(err) {
 			return checkResult{"config.toml", "ok", "absent (no custom actions)"}
 		}
 		return checkResult{"config.toml", "warn", fmt.Sprintf("%s: %v", p, err)}
 	}
-	cfg, err := LoadConfig(home)
+	cfg, err := config.LoadConfig(home)
 	if err != nil {
 		return checkResult{"config.toml", "err", err.Error()}
 	}
@@ -203,9 +216,9 @@ func checkConfigFile(home string) checkResult {
 }
 
 func checkShellSnippet(home string) checkResult {
-	p := shellPath(home)
+	p := snippet.PwshPath(home)
 	if runtime.GOOS != "windows" {
-		p = bashShellPath(home)
+		p = snippet.BashPath(home)
 	}
 	if _, err := os.Stat(p); err != nil {
 		return checkResult{"shell snippet", "warn", fmt.Sprintf("%s missing — run: onix init", p)}
@@ -219,9 +232,9 @@ func checkShellSnippet(home string) checkResult {
 // fails with "term not recognised" — the right fix is `onix install-actions`
 // from the binary's new location.
 func checkSnippetPin(home string) checkResult {
-	p := shellPath(home)
+	p := snippet.PwshPath(home)
 	if runtime.GOOS != "windows" {
-		p = bashShellPath(home)
+		p = snippet.BashPath(home)
 	}
 	if _, err := os.Stat(p); err != nil {
 		// Snippet absence is already reported by checkShellSnippet; skip.
@@ -298,9 +311,9 @@ func checkPowerShellProfile(home string) checkResult {
 		}
 		return checkResult{"PowerShell $PROFILE", "warn", fmt.Sprintf("%s unreadable: %v", profile, err)}
 	}
-	if !strings.Contains(string(content), filepath.ToSlash(shellPath(home))) &&
-		!strings.Contains(string(content), shellPath(home)) {
-		return checkResult{"PowerShell $PROFILE", "warn", fmt.Sprintf("does not source %s — run: onix init", shellPath(home))}
+	if !strings.Contains(string(content), filepath.ToSlash(snippet.PwshPath(home))) &&
+		!strings.Contains(string(content), snippet.PwshPath(home)) {
+		return checkResult{"PowerShell $PROFILE", "warn", fmt.Sprintf("does not source %s — run: onix init", snippet.PwshPath(home))}
 	}
 	return checkResult{"PowerShell $PROFILE", "ok", profile}
 }
@@ -310,7 +323,7 @@ func checkBashLikeProfile(home string) checkResult {
 	if err != nil {
 		return checkResult{"Bash/Zsh profile", "warn", "could not determine home dir"}
 	}
-	snippet := bashShellPath(home)
+	snip := snippet.BashPath(home)
 	files := []string{".bashrc", ".zshrc"}
 	var found, sourced bool
 	for _, f := range files {
@@ -320,7 +333,7 @@ func checkBashLikeProfile(home string) checkResult {
 			continue
 		}
 		found = true
-		if strings.Contains(string(data), snippet) {
+		if strings.Contains(string(data), snip) {
 			sourced = true
 			break
 		}
@@ -329,7 +342,7 @@ func checkBashLikeProfile(home string) checkResult {
 		return checkResult{"Bash/Zsh profile", "warn", "neither .bashrc nor .zshrc found"}
 	}
 	if !sourced {
-		return checkResult{"Bash/Zsh profile", "warn", fmt.Sprintf("no .bashrc/.zshrc sources %s — run: onix init", snippet)}
+		return checkResult{"Bash/Zsh profile", "warn", fmt.Sprintf("no .bashrc/.zshrc sources %s — run: onix init", snip)}
 	}
 	return checkResult{"Bash/Zsh profile", "ok", "sourced in .bashrc or .zshrc"}
 }
@@ -353,7 +366,7 @@ func extractSnippetPin(home string) string {
 // the prefix is exact, single quotes are literal, and `''` is the only
 // possible quote escape — so a small string search is fine here.
 func extractPwshSnippetPin(home string) string {
-	data, err := os.ReadFile(shellPath(home))
+	data, err := os.ReadFile(snippet.PwshPath(home))
 	if err != nil {
 		return ""
 	}
@@ -376,7 +389,7 @@ func extractPwshSnippetPin(home string) string {
 
 // extractBashSnippetPin reads export ONIX_EXE='<path>' from onix.sh.
 func extractBashSnippetPin(home string) string {
-	data, err := os.ReadFile(bashShellPath(home))
+	data, err := os.ReadFile(snippet.BashPath(home))
 	if err != nil {
 		return ""
 	}

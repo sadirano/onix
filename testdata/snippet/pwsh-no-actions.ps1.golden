@@ -1,7 +1,7 @@
 # onix shell integration (generated; do not edit — run 'onix install-actions')
-# Source from $PROFILE: . 'C:\Users\sadirano\AppData\Local\Temp\TestWritePwshShellSnippet_NoActions1623820606\001\shell\onix.ps1'
+# Source from $PROFILE: . 'C:\Users\sadirano\AppData\Local\Temp\TestWritePwshShellSnippet_NoActions2313625892\001\shell\onix.ps1'
 
-$global:onixExe = 'C:\Users\sadirano\AppData\Local\Temp\go-build2116626233\b001\onix.test.exe'
+$global:onixExe = 'C:\Users\sadirano\AppData\Local\Temp\go-build4049866268\b001\onix.test.exe'
 
 $onixAliasCompleter = {
     param($wordToComplete, $commandAst, $cursorPosition)
@@ -34,25 +34,21 @@ function global:o {
         Set-Location -LiteralPath $resolved
     }
 }
-
 function global:n {
     [CmdletBinding()]
     param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
     & $global:onixExe edit $Alias
 }
-
 function global:s {
     [CmdletBinding()]
     param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
     & $global:onixExe explore $Alias
 }
-
 function global:y {
     [CmdletBinding()]
     param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
     & $global:onixExe yank $Alias
 }
-
 function global:r {
     [CmdletBinding()]
     param(
@@ -62,4 +58,4 @@ function global:r {
     & $global:onixExe run $Alias -- @Rest
 }
 
-Register-ArgumentCompleter -CommandName o,n,s,y,r -ParameterName Alias -ScriptBlock $onixAliasCompleter
+Register-ArgumentCompleter -CommandName s,y,r,o,n -ParameterName Alias -ScriptBlock $onixAliasCompleter

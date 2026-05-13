@@ -2,9 +2,10 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sadirano/onix/internal/store"
 )
 
 // TestFastResolve_AgreesWithStore is the canonical contract test for the
@@ -14,20 +15,20 @@ import (
 // comparing the results.
 func TestFastResolve_AgreesWithStore(t *testing.T) {
 	dir := t.TempDir()
-	s := &Store{Aliases: map[string]Alias{}}
+	s := &store.Store{Aliases: map[string]store.Alias{}}
 	cases := map[string]string{
 		"acme":  "C:/projects/acme",
 		"sms":   "D:/work/sms",
 		"funky": "/var/lib/some path",
 	}
 	for k, v := range cases {
-		s.Set(k, Alias{Path: v})
+		s.Set(k, store.Alias{Path: v})
 	}
-	if err := SaveStore(dir, s); err != nil {
+	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "aliases.toml"))
+	data, err := os.ReadFile(store.AliasesPath(dir))
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -49,11 +50,11 @@ func TestFastResolve_AgreesWithStore(t *testing.T) {
 // path.
 func TestFastResolve_MissingFallsThrough(t *testing.T) {
 	dir := t.TempDir()
-	s := &Store{Aliases: map[string]Alias{"a": {Path: "C:/a"}}}
-	if err := SaveStore(dir, s); err != nil {
+	s := &store.Store{Aliases: map[string]store.Alias{"a": {Path: "C:/a"}}}
+	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, "aliases.toml"))
+	data, _ := os.ReadFile(store.AliasesPath(dir))
 	if _, ok := scanForAlias(data, "missing"); ok {
 		t.Error("scanForAlias claimed to find an absent alias")
 	}
@@ -66,11 +67,11 @@ func TestFastResolve_MissingFallsThrough(t *testing.T) {
 func TestFastResolve_HandlesQuotes(t *testing.T) {
 	const path = `C:/weird "name"/proj`
 	dir := t.TempDir()
-	s := &Store{Aliases: map[string]Alias{"q": {Path: path}}}
-	if err := SaveStore(dir, s); err != nil {
+	s := &store.Store{Aliases: map[string]store.Alias{"q": {Path: path}}}
+	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, "aliases.toml"))
+	data, _ := os.ReadFile(store.AliasesPath(dir))
 	got, ok := scanForAlias(data, "q")
 	if !ok || got != path {
 		t.Errorf("scan(q) = %q,%v want %q,true", got, ok, path)
@@ -99,7 +100,7 @@ func TestFastResolve_StopsAtNextSection(t *testing.T) {
 func BenchmarkFastResolve(b *testing.B) {
 	dir := b.TempDir()
 	seedStore(b, dir, 200)
-	data, err := os.ReadFile(filepath.Join(dir, "aliases.toml"))
+	data, err := os.ReadFile(store.AliasesPath(dir))
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/sadirano/onix/internal/segments"
+	"github.com/sadirano/onix/internal/store"
 )
 
 // fastListNames prints alias names from aliases.toml, one per line, in
@@ -16,7 +19,7 @@ import (
 // malformed the user will hit a real error on the next `onix resolve` and
 // we'd rather not spam completion output with parse failures.
 func fastListNames(home string) error {
-	data, err := os.ReadFile(aliasesPath(home))
+	data, err := os.ReadFile(store.AliasesPath(home))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // empty list is a valid completion result
@@ -74,7 +77,7 @@ func fastResolve(home, name string) error {
 		return resolveSegmented(home, name)
 	}
 
-	data, err := os.ReadFile(aliasesPath(home))
+	data, err := os.ReadFile(store.AliasesPath(home))
 	if err != nil {
 		// Match the error shape from the slow path so the user sees the
 		// same message regardless of which code path they hit.
@@ -98,13 +101,13 @@ func fastResolve(home, name string) error {
 	// Either the alias isn't present or the file uses a TOML construct
 	// the fast scanner doesn't handle. Fall back to the full loader so
 	// hand-edited exotic syntax still works.
-	s, err := LoadStore(home)
+	s, err := store.LoadStore(home)
 	if err != nil {
 		return err
 	}
 	a, ok := s.Lookup(name)
 	if !ok {
-		if err := ValidateAliasName(name); err != nil {
+		if err := store.ValidateAliasName(name); err != nil {
 			return err
 		}
 		dest := promptDestination(name)
@@ -115,9 +118,9 @@ func fastResolve(home, name string) error {
 		if err != nil {
 			return fmt.Errorf("absolutise %q: %w", dest, err)
 		}
-		a = Alias{Path: filepath.ToSlash(abs)}
+		a = store.Alias{Path: filepath.ToSlash(abs)}
 		s.Set(name, a)
-		if err := SaveStore(home, s); err != nil {
+		if err := store.SaveStore(home, s); err != nil {
 			return err
 		}
 		if err := os.MkdirAll(abs, 0o755); err != nil {
@@ -159,14 +162,14 @@ func resolveSegmented(home, input string) error {
 // Used by resolveAliasPath (which feeds the path to chdir/exec) so the
 // segment-walk logic doesn't live in two places.
 func resolveSegmentedToPath(home, input string) (string, error) {
-	segments, alias := ParseSegmentedAlias(input)
-	if len(segments) == 0 || alias == "" {
+	segs, alias := segments.ParseSegmentedAlias(input)
+	if len(segs) == 0 || alias == "" {
 		// Empty alias or no segments parsed — give a clear error rather
 		// than silently treating malformed input as a regular alias.
 		return "", fmt.Errorf("invalid segmented alias %q (usage: <seg>@[<seg>@...]<alias>)", input)
 	}
 
-	s, err := LoadStore(home)
+	s, err := store.LoadStore(home)
 	if err != nil {
 		return "", err
 	}
@@ -175,7 +178,7 @@ func resolveSegmentedToPath(home, input string) (string, error) {
 		return "", fmt.Errorf("unknown alias %q (run: onix list)", alias)
 	}
 
-	segFile, err := LoadSegments(home)
+	segFile, err := segments.LoadSegments(home)
 	if err != nil {
 		return "", err
 	}
@@ -184,8 +187,8 @@ func resolveSegmentedToPath(home, input string) (string, error) {
 	// disk; we keep it that way so we can hand the result to PowerShell's
 	// Set-Location without conversion).
 	target := a.Path
-	for i := len(segments) - 1; i >= 0; i-- {
-		part := ResolveSegment(segments[i], a.Subdirs, segFile.Subdirs)
+	for i := len(segs) - 1; i >= 0; i-- {
+		part := segments.ResolveSegment(segs[i], a.Subdirs, segFile.Subdirs)
 		// Use forward-slash joins so the printed output stays the same
 		// shape regardless of platform. filepath.FromSlash on the
 		// consumer side (or PowerShell's native handling) sorts out the
@@ -199,6 +202,7 @@ func resolveSegmentedToPath(home, input string) (string, error) {
 	}
 	return target, nil
 }
+
 
 // scanForAlias walks the file byte by byte looking for the section header
 // `[target]` (case-insensitive, no spaces, no quoted-key syntax) followed

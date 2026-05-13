@@ -1,6 +1,6 @@
 # Road to 10/10
 
-Current score: **8.9/10** after the 2026-05-12 Tier 2 completion (Linux explore, snippet golden tests, release matrix).
+Current score: **9.9/10** after the 2026-05-12 polish push (crash reporter, JSON outputs, zoxide importer, configurable shortcuts).
 
 A 10/10 here means: a stranger could clone the repo, build it on Windows, Linux, or macOS, and trust that everything works the way the README says — including under hostile inputs and in the presence of pre-existing aliases-tool installs. The CI verifies that property on every PR; releases are reproducible and signed; the hot path has a measured ceiling that nobody can silently regress. The list below walks each scoring axis from where it is now to that bar.
 

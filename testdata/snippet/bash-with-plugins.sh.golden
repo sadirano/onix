@@ -1,5 +1,22 @@
 # onix shell integration (generated; do not edit — run 'onix install-actions')
-export ONIX_EXE='C:\Users\sadirano\AppData\Local\Temp\go-build2116626233\b001\onix.test.exe'
+export ONIX_EXE='C:\Users\sadirano\AppData\Local\Temp\go-build4049866268\b001\onix.test.exe'
+
+if [ -n "$BASH_VERSION" ]; then
+    _onix_completer() {
+        local cur=${COMP_WORDS[COMP_CWORD]}
+        local names
+        mapfile -t names < <("$ONIX_EXE" list-names 2>/dev/null)
+        COMPREPLY=( $(compgen -W "${names[*]}" -- "$cur") )
+    }
+elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
+    _onix_zsh_completer() {
+        local line names=()
+        while IFS= read -r line; do
+            names+=("$line")
+        done < <("$ONIX_EXE" list-names 2>/dev/null)
+        compadd -- "${names[@]}"
+    }
+fi
 
 o() {
     if [ -z "$1" ]; then
@@ -18,7 +35,6 @@ o() {
         cd "$path"
     fi
 }
-
 n() { "$ONIX_EXE" edit "$1"; }
 s() { "$ONIX_EXE" explore "$1"; }
 y() { "$ONIX_EXE" yank "$1"; }
@@ -27,33 +43,6 @@ r() {
     shift
     "$ONIX_EXE" run "$alias" -- "$@"
 }
-
-# Tab completion. We read names one per line into an array rather than
-# relying on word-splitting on $(...), so aliases containing odd
-# characters (in practice ValidateAliasName rejects them, but defence in
-# depth is cheap) don't get split into multiple completion entries.
-# Zsh uses compdef, which requires the user to have called compinit in
-# .zshrc beforehand — we gate on its availability so users without
-# compinit just lose completion instead of seeing an error on every
-# shell start. The zsh body uses portable 'while read' rather than zsh
-# parameter flags so bash can parse the function definition at source
-# time even though bash never runs it.
-if [ -n "$BASH_VERSION" ]; then
-    _onix_completer() {
-        local cur=${COMP_WORDS[COMP_CWORD]}
-        local names
-        mapfile -t names < <("$ONIX_EXE" list-names 2>/dev/null)
-        COMPREPLY=( $(compgen -W "${names[*]}" -- "$cur") )
-    }
-elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
-    _onix_zsh_completer() {
-        local line names=()
-        while IFS= read -r line; do
-            names+=("$line")
-        done < <("$ONIX_EXE" list-names 2>/dev/null)
-        compadd -- "${names[@]}"
-    }
-fi
 
 tts() {
     local alias=$1

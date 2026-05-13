@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	rdebug "runtime/debug"
 )
@@ -16,8 +18,20 @@ var buildVersion = "dev"
 // if needed via the `key: value` convention.
 type VersionCmd struct{}
 
-func (c *VersionCmd) Run() error {
-	fmt.Printf("onix:    %s\n", resolveBuildVersion())
+func (c *VersionCmd) Run(e *env) error {
+	v := resolveBuildVersion()
+	if e.JSON {
+		res := struct {
+			Onix   string `json:"onix"`
+			Go     string `json:"go"`
+			OSArch string `json:"os_arch"`
+		}{v, runtime.Version(), fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(res)
+	}
+
+	fmt.Printf("onix:    %s\n", v)
 	fmt.Printf("go:      %s\n", runtime.Version())
 	fmt.Printf("os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	return nil
