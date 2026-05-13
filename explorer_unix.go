@@ -3,17 +3,23 @@
 package main
 
 import (
+	"fmt"
 	"os/exec"
 	"runtime"
 )
 
-// openInExplorer is a placeholder on non-Windows platforms. M1 is
-// Windows-first per the rework scope; Unix support lands in a later
-// milestone with xdg-open / open(1). We return a hard error rather than
-// silently no-op so anyone running this on Linux knows the action isn't
-// wired yet.
+// openInExplorer opens the target path in the system file manager.
+// On Linux we use xdg-open; on macOS we use open.
 func openInExplorer(target string) error {
+	bin := "xdg-open"
+	if runtime.GOOS == "darwin" {
+		bin = "open"
+	}
+
 	// We use Start() rather than Run() so onix doesn't block while the
 	// explorer window is open.
-	return exec.Command("xdg-open", target).Start()
+	if err := exec.Command(bin, target).Start(); err != nil {
+		return fmt.Errorf("%s %s: %w", bin, target, err)
+	}
+	return nil
 }

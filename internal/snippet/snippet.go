@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
@@ -254,7 +255,14 @@ func RegenerateShellSnippet(home string) error {
 	return WriteShellSnippet(home, cfg.Shortcuts, cfg.Actions, pf.Plugins)
 }
 
+var OnixExeOverride string
+
+// resolveOnixExe returns the path to the current onix binary.
+// Can be overridden by OnixExeOverride for stable tests.
 func resolveOnixExe() (string, error) {
+	if OnixExeOverride != "" {
+		return OnixExeOverride, nil
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("locate running binary: %w", err)
@@ -306,6 +314,7 @@ func writeCompleterRegistration(b *strings.Builder, shortcuts map[string]string,
 			names = append(names, e.EffectiveCmd())
 		}
 	}
+	slices.Sort(names)
 	fmt.Fprintf(b, "Register-ArgumentCompleter -CommandName %s -ParameterName Alias -ScriptBlock $onixAliasCompleter\n",
 		strings.Join(names, ","))
 }
@@ -344,6 +353,7 @@ func writeCompleterRegistrationBash(b *strings.Builder, shortcuts map[string]str
 			names = append(names, e.EffectiveCmd())
 		}
 	}
+	slices.Sort(names)
 	fmt.Fprintf(b, `if [ -n "$BASH_VERSION" ]; then
     complete -F _onix_completer %s
 elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then

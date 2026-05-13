@@ -1,7 +1,7 @@
 # onix shell integration (generated; do not edit — run 'onix install-actions')
-# Source from $PROFILE: . 'C:\Users\sadirano\AppData\Local\Temp\TestWritePwshShellSnippet_WithActions1532147208\001\shell\onix.ps1'
+# Source from $PROFILE: . '/ONIX_HOME\shell\onix.ps1'
 
-$global:onixExe = 'C:\Users\sadirano\AppData\Local\Temp\go-build4049866268\b001\onix.test.exe'
+$global:onixExe = '/usr/local/bin/onix'
 
 $onixAliasCompleter = {
     param($wordToComplete, $commandAst, $cursorPosition)
@@ -76,4 +76,4 @@ function global:pr {
     & $global:onixExe exec pr $Alias -- @Rest
 }
 
-Register-ArgumentCompleter -CommandName r,o,n,s,y,test,pr -ParameterName Alias -ScriptBlock $onixAliasCompleter
+Register-ArgumentCompleter -CommandName n,o,pr,r,s,test,y -ParameterName Alias -ScriptBlock $onixAliasCompleter

@@ -9,12 +9,12 @@ Fast directory alias resolver for Windows PowerShell and Linux (Bash/Zsh). Type 
 go install github.com/sadirano/onix@latest
 onix init
 
-# On Linux (Bash/Zsh)
+# On Linux or macOS (Bash/Zsh)
 go install github.com/sadirano/onix@latest
 onix init
 ```
 
-`onix init` creates `~/.onix/`, writes a shell snippet to `~/.onix/shell/`, and sources it from your shell profile (`$PROFILE` on Windows, `.bashrc` or `.zshrc` on Linux). Restart your shell (or source your profile) once and the short commands below are live.
+`onix init` creates `~/.onix/`, writes a shell snippet to `~/.onix/shell/`, and sources it from your shell profile (`$PROFILE` on Windows, `.bashrc`, `.zshrc`, or `.profile` on Unix-likes). Restart your shell (or source your profile) once and the short commands below are live.
 
 ## Use
 
@@ -143,7 +143,11 @@ Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The include
 
 ## Status and scope
 
-This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, sub-alias subdir shortcuts from `segments.toml`, and cross-platform tab completion. Sub-alias context resolvers (env/cmd/file segments with templates), search shortcuts (`sg`, `ff`) as first-party features, and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
+This release covers Windows (PowerShell), Linux (Bash/Zsh), and macOS (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, sub-alias subdir shortcuts from `segments.toml`, and cross-platform tab completion. 
+
+Note: macOS support is provided "blind" (untested by the primary maintainer) and relies on community feedback and PRs for platform-specific bug fixes.
+
+Sub-alias context resolvers (env/cmd/file segments with templates), search shortcuts (`sg`, `ff`) as first-party features, and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
 
 ## Architecture
 

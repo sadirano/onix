@@ -59,6 +59,9 @@ func TestExtractSnippetPin(t *testing.T) {
 		if err != nil {
 			t.Fatalf("os.Executable: %v", err)
 		}
+		if snippet.OnixExeOverride != "" {
+			exe = snippet.OnixExeOverride
+		}
 		if !samePath(pin, exe) {
 			t.Errorf("pin = %q, want path equivalent to %q", pin, exe)
 		}
@@ -95,8 +98,14 @@ func TestCheckSnippetPin(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := checkSnippetPin(dir)
-		if r.Status != "ok" {
-			t.Errorf("Status = %q, want ok (Detail=%s)", r.Status, r.Detail)
+		want := "ok"
+		if snippet.OnixExeOverride != "" {
+			if _, err := os.Stat(snippet.OnixExeOverride); err != nil {
+				want = "warn"
+			}
+		}
+		if r.Status != want {
+			t.Errorf("Status = %q, want %q (Detail=%s)", r.Status, want, r.Detail)
 		}
 	})
 

@@ -3,14 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/atotto/clipboard"
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/plugins"
 	"github.com/sadirano/onix/internal/snippet"
@@ -591,31 +590,8 @@ func resolveEditor() string {
 	return "nvim"
 }
 
-// copyToClipboard pipes s into the platform clipboard utility. On Windows we
-// use built-in clip.exe; Unix support comes later (pbcopy / xclip / wl-copy).
+// copyToClipboard writes s to the system clipboard. We use atotto/clipboard
+// so it works natively on Windows, macOS, and Linux (via xclip/xsel).
 func copyToClipboard(s string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("clip.exe")
-	default:
-		return fmt.Errorf("clipboard not supported on %s yet", runtime.GOOS)
-	}
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	if _, err := io.WriteString(stdin, s); err != nil {
-		_ = stdin.Close()
-		_ = cmd.Wait()
-		return err
-	}
-	if err := stdin.Close(); err != nil {
-		_ = cmd.Wait()
-		return err
-	}
-	return cmd.Wait()
+	return clipboard.WriteAll(s)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,6 +17,13 @@ import (
 var onixExe string
 
 func TestMain(m *testing.M) {
+	flag.Parse()
+
+	// Stabilize the binary path for golden file tests. Without this,
+	// os.Executable() returns a random /tmp/go-build... path that
+	// changes on every run.
+	snippet.OnixExeOverride = "/usr/local/bin/onix"
+
 	tmp, err := os.MkdirTemp("", "onix-e2e-build-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)

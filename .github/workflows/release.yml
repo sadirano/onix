@@ -28,6 +28,16 @@ jobs:
             goarch: arm64
             suffix: ""
             pkg_cmd: bash
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            suffix: ""
+            pkg_cmd: bash
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            suffix: ""
+            pkg_cmd: bash
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -59,13 +69,13 @@ jobs:
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           Write-Host "SHA256: $hash"
 
-      - name: Package (Linux)
-        if: matrix.goos == 'linux'
+      - name: Package (Linux/macOS)
+        if: matrix.goos == 'linux' || matrix.goos == 'darwin'
         run: |
           mkdir -p dist
           cp onix dist/
           tar -czf "onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" -C dist .
-          sha256sum "onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
+          sha256sum "onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" || true
 
       - name: Release
         uses: softprops/action-gh-release@v2

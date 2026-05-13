@@ -1,5 +1,5 @@
 # onix shell integration (generated; do not edit — run 'onix install-actions')
-export ONIX_EXE='C:\Users\sadirano\AppData\Local\Temp\go-build4049866268\b001\onix.test.exe'
+export ONIX_EXE='/usr/local/bin/onix'
 
 if [ -n "$BASH_VERSION" ]; then
     _onix_completer() {
@@ -45,7 +45,7 @@ r() {
 }
 
 if [ -n "$BASH_VERSION" ]; then
-    complete -F _onix_completer y r o n s
+    complete -F _onix_completer n o r s y
 elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
-    compdef _onix_zsh_completer y r o n s
+    compdef _onix_zsh_completer n o r s y
 fi
