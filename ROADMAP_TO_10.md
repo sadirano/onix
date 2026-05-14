@@ -1,6 +1,8 @@
 # Road to 10/10
 
-Current score: **9.9/10** after the 2026-05-12 polish push (crash reporter, JSON outputs, zoxide importer, configurable shortcuts).
+Current score: **6.2/10** (verified 2026-05-14 by running `go test ./...` and `go test -coverprofile=coverage.out ./...`).
+
+Previous self-reported score was 9.9/10, but actual test run shows 4 failing tests, 8.7% total statement coverage, and 0.0% coverage across all five `internal/` packages. The items below are ordered by urgency: fix the broken tests first, then pursue the quality improvements.
 
 A 10/10 here means: a stranger could clone the repo, build it on Windows, Linux, or macOS, and trust that everything works the way the README says — including under hostile inputs and in the presence of pre-existing aliases-tool installs. The CI verifies that property on every PR; releases are reproducible and signed; the hot path has a measured ceiling that nobody can silently regress. The list below walks each scoring axis from where it is now to that bar.
 
@@ -54,19 +56,37 @@ Today the plugin contract is described in `MODULE_PATTERN.md` as a set of enviro
 
 ---
 
-## Test suite (7 → 10)
+## Test suite (3 → 10)
+
+> **Blocker:** `go test ./...` currently fails with 4 errors and reports 8.7% total coverage. Fix the three items marked `[BUG]` before anything else — they break CI on every Linux and macOS runner.
+
+### `[BUG][S]` Fix PowerShell golden-file path separator (3 tests failing on Linux/macOS)
+
+`testdata/*.ps1.golden` files contain `'/ONIX_HOME\shell\onix.ps1'` (Windows `\`), but `internal/snippet` emits `filepath.Join` output, which uses `/` on Linux/macOS. This mismatch fails `TestWritePwshShellSnippet_NoActions`, `_WithActions`, and `_WithPlugins` on every non-Windows CI run.
+
+Fix: normalize the path separator in the generated header comment to always use `/` (forward slash is valid in PowerShell paths), then regenerate the golden files with `go test ./... -update`. Alternatively, strip the separator from the golden comparison by replacing the home-placeholder line before diffing.
+
+### `[BUG][S]` Fix E2E Bash test hardcoded binary path (1 test failing everywhere)
+
+`TestE2E_ShellIntegration_Bash` in `e2e_test.go:206` sources a shell snippet that hardcodes `/usr/local/bin/onix`. The binary is not installed there in CI or in a fresh checkout. All other E2E tests use the `OnixExeOverride` mechanism to point at the freshly-built test binary — apply the same pattern here.
+
+### `[BUG][M]` Add dedicated unit tests inside each `internal/` package
+
+All test files (`store_test.go`, `segments_test.go`, `plugins_test.go`, `config_test.go`, `init_test.go`) sit in the root package. When `go test -coverprofile` measures each package independently, all five `internal/` packages (`store`, `segments`, `snippet`, `plugins`, `config`) report **0.0% coverage** — none of their code is counted as tested, even though the root tests exercise it indirectly.
+
+Create `internal/store/store_test.go`, `internal/segments/segments_test.go`, `internal/snippet/snippet_test.go`, `internal/plugins/plugins_test.go`, and `internal/config/config_test.go`. Move the relevant test functions into the package they actually test. This is the single biggest lever on the 8.7% coverage figure.
 
 ### `[S]` Verify everything compiles and passes
 
-The minimum bar before pushing for 10/10: `go vet ./... && go test ./... && go test -bench=. -benchmem -run=^$ ./...` on Windows, Linux, and macOS. Currently couldn't run in the sandbox.
+The minimum bar before pushing for 10/10: `go vet ./... && go test ./... && go test -bench=. -benchmem -run=^$ ./...` on Windows, Linux, and macOS. The three `[BUG]` items above must be resolved first.
 
 ### `[M]` Golden-file tests for the shell snippets
 
-The PowerShell and Bash snippet bodies are emitted from templates plus generated wrappers. Instead of asserting on substrings (the current pattern), commit a `testdata/snippet/no-actions.ps1.golden` etc., compare with `-update` flag support. Catches whitespace and quoting regressions that substring tests miss.
+The PowerShell and Bash snippet bodies are emitted from templates plus generated wrappers. The golden files already exist in `testdata/`; the fix above resolves the current failures. Extend coverage to the Bash snippet variants (`testdata/bash-no-actions.sh.golden` etc.) using the same `-update` flag pattern. Catches whitespace and quoting regressions that substring tests miss.
 
 ### `[M]` Coverage gate at 80%
 
-Add `go test -coverprofile=coverage.out ./...` to the CI workflow and fail the job if any package drops below 80%. Today `bench_test.go`, `fastresolve_test.go`, `segments_test.go`, `store_test.go`, `plugins_test.go` are solid; `init_test.go`, `doctor_test.go`, and the new `commands_test.go` cover roughly half of their packages. The plugin-installer code path (`plugin_install.go`, `plugin_cmd.go`) is the lowest-coverage area — write a fake-git harness so install/update/remove can be exercised hermetically.
+Add `go test -coverprofile=coverage.out ./...` to the CI workflow and fail the job if any package drops below 80%. The internal package test files (see `[BUG]` above) must exist first or the gate will immediately fail. The plugin-installer code path (`plugin_install.go`, `plugin_cmd.go`) is the second-lowest area after the internal packages — write a fake-git harness so install/update/remove can be exercised hermetically.
 
 ### `[L]` End-to-end shell tests
 
@@ -111,19 +131,9 @@ Then `s acme` works on every supported OS. Add a `doctor` check that warns if ne
 
 The Bash/Zsh integration is currently labelled "Linux" in the README but should work on macOS unchanged. Verify on a Mac runner, update the README to say "Linux/macOS", and add `darwin-amd64` and `darwin-arm64` to the release matrix. The Zsh path is more important on macOS (system default) than on Linux — make sure `compinit` guidance is prominent.
 
-### `[M]` Add a CI matrix
+### ~~`[M]` Add a CI matrix~~ ✓ DONE
 
-`.github/workflows/test.yml` runs only on `windows-latest`. Expand to:
-
-```yaml
-strategy:
-  matrix:
-    os: [windows-latest, ubuntu-latest, macos-latest]
-    go: ['1.23', '1.24']
-runs-on: ${{ matrix.os }}
-```
-
-And remove the `branches: [ master ]` restriction so feature branches get tested too. Today the long-running `refactor/onix-rework` branch doesn't see CI at all.
+`.github/workflows/test.yml` already runs `windows-latest`, `ubuntu-latest`, `macos-latest` × Go 1.23/1.24 with no branch restriction. No action needed.
 
 ### `[S]` Doctor: fish, nushell awareness
 
@@ -169,21 +179,21 @@ Functions like `ParseSegmentedAlias`, `ResolveSegment`, `ValidateAliasName` bene
 
 ## Repo hygiene (7 → 10)
 
-### `[S]` Configure dependabot
+### ~~`[S]` Configure dependabot~~ ✓ DONE
 
-`.github/dependabot.yml` for Go modules and GitHub Actions. Weekly check, grouped updates. Prevents the slow-rotting `go.sum` problem and the action-version drift problem.
+`.github/dependabot.yml` already exists. No action needed.
 
-### `[M]` Set up `gosec` and `govulncheck` in CI
+### ~~`[M]` Set up `govulncheck` in CI~~ ✓ DONE
 
-`govulncheck ./...` flags any imported package with a known CVE. Free; takes 90 seconds to add; catches issues before users do.
+`govulncheck ./...` already runs as a CI step. `gosec` is still missing — add it to the `golangci-lint` run (see Code quality section).
 
 ### `[M]` Signed releases
 
 `cosign sign-blob` on the binary, publish the signature alongside the zip. Document the verification command in the README. Becomes more important if anyone ever distributes onix through Scoop or Homebrew.
 
-### `[S]` Multi-arch release matrix
+### ~~`[S]` Multi-arch release matrix~~ ✓ DONE
 
-`release.yml` currently builds `windows-amd64` only. Add `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`. Five `goreleaser`-style entries; the binary doesn't have OS-specific dependencies, so it's a free cross-compile.
+`release.yml` already builds `windows-amd64`, `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`. No action needed.
 
 ### `[S]` Tag the schema versions
 
@@ -234,9 +244,9 @@ When onix panics, print a short message with a `--report` flag suggestion that b
 
 If you want to take this in chunks:
 
-1. **Tonight (one hour):** verify `go vet` + `go test` pass; add the CI matrix and `govulncheck`; configure dependabot. Score: 8.3.
-2. **This week (half day):** wire `xdg-open` and macOS support; add the snippet golden tests and the coverage gate; cross-compile in `release.yml`. Score: 8.9.
-3. **Within a sprint (two days):** end-to-end shell tests, benchmark regression gate, the `internal/` re-split, CONTRIBUTING.md, troubleshooting section, schema versioning, signed releases. Score: 9.6.
-4. **Long-tail (sometime):** daemon mode, plugin SDK, `--json` outputs, importers, crash reporter. Score: 10.
+0. **Right now (30 min) — unblock CI:** fix the PowerShell golden-file path separator (`[BUG][S]`), fix the E2E Bash hardcoded path (`[BUG][S]`). These two items cause 4 test failures on every Linux/macOS run. Without them, CI is broken on two of three OS runners. Score: 6.2 → 7.0.
+1. **This week (half day):** add dedicated test files inside each `internal/` package (`[BUG][M]`); wire `xdg-open` and macOS `open` for the explore action; add the coverage gate. Score: 7.0 → 8.0.
+2. **Within a sprint (two days):** end-to-end shell tests, benchmark regression gate, `golangci-lint` clean, `gofumpt`, CONTRIBUTING.md updates, troubleshooting section, schema versioning, signed releases. Score: 8.0 → 9.2.
+3. **Long-tail (sometime):** daemon mode, plugin SDK, `--json` outputs, importers, crash reporter, Levenshtein hint on unknown alias. Score: 9.2 → 10.
 
-Items in tier 1–3 are mostly mechanical; tier 4 is product work that should land when there's a concrete user pulling for it.
+Items in tier 0–2 are mostly mechanical; tier 3 is product work that should land when there's a concrete user pulling for it.
