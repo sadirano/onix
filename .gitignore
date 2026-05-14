@@ -1,3 +1,4 @@
 onix.exe
 *.exe
 .claude/
+coverage.out
