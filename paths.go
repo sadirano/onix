@@ -3,8 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+
+	"github.com/sadirano/onix/internal/store"
 )
 
 // resolveHome returns the absolute path to the onix config directory.
@@ -12,7 +16,7 @@ import (
 // We don't create the directory here — that's `onix init`'s job.
 func resolveHome(override string) (string, error) {
 	if v := strings.TrimSpace(override); v != "" {
-		abs, err := filepath.Abs(expandTilde(v))
+		abs, err := filepath.Abs(store.ExpandTilde(v))
 		if err != nil {
 			return "", fmt.Errorf("resolve config dir %q: %w", v, err)
 		}
@@ -33,15 +37,15 @@ func resolveHome(override string) (string, error) {
 	return filepath.Join(home, ".onix"), nil
 }
 
-// expandTilde expands a leading ~ to the user home directory.
-// Pure cosmetic helper — only the first character is examined.
-func expandTilde(p string) string {
-	if !strings.HasPrefix(p, "~") {
-		return p
+// pwshBin returns the name of the PowerShell executable to use.
+// It prefers 'pwsh' (PowerShell Core) but falls back to 'powershell.exe'
+// (Windows PowerShell) if pwsh isn't on PATH.
+func pwshBin() string {
+	if _, err := exec.LookPath("pwsh"); err == nil {
+		return "pwsh"
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return p
+	if runtime.GOOS == "windows" {
+		return "powershell.exe"
 	}
-	return home + p[1:]
+	return "pwsh" // best guess on non-windows
 }

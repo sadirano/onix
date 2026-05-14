@@ -32,6 +32,7 @@ function global:o {
     }
     if ($LASTEXITCODE -eq 0) {
         Set-Location -LiteralPath $resolved
+        & $global:onixExe context apply $Alias | Invoke-Expression
     }
 }
 function global:n {
@@ -57,6 +58,22 @@ function global:r {
     )
     & $global:onixExe run $Alias -- @Rest
 }
+function global:sg {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe grep $Alias @Rest
+}
+function global:ff {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe find $Alias @Rest
+}
 
 function global:test {
     [CmdletBinding()]
@@ -76,4 +93,4 @@ function global:pr {
     & $global:onixExe exec pr $Alias -- @Rest
 }
 
-Register-ArgumentCompleter -CommandName n,o,pr,r,s,test,y -ParameterName Alias -ScriptBlock $onixAliasCompleter
+Register-ArgumentCompleter -CommandName ff,n,o,pr,r,s,sg,test,y -ParameterName Alias -ScriptBlock $onixAliasCompleter

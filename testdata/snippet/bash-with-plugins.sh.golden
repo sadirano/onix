@@ -33,6 +33,9 @@ o() {
     fi
     if [ $? -eq 0 ]; then
         cd "$path"
+        local shell="bash"
+        if [ -n "$ZSH_VERSION" ]; then shell="zsh"; fi
+        eval "$("$ONIX_EXE" context apply "$1" --shell "$shell")"
     fi
 }
 n() { "$ONIX_EXE" edit "$1"; }
@@ -42,6 +45,16 @@ r() {
     local alias=$1
     shift
     "$ONIX_EXE" run "$alias" -- "$@"
+}
+sg() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" grep "$alias" "$@"
+}
+ff() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" find "$alias" "$@"
 }
 
 tts() {
@@ -69,7 +82,7 @@ stop() {
 }
 
 if [ -n "$BASH_VERSION" ]; then
-    complete -F _onix_completer n o r s stop t-start timer tts y
+    complete -F _onix_completer ff n o r s sg stop t-start timer tts y
 elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
-    compdef _onix_zsh_completer n o r s stop t-start timer tts y
+    compdef _onix_zsh_completer ff n o r s sg stop t-start timer tts y
 fi

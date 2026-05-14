@@ -29,10 +29,11 @@ type ContextCmd struct {
 // Invoke-Expression — setting env vars and running any post-cd exec command.
 type ContextApplyCmd struct {
 	Alias string `arg:"" help:"Alias (plain or segmented). Plain aliases produce no output."`
+	Shell string `help:"Output shell format (pwsh, bash, zsh). Defaults to 'pwsh'." default:"pwsh"`
 }
 
 func (c *ContextApplyCmd) Run(e *env) error {
-	return applyContexts(e.Home, c.Alias, os.Stdout)
+	return applyContexts(e.Home, c.Alias, c.Shell, os.Stdout)
 }
 
 // ContextListCmd prints every context defined in segments.toml in a
@@ -110,15 +111,9 @@ func (c *ContextEditCmd) Run(e *env) error {
 //
 // For plain aliases (no '@') it returns immediately — no file I/O, no
 // allocations. For segmented aliases it loads segments.toml, finds any
-// matching [[contexts]] entries, and writes PowerShell env-var setters
+// matching [[contexts]] entries, and writes shell env-var setters
 // and exec invocations to w in innermost-first segment order.
-//
-// Output shape (one statement per line, single-quoted PS literals):
-//
-//	$env:GO111MODULE = 'on'
-//	$env:GOFLAGS = '-tags=integration'
-//	& 'make' 'dev-env'
-func applyContexts(home, input string, w io.Writer) error {
+func applyContexts(home, input, shell string, w io.Writer) error {
 	if !strings.Contains(input, "@") {
 		return nil // plain alias — no context possible, skip all I/O
 	}
@@ -145,8 +140,10 @@ func applyContexts(home, input string, w io.Writer) error {
 		}
 	}
 
+	isBash := shell == "bash" || shell == "zsh"
+
 	// Apply in innermost-first order (right-to-left in the segments slice)
-	// to mirror the path-building direction from M4.
+	// to mirror the path-building direction.
 	for i := len(segs) - 1; i >= 0; i-- {
 		cd, ok := ctxMap[strings.ToLower(segs[i])]
 		if !ok {
@@ -159,18 +156,36 @@ func applyContexts(home, input string, w io.Writer) error {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			fmt.Fprintf(w, "$env:%s = %s\n", k, psSingleQuote(cd.Env[k]))
+			if isBash {
+				fmt.Fprintf(w, "export %s=%s\n", k, shQuote(cd.Env[k]))
+			} else {
+				fmt.Fprintf(w, "$env:%s = %s\n", k, psSingleQuote(cd.Env[k]))
+			}
 		}
 		// Exec: each argument individually quoted.
 		if len(cd.Exec) > 0 {
 			quoted := make([]string, len(cd.Exec))
 			for j, arg := range cd.Exec {
-				quoted[j] = psSingleQuote(arg)
+				if isBash {
+					quoted[j] = shQuote(arg)
+				} else {
+					quoted[j] = psSingleQuote(arg)
+				}
 			}
-			fmt.Fprintf(w, "& %s\n", strings.Join(quoted, " "))
+			if isBash {
+				fmt.Fprintf(w, "%s\n", strings.Join(quoted, " "))
+			} else {
+				fmt.Fprintf(w, "& %s\n", strings.Join(quoted, " "))
+			}
 		}
 	}
 	return nil
+}
+
+// shQuote wraps s in single quotes for POSIX shells, escaping any embedded
+// single quotes by ending the string, adding an escaped quote, then restarting.
+func shQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // psSingleQuote wraps s in PowerShell single quotes, escaping any embedded

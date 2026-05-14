@@ -42,6 +42,7 @@ const pwshO = `function global:%s {
     }
     if ($LASTEXITCODE -eq 0) {
         Set-Location -LiteralPath $resolved
+        & $global:onixExe context apply $Alias | Invoke-Expression
     }
 }
 `
@@ -77,6 +78,26 @@ const pwshR = `function global:%s {
 }
 `
 
+const pwshSG = `function global:%s {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe grep $Alias @Rest
+}
+`
+
+const pwshFF = `function global:%s {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe find $Alias @Rest
+}
+`
+
 const bashO = `%s() {
     if [ -z "$1" ]; then
         "$ONIX_EXE" aliases
@@ -92,6 +113,9 @@ const bashO = `%s() {
     fi
     if [ $? -eq 0 ]; then
         cd "$path"
+        local shell="bash"
+        if [ -n "$ZSH_VERSION" ]; then shell="zsh"; fi
+        eval "$("$ONIX_EXE" context apply "$1" --shell "$shell")"
     fi
 }
 `
@@ -106,6 +130,20 @@ const bashR = `%s() {
     local alias=$1
     shift
     "$ONIX_EXE" run "$alias" -- "$@"
+}
+`
+
+const bashSG = `%s() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" grep "$alias" "$@"
+}
+`
+
+const bashFF = `%s() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" find "$alias" "$@"
 }
 `
 
@@ -176,6 +214,8 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	fmt.Fprintf(&b, pwshS, s["s"])
 	fmt.Fprintf(&b, pwshY, s["y"])
 	fmt.Fprintf(&b, pwshR, s["r"])
+	fmt.Fprintf(&b, pwshSG, s["sg"])
+	fmt.Fprintf(&b, pwshFF, s["ff"])
 	b.WriteString("\n")
 
 	for _, a := range actions {
@@ -224,6 +264,8 @@ func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []c
 	fmt.Fprintf(&b, bashS, s["s"])
 	fmt.Fprintf(&b, bashY, s["y"])
 	fmt.Fprintf(&b, bashR, s["r"])
+	fmt.Fprintf(&b, bashSG, s["sg"])
+	fmt.Fprintf(&b, bashFF, s["ff"])
 	b.WriteString("\n")
 
 	for _, a := range actions {
@@ -301,7 +343,7 @@ func writePluginFunction(b *strings.Builder, wrapperName, pluginName, entryName 
 }
 
 func writeCompleterRegistration(b *strings.Builder, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) {
-	names := make([]string, 0, 5+len(actions)+len(plgs))
+	names := make([]string, 0, 7+len(actions)+len(plgs))
 	for _, v := range shortcuts {
 		names = append(names, v)
 	}
@@ -340,7 +382,7 @@ func writePluginFunctionBash(b *strings.Builder, wrapperName, pluginName, entryN
 }
 
 func writeCompleterRegistrationBash(b *strings.Builder, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) {
-	names := make([]string, 0, 5+len(actions)+len(plgs))
+	names := make([]string, 0, 7+len(actions)+len(plgs))
 	for _, v := range shortcuts {
 		names = append(names, v)
 	}

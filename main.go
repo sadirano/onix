@@ -32,6 +32,8 @@ type CLI struct {
 
 	// Actions that operate on the resolved directory.
 	Edit    EditCmd    `cmd:"" help:"Open the alias directory in your editor."`
+	Grep    GrepCmd    `cmd:"" help:"Search file contents in an alias directory using ripgrep and fzf."`
+	Find    FindCmd    `cmd:"" help:"Find files in an alias directory using Everything/fd and fzf."`
 	Explore ExploreCmd `cmd:"" help:"Open the alias directory in the OS file manager."`
 	Yank    YankCmd    `cmd:"" help:"Print the alias path and copy it to the clipboard."`
 	Run     RunCmd     `cmd:"" passthrough:"" help:"Run a command in the alias directory."`
@@ -44,6 +46,8 @@ type CLI struct {
 	PluginExec PluginExecCmd `cmd:"" name:"plugin-exec" passthrough:"" help:"Internal: run a plugin against an alias (called by generated shell wrappers)."`
 
 	Import ImportCmd `cmd:"" help:"Import aliases from other tools (zoxide, autojump, etc)."`
+
+	Context ContextCmd `cmd:"" help:"Manage segment contexts."`
 
 	// Installation and diagnostics.
 	Init           InitCmd           `cmd:"" help:"Create ~/.onix and install shell integration."`

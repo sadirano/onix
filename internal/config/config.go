@@ -167,11 +167,13 @@ func BuiltinDefaults() map[string]string {
 }
 
 var builtinDefaults = map[string]string{
-	"o": "o",
-	"n": "n",
-	"s": "s",
-	"y": "y",
-	"r": "r",
+	"o":  "o",
+	"n":  "n",
+	"s":  "s",
+	"y":  "y",
+	"r":  "r",
+	"sg": "sg",
+	"ff": "ff",
 }
 
 func IsBuiltinName(lower string) bool {

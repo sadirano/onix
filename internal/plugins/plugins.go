@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -78,16 +79,17 @@ func SavePlugins(home string, pf *PluginsFile) error {
 		return fmt.Errorf("create %s: %w", filepath.Dir(p), err)
 	}
 
+	// Stable sort for consistent output.
+	sort.Slice(pf.Plugins, func(i, j int) bool { return pf.Plugins[i].Name < pf.Plugins[j].Name })
+
+	data, err := toml.Marshal(pf)
+	if err != nil {
+		return fmt.Errorf("marshal plugins: %w", err)
+	}
+
 	var b strings.Builder
 	b.WriteString("# onix plugins — edit with care, prefer 'onix plugin add' / 'onix plugin remove'\n\n")
-	fmt.Fprintf(&b, "version = %d\n\n", CurrentVersion)
-	sorted := make([]Plugin, len(pf.Plugins))
-	copy(sorted, pf.Plugins)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
-	for _, pl := range sorted {
-		writePluginBlock(&b, pl)
-		b.WriteString("\n")
-	}
+	b.Write(data)
 
 	tmp, err := os.CreateTemp(filepath.Dir(p), ".plugins.*.toml")
 	if err != nil {
@@ -103,71 +105,6 @@ func SavePlugins(home string, pf *PluginsFile) error {
 		return err
 	}
 	return os.Rename(tmpName, p)
-}
-
-func writePluginBlock(b *strings.Builder, p Plugin) {
-	b.WriteString("[[plugins]]\n")
-	fmt.Fprintf(b, "name = %q\n", p.Name)
-	fmt.Fprintf(b, "repo = %q\n", p.Repo)
-	if p.SHA != "" {
-		fmt.Fprintf(b, "sha  = %q\n", p.SHA)
-	}
-	if p.Unpinned {
-		b.WriteString("unpinned = true\n")
-	}
-	if len(p.Config) > 0 {
-		j, _ := json.Marshal(p.Config)
-		fmt.Fprintf(b, "config = %s\n", tomlInlineFromJSON(j))
-	}
-	for _, e := range p.Entries {
-		b.WriteString("[[plugins.entries]]\n")
-		fmt.Fprintf(b, "name = %q\n", e.Name)
-		if e.Cmd != "" {
-			fmt.Fprintf(b, "cmd  = %q\n", e.Cmd)
-		}
-	}
-}
-
-func tomlInlineFromJSON(j []byte) string {
-	var v any
-	if err := json.Unmarshal(j, &v); err != nil {
-		return string(j)
-	}
-	return tomlInline(v)
-}
-
-func tomlInline(v any) string {
-	switch x := v.(type) {
-	case map[string]any:
-		keys := make([]string, 0, len(x))
-		for k := range x {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		parts := make([]string, 0, len(keys))
-		for _, k := range keys {
-			parts = append(parts, fmt.Sprintf("%s = %s", k, tomlInline(x[k])))
-		}
-		return "{" + strings.Join(parts, ", ") + "}"
-	case []any:
-		parts := make([]string, 0, len(x))
-		for _, item := range x {
-			parts = append(parts, tomlInline(item))
-		}
-		return "[" + strings.Join(parts, ", ") + "]"
-	case string:
-		return fmt.Sprintf("%q", x)
-	case bool:
-		return fmt.Sprintf("%t", x)
-	case float64:
-		if x == float64(int64(x)) {
-			return fmt.Sprintf("%d", int64(x))
-		}
-		return fmt.Sprintf("%g", x)
-	case nil:
-		return `""`
-	}
-	return fmt.Sprintf("%q", fmt.Sprint(v))
 }
 
 // FindPlugin returns the plugin matching name (case-insensitive), or nil.
@@ -243,7 +180,7 @@ func ValidatePlugins(pf *PluginsFile, actions []config.Action) error {
 }
 
 // BuiltinWrapperNames is the list of names emitted by snippetBuiltins.
-var BuiltinWrapperNames = []string{"o", "n", "s", "y", "r"}
+var BuiltinWrapperNames = []string{"o", "n", "s", "y", "r", "sg", "ff"}
 
 // ConfigJSON serialises Plugin.Config for ONIX_MODULE_CONFIG.
 func (p *Plugin) ConfigJSON() string {
@@ -273,7 +210,11 @@ func BinaryPath(home, repo string) string {
 
 // BinaryName is the base filename of the built binary.
 func BinaryName(repo string) string {
-	return RepoBasename(repo) + ".exe"
+	name := RepoBasename(repo)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
 }
 
 // RepoBasename returns the last meaningful segment of repo.

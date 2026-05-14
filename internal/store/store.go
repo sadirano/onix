@@ -13,8 +13,8 @@ import (
 
 // Store is the on-disk alias database. One TOML file, all aliases.
 type Store struct {
-	Version int              `toml:"version"`
-	Aliases map[string]Alias `toml:"-"`
+	Version int
+	Aliases map[string]Alias
 }
 
 // CurrentVersion is the latest schema version for aliases.toml.
@@ -42,25 +42,25 @@ func LoadStore(home string) (*Store, error) {
 		return nil, fmt.Errorf("read %s: %w", p, err)
 	}
 
-	// We decode into a raw map to see what's there.
-	var doc map[string]any
-	if err := toml.Unmarshal(data, &doc); err != nil {
+	var raw map[string]any
+	if err := toml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
 	}
 
 	s := &Store{Aliases: map[string]Alias{}}
-	if v, ok := doc["version"].(int64); ok {
+	if v, ok := raw["version"].(int64); ok {
 		s.Version = int(v)
-	}
-	delete(doc, "version")
-
-	// Now re-marshal the rest and unmarshal into the map.
-	rest, _ := toml.Marshal(doc)
-	if err := toml.Unmarshal(rest, &s.Aliases); err != nil {
-		return nil, fmt.Errorf("parse %s aliases: %w", p, err)
+		delete(raw, "version")
 	}
 
-	for name, a := range s.Aliases {
+	for name, v := range raw {
+		// Round-trip through marshal to unmarshal into the Alias struct.
+		// This is robust to schema changes and avoids manual map-to-struct mapping.
+		b, _ := toml.Marshal(v)
+		var a Alias
+		if err := toml.Unmarshal(b, &a); err != nil {
+			return nil, fmt.Errorf("parse %s alias %q: %w", p, name, err)
+		}
 		if err := ValidateAliasName(name); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
@@ -69,6 +69,7 @@ func LoadStore(home string) (*Store, error) {
 				return nil, fmt.Errorf("%s: alias %q: %w", p, name, err)
 			}
 		}
+		s.Aliases[name] = a
 	}
 
 	if needs, lowered := lowerKeys(s.Aliases); needs {
@@ -87,6 +88,9 @@ func (s *Store) Lookup(name string) (Alias, bool) {
 func (s *Store) Set(name string, a Alias) {
 	if s.Aliases == nil {
 		s.Aliases = map[string]Alias{}
+	}
+	if s.Version == 0 {
+		s.Version = CurrentVersion
 	}
 	s.Aliases[strings.ToLower(strings.TrimSpace(name))] = a
 }
@@ -118,39 +122,24 @@ func SaveStore(home string, s *Store) error {
 		return fmt.Errorf("create %s: %w", filepath.Dir(p), err)
 	}
 
+	// Combine version and aliases into a flat map for marshaling.
+	if s.Version == 0 {
+		s.Version = CurrentVersion
+	}
+	out := make(map[string]any, len(s.Aliases)+1)
+	out["version"] = s.Version
+	for k, v := range s.Aliases {
+		out[k] = v
+	}
+
+	data, err := toml.Marshal(out)
+	if err != nil {
+		return fmt.Errorf("marshal store: %w", err)
+	}
+
 	var b strings.Builder
 	b.WriteString("# onix aliases — edit with care, prefer `onix add` / `onix rm`\n\n")
-	fmt.Fprintf(&b, "version = %d\n\n", CurrentVersion)
-	for _, name := range s.Names() {
-		a := s.Aliases[name]
-		if isBareKey(name) {
-			fmt.Fprintf(&b, "[%s]\n", name)
-		} else {
-			fmt.Fprintf(&b, "[%q]\n", name)
-		}
-		fmt.Fprintf(&b, "path = %q\n", a.Path)
-		if len(a.Subdirs) > 0 {
-			b.WriteString("\n")
-			if isBareKey(name) {
-				fmt.Fprintf(&b, "[%s.subdirs]\n", name)
-			} else {
-				fmt.Fprintf(&b, "[%q.subdirs]\n", name)
-			}
-			keys := make([]string, 0, len(a.Subdirs))
-			for k := range a.Subdirs {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-			for _, k := range keys {
-				if isBareKey(k) {
-					fmt.Fprintf(&b, "%s = %q\n", k, a.Subdirs[k])
-				} else {
-					fmt.Fprintf(&b, "%q = %q\n", k, a.Subdirs[k])
-				}
-			}
-		}
-		b.WriteString("\n")
-	}
+	b.Write(data)
 
 	tmp, err := os.CreateTemp(filepath.Dir(p), ".aliases.*.toml")
 	if err != nil {
@@ -232,4 +221,16 @@ func isBareKey(s string) bool {
 		}
 	}
 	return true
+}
+
+// ExpandTilde expands a leading ~ to the user home directory.
+func ExpandTilde(p string) string {
+	if !strings.HasPrefix(p, "~") {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	return home + p[1:]
 }

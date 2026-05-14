@@ -12,6 +12,7 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/plugins"
+	"github.com/sadirano/onix/internal/resolver"
 	"github.com/sadirano/onix/internal/snippet"
 	"github.com/sadirano/onix/internal/store"
 )
@@ -142,7 +143,7 @@ func (c *AddCmd) Run(e *env) error {
 		}
 		p = cwd
 	}
-	abs, err := filepath.Abs(expandTilde(p))
+	abs, err := filepath.Abs(store.ExpandTilde(p))
 	if err != nil {
 		return fmt.Errorf("absolutise %q: %w", p, err)
 	}
@@ -528,56 +529,17 @@ func (c *ListNamesCmd) Run(e *env) error {
 // -----------------------------------------------------------------------------
 
 // resolveAliasPath is the common prefix for every action that operates on
-// the resolved directory. We centralise the lookup so the error message
-// is consistent and the store-read happens exactly once per command.
-//
-// Segmented input (`<seg>@<alias>` or longer) is delegated to the segment
-// walker, which loads the global subdirs registry and respects per-alias
-// overrides. Both shapes return a host-native path (FromSlash) because
-// downstream Cmd.Dir and exec.Command want platform separators.
+// the resolved directory. It uses the shared resolver to find the path
+// and then ensures the directory exists on disk.
 func resolveAliasPath(e *env, name string) (string, error) {
-	if strings.Contains(name, "@") {
-		p, err := resolveSegmentedToPath(e.Home, name)
-		if err != nil {
-			return "", err
-		}
-		return filepath.FromSlash(p), nil
-	}
-
-	s, err := store.LoadStore(e.Home)
+	p, err := resolver.Resolve(e.Home, name, promptDestination)
 	if err != nil {
 		return "", err
 	}
-	a, ok := s.Lookup(name)
-	if !ok {
-		if err := store.ValidateAliasName(name); err != nil {
-			return "", err
-		}
-		dest := promptDestination(name)
-		if dest == "" {
-			return "", fmt.Errorf("unknown alias %q (run: onix list)", name)
-		}
-		abs, err := filepath.Abs(expandTilde(dest))
-		if err != nil {
-			return "", fmt.Errorf("absolutise %q: %w", dest, err)
-		}
-		a = store.Alias{Path: filepath.ToSlash(abs)}
-		s.Set(name, a)
-		if err := store.SaveStore(e.Home, s); err != nil {
-			return "", err
-		}
-		if err := os.MkdirAll(abs, 0o755); err != nil {
-			return "", fmt.Errorf("create directory %q: %w", abs, err)
-		}
-		fmt.Fprintf(os.Stderr, "registered %s -> %s\n", strings.ToLower(name), abs)
-		return abs, nil
+	if err := os.MkdirAll(p, 0o755); err != nil {
+		return "", fmt.Errorf("create directory %q: %w", p, err)
 	}
-
-	target := filepath.FromSlash(a.Path)
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		return "", fmt.Errorf("create directory %q: %w", target, err)
-	}
-	return target, nil
+	return p, nil
 }
 
 // resolveEditor returns the editor to invoke for `onix edit`.

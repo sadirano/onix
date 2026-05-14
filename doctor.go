@@ -290,7 +290,7 @@ func checkEditor() checkResult {
 }
 
 func checkPowerShellProfile(home string) checkResult {
-	out, err := exec.Command("powershell.exe",
+	out, err := exec.Command(pwshBin(),
 		"-NoProfile", "-NonInteractive",
 		"-Command", "$PROFILE.CurrentUserAllHosts").Output()
 	if err != nil {

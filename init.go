@@ -143,7 +143,7 @@ func sourceFromBashLike(snippet string) error {
 // rather than editing the registry — modifying user-owned config files is
 // much less invasive than the v1 PATH-mutation flow.
 func sourceFromProfile(snippet string) error {
-	out, err := exec.Command("powershell.exe",
+	out, err := exec.Command(pwshBin(),
 		"-NoProfile", "-NonInteractive",
 		"-Command", "$PROFILE.CurrentUserAllHosts").Output()
 	if err != nil {

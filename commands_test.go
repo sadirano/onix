@@ -90,6 +90,85 @@ func TestAddCmd_RejectsInvalidName(t *testing.T) {
 	}
 }
 
+// TestListCmd verifies that aliases are listed correctly in both table and JSON modes.
+func TestListCmd(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Register two aliases.
+	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(&env{Home: home})
+	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(&env{Home: home})
+
+	t.Run("table output", func(t *testing.T) {
+		stdout, _, err := captureStdio(func() error {
+			return (&ListCmd{}).Run(&env{Home: home})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(stdout, "ALIAS") || !strings.Contains(stdout, "PATH") {
+			t.Errorf("table header missing: %q", stdout)
+		}
+		if !strings.Contains(stdout, "a") || !strings.Contains(stdout, "b") {
+			t.Errorf("aliases missing from output: %q", stdout)
+		}
+	})
+
+	t.Run("JSON output", func(t *testing.T) {
+		stdout, _, err := captureStdio(func() error {
+			return (&ListCmd{}).Run(&env{Home: home, JSON: true})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(stdout, "[") {
+			t.Errorf("expected JSON array, got: %q", stdout)
+		}
+		if !strings.Contains(stdout, `"name": "a"`) || !strings.Contains(stdout, `"path": "C:/a"`) {
+			t.Errorf("JSON output missing data: %q", stdout)
+		}
+	})
+}
+
+// TestRemoveCmd confirms that aliases can be removed.
+func TestRemoveCmd(t *testing.T) {
+	dir := t.TempDir()
+	home := filepath.Join(dir, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	(&AddCmd{Alias: "acme", Path: "C:/acme"}).Run(&env{Home: home})
+
+	t.Run("remove existing", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return (&RemoveCmd{Alias: "acme"}).Run(&env{Home: home})
+		})
+		if err != nil {
+			t.Fatalf("RemoveCmd.Run: %v", err)
+		}
+		// Confirm it's gone from List.
+		stdout, _, _ := captureStdio(func() error {
+			return (&ListCmd{}).Run(&env{Home: home})
+		})
+		if strings.Contains(stdout, "acme") {
+			t.Error("alias still present after removal")
+		}
+	})
+
+	t.Run("remove missing", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return (&RemoveCmd{Alias: "nope"}).Run(&env{Home: home})
+		})
+		if err == nil {
+			t.Error("RemoveCmd on missing alias should have errored")
+		}
+	})
+}
+
 // captureStdio runs fn with os.Stdout and os.Stderr redirected to pipes,
 // returning the captured output. We restore the originals before
 // returning so subsequent test logging still works.

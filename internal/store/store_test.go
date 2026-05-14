@@ -1,11 +1,9 @@
-package main
+package store
 
 import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/sadirano/onix/internal/store"
 )
 
 // TestStore_RoundTrip writes a few aliases, reads them back, and confirms
@@ -14,14 +12,14 @@ import (
 func TestStore_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
-	s := &store.Store{Aliases: map[string]store.Alias{}}
-	s.Set("acme", store.Alias{Path: "C:/projects/acme"})
-	s.Set("sms", store.Alias{Path: "D:/work/sms"})
-	if err := store.SaveStore(dir, s); err != nil {
+	s := &Store{Aliases: map[string]Alias{}}
+	s.Set("acme", Alias{Path: "C:/projects/acme"})
+	s.Set("sms", Alias{Path: "D:/work/sms"})
+	if err := SaveStore(dir, s); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
-	loaded, err := store.LoadStore(dir)
+	loaded, err := LoadStore(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -48,12 +46,12 @@ func TestStore_RoundTrip(t *testing.T) {
 // also normalise on load.
 func TestStore_LookupCaseInsensitive(t *testing.T) {
 	dir := t.TempDir()
-	s := &store.Store{Aliases: map[string]store.Alias{}}
-	s.Set("Acme", store.Alias{Path: "C:/projects/acme"})
-	if err := store.SaveStore(dir, s); err != nil {
+	s := &Store{Aliases: map[string]Alias{}}
+	s.Set("Acme", Alias{Path: "C:/projects/acme"})
+	if err := SaveStore(dir, s); err != nil {
 		t.Fatalf("save: %v", err)
 	}
-	loaded, err := store.LoadStore(dir)
+	loaded, err := LoadStore(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -69,7 +67,7 @@ func TestStore_LookupCaseInsensitive(t *testing.T) {
 // fail with "unknown alias" but Load itself should not.
 func TestStore_LoadMissingReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
-	s, err := store.LoadStore(dir)
+	s, err := LoadStore(dir)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -84,7 +82,7 @@ func TestStore_LoadMissingReturnsEmpty(t *testing.T) {
 // TestStore_DeleteUnknown confirms Delete returns false when the alias
 // isn't present, so the CLI can surface the right message.
 func TestStore_DeleteUnknown(t *testing.T) {
-	s := &store.Store{Aliases: map[string]store.Alias{"acme": {Path: "C:/x"}}}
+	s := &Store{Aliases: map[string]Alias{"acme": {Path: "C:/x"}}}
 	if s.Delete("nope") {
 		t.Error("Delete(nope) returned true on a missing alias")
 	}
@@ -99,20 +97,12 @@ func TestStore_DeleteUnknown(t *testing.T) {
 // TestValidateNames locks the character rules that prevent unresolvable
 // aliases (and the segment-name counterpart). The rule set is shared, so
 // both functions are exercised with the same fixtures.
-//
-// Highlights:
-//   - empty / whitespace-only names are rejected (would TOML-quote as "")
-//   - '/' and '\' would collide with path separators inside subdir chains
-//   - '@' is the segment separator, so "foo@bar" would never resolve as an
-//     alias of that literal name (the parser strips the '@bar' suffix)
-//   - whitespace and control bytes break shell completion and function
-//     definitions emitted by writeShellSnippet
 func TestValidateNames(t *testing.T) {
 	t.Run("alias", func(t *testing.T) {
-		runValidatorTable(t, store.ValidateAliasName, "alias")
+		runValidatorTable(t, ValidateAliasName, "alias")
 	})
 	t.Run("segment", func(t *testing.T) {
-		runValidatorTable(t, store.ValidateSegmentName, "segment")
+		runValidatorTable(t, ValidateSegmentName, "segment")
 	})
 }
 
@@ -158,8 +148,8 @@ func runValidatorTable(t *testing.T, fn func(string) error, kind string) {
 // A scan of the directory is the cheapest way to verify the cleanup path.
 func TestStore_AtomicWrite(t *testing.T) {
 	dir := t.TempDir()
-	s := &store.Store{Aliases: map[string]store.Alias{"a": {Path: "C:/a"}}}
-	if err := store.SaveStore(dir, s); err != nil {
+	s := &Store{Aliases: map[string]Alias{"a": {Path: "C:/a"}}}
+	if err := SaveStore(dir, s); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	entries, err := os.ReadDir(dir)
@@ -173,7 +163,44 @@ func TestStore_AtomicWrite(t *testing.T) {
 		}
 	}
 	// And the canonical file should exist.
-	if _, err := os.Stat(store.AliasesPath(dir)); err != nil {
+	if _, err := os.Stat(AliasesPath(dir)); err != nil {
 		t.Errorf("aliases.toml not present after save: %v", err)
+	}
+}
+
+// TestStore_SubdirsRoundTrip locks the on-disk shape for per-alias subdir overrides.
+func TestStore_SubdirsRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := &Store{Aliases: map[string]Alias{}}
+	s.Set("acme", Alias{
+		Path:    "C:/projects/acme",
+		Subdirs: map[string]string{"docs": "doc-internal", "src": "source-acme"},
+	})
+	if err := SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(AliasesPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Confirm the file has both the path line and the subdirs subtable.
+	got := string(body)
+	for _, want := range []string{`[acme]`, `path = `, `C:/projects/acme`, `[acme.subdirs]`, `docs = `, `doc-internal`, `src = `, `source-acme`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("aliases.toml missing %q\n--- file ---\n%s", want, got)
+		}
+	}
+
+	// Reload and confirm the map survived.
+	s2, err := LoadStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, ok := s2.Lookup("acme")
+	if !ok {
+		t.Fatal("acme missing after reload")
+	}
+	if a.Subdirs["docs"] != "doc-internal" || a.Subdirs["src"] != "source-acme" {
+		t.Errorf("subdirs round-trip lost data: %+v", a.Subdirs)
 	}
 }
