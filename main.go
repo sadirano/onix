@@ -51,7 +51,7 @@ type CLI struct {
 
 	// Installation and diagnostics.
 	Init           InitCmd           `cmd:"" help:"Create ~/.onix and install shell integration."`
-	InstallActions InstallActionsCmd `cmd:"" name:"install-actions" help:"Regenerate the shell snippet from config.toml + plugins.toml."`
+	Sync           SyncCmd           `cmd:"" help:"Regenerate shell snippets and Windows wrappers."`
 	ListNames      ListNamesCmd      `cmd:"" name:"list-names" help:"Print alias names (used by tab-completion)."`
 	Doctor         DoctorCmd         `cmd:"" help:"Check installation health."`
 	Version        VersionCmd        `cmd:"" help:"Print the onix version."`

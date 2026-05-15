@@ -198,7 +198,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	}
 
 	var b strings.Builder
-	b.WriteString("# onix shell integration (generated; do not edit — run 'onix install-actions')\n")
+	b.WriteString("# onix shell integration (generated; do not edit — run 'onix sync')\n")
 	fmt.Fprintf(&b, "# Source from $PROFILE: . '%s'\n\n", strings.ReplaceAll(path, `'`, `''`))
 	fmt.Fprintf(&b, "$global:onixExe = '%s'\n\n", strings.ReplaceAll(exe, `'`, `''`))
 
@@ -221,20 +221,53 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	fmt.Fprintf(&b, pwshFF, s["ff"])
 	b.WriteString("\n")
 
+	// On Windows, we also drop .cmd wrappers into ~/.onix/bin for each
+	// shortcut, custom action, and plugin entry. This makes them
+	// available via Windows Run (Win+R) or from cmd.exe without needing
+	// the PowerShell snippet.
+	binDir := filepath.Join(home, "bin")
+	_ = os.MkdirAll(binDir, 0o755)
+
+	writeCmdWrapper(binDir, exe, s["o"], "resolve")
+	writeCmdWrapper(binDir, exe, s["n"], "edit")
+	writeCmdWrapper(binDir, exe, s["s"], "explore")
+	writeCmdWrapper(binDir, exe, s["y"], "yank")
+	writeCmdWrapper(binDir, exe, s["r"], "run")
+	writeCmdWrapper(binDir, exe, s["sg"], "grep")
+	writeCmdWrapper(binDir, exe, s["ff"], "find")
+
 	for _, a := range actions {
 		writeActionFunction(&b, a)
+		writeCmdWrapper(binDir, exe, a.Name, "exec", a.Name)
 	}
 
 	for _, p := range plgs {
 		writePluginFunction(&b, p.Name, p.Name, "")
+		writeCmdWrapper(binDir, exe, p.Name, "plugin-exec", p.Name, "")
+
 		for _, e := range p.Entries {
 			writePluginFunction(&b, e.EffectiveCmd(), p.Name, e.Name)
+			writeCmdWrapper(binDir, exe, e.EffectiveCmd(), "plugin-exec", p.Name, e.Name)
 		}
 	}
 
 	writeCompleterRegistration(&b, s, actions, plgs)
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+func writeCmdWrapper(binDir, exe, name string, args ...string) {
+	path := filepath.Join(binDir, name+".cmd")
+	var cmdArgs []string
+	for _, a := range args {
+		if a == "" {
+			cmdArgs = append(cmdArgs, `""`)
+		} else {
+			cmdArgs = append(cmdArgs, a)
+		}
+	}
+	content := fmt.Sprintf("@echo off\r\n\"%s\" %s %%*\r\n", exe, strings.Join(cmdArgs, " "))
+	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
 func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) error {
@@ -249,7 +282,7 @@ func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []c
 	}
 
 	var b strings.Builder
-	b.WriteString("# onix shell integration (generated; do not edit — run 'onix install-actions')\n")
+	b.WriteString("# onix shell integration (generated; do not edit — run 'onix sync')\n")
 	fmt.Fprintf(&b, "export ONIX_EXE='%s'\n\n", exe)
 
 	b.WriteString(bashCompleter)

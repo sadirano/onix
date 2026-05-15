@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 
@@ -453,19 +454,19 @@ func (c *ExecCmd) Run(e *env) error {
 }
 
 // -----------------------------------------------------------------------------
-// install-actions — regenerate the PowerShell snippet.
+// sync — regenerate shell snippets and Windows wrappers.
 //
 // Separate from `init` because users will edit config.toml multiple times
 // over a session and we don't want to keep re-touching $PROFILE on each
-// edit. install-actions only rewrites ~/.onix/shell/onix.ps1; the dot-source
-// line in $PROFILE already points at it.
+// edit. sync rewrites ~/.onix/shell/onix.ps1 and ~/.onix/bin/*.cmd; the
+// dot-source line in $PROFILE already points at the snippet.
 // -----------------------------------------------------------------------------
 
-type InstallActionsCmd struct{}
+type SyncCmd struct{}
 
-func (c *InstallActionsCmd) Run(e *env) error {
+func (c *SyncCmd) Run(e *env) error {
 	// Read both config.toml and plugins.toml first so we can list what
-	// the regenerated snippet covers; regenerateShellSnippet does the
+	// the regenerated snippet covers; RegenerateShellSnippet does the
 	// actual file write.
 	cfg, err := config.LoadConfig(e.Home)
 	if err != nil {
@@ -478,7 +479,11 @@ func (c *InstallActionsCmd) Run(e *env) error {
 	if err := snippet.RegenerateShellSnippet(e.Home); err != nil {
 		return err
 	}
-	fmt.Printf("regenerated %s\n", snippet.PwshPath(e.Home))
+	if runtime.GOOS == "windows" {
+		fmt.Printf("regenerated %s and wrappers in %s\n", snippet.PwshPath(e.Home), filepath.Join(e.Home, "bin"))
+	} else {
+		fmt.Printf("regenerated %s\n", snippet.BashPath(e.Home))
+	}
 	if len(cfg.Actions) > 0 {
 		names := make([]string, 0, len(cfg.Actions))
 		for _, a := range cfg.Actions {

@@ -1,4 +1,4 @@
-# onix shell integration (generated; do not edit — run 'onix install-actions')
+# onix shell integration (generated; do not edit — run 'onix sync')
 export ONIX_EXE='/ONIX_EXE'
 
 if [ -n "$BASH_VERSION" ]; then

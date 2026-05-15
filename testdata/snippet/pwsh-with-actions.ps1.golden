@@ -1,4 +1,4 @@
-# onix shell integration (generated; do not edit — run 'onix install-actions')
+# onix shell integration (generated; do not edit — run 'onix sync')
 # Source from $PROFILE: . '/ONIX_HOME/shell/onix.ps1'
 
 $global:onixExe = '/ONIX_EXE'
