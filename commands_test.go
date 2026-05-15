@@ -252,3 +252,36 @@ func TestListNamesCmd(t *testing.T) {
 		t.Errorf("expected [a, b], got %v", lines)
 	}
 }
+
+func TestResolveCmd(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	(&AddCmd{Alias: "acme", Path: target}).Run(&env{Home: home})
+
+	stdout, _, err := captureStdio(func() error {
+		return (&ResolveCmd{Alias: "acme"}).Run(&env{Home: home})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(stdout) != target {
+		t.Errorf("got %q, want %q", stdout, target)
+	}
+}
+
+func TestYankCmd(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	(&AddCmd{Alias: "acme", Path: target}).Run(&env{Home: home})
+
+	stdout, _, err := captureStdio(func() error {
+		return (&YankCmd{Alias: "acme"}).Run(&env{Home: home})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Yank prints the path to stdout.
+	if strings.TrimSpace(stdout) != target {
+		t.Errorf("got %q, want %q", stdout, target)
+	}
+}
