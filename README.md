@@ -9,7 +9,7 @@ Fast directory alias resolver for Windows PowerShell and Linux (Bash/Zsh). Type 
 go install github.com/sadirano/onix@latest
 onix init
 
-# On Linux or macOS (Bash/Zsh)
+# On Linux (Bash/Zsh)
 go install github.com/sadirano/onix@latest
 onix init
 ```
@@ -135,17 +135,17 @@ Every command that takes an alias (`o`, `n`, `s`, `y`, `r`, plus your custom act
 
 ## Diagnostics
 
-If `onix doctor` warns that your shell profile does not source the snippet, run `onix init` again without `--skip-profile`. On Windows this updates `$PROFILE`; on Linux/macOS it appends a `[ -f ... ] && . ...` line to `.bashrc` and/or `.zshrc`.
+If `onix doctor` warns that your shell profile does not source the snippet, run `onix init` again without `--skip-profile`. On Windows this updates `$PROFILE`; on Linux it appends a `[ -f ... ] && . ...` line to `.bashrc` and/or `.zshrc`.
 
-If `doctor` warns that `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin` (Linux/macOS) to PATH and restart your shell. Shortcuts (`o`, `n`, `s`, `y`, `r`) work without `onix` on PATH because the snippet pins the binary location at install time; `PATH` only matters when you type `onix` directly. Zsh tab completion additionally requires `compinit` to be loaded in `.zshrc` before sourcing the snippet — without it, completion silently skips registration rather than erroring.
+If `doctor` warns that `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin` (Linux) to PATH and restart your shell. Shortcuts (`o`, `n`, `s`, `y`, `r`) work without `onix` on PATH because the snippet pins the binary location at install time; `PATH` only matters when you type `onix` directly. Zsh tab completion additionally requires `compinit` to be loaded in `.zshrc` before sourcing the snippet — without it, completion silently skips registration rather than erroring.
 
 Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The included `scripts/smoke.ps1` does exactly that — it builds, runs every command against a throwaway home, and measures the hot path.
 
 ## Status and scope
 
-This release covers Windows (PowerShell), Linux (Bash/Zsh), and macOS (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, sub-alias subdir shortcuts from `segments.toml`, and cross-platform tab completion. 
+This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, sub-alias subdir shortcuts from `segments.toml`, and cross-platform tab completion.
 
-Note: macOS support is provided "blind" (untested by the primary maintainer) and relies on community feedback and PRs for platform-specific bug fixes.
+**Note: macOS is NOT supported in this repository.** If you require macOS support, please feel free to create your own fork.
 
 Sub-alias context resolvers (env/cmd/file segments with templates), search shortcuts (`sg`, `ff`) as first-party features, and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
 
