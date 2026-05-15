@@ -130,6 +130,28 @@ func main() {
 		return
 	}
 
+	// Default to 'resolve' if the first argument is not a known command and
+	// not a flag. This allows 'onix <alias>' and 'o <alias>' to work
+	// without explicit 'resolve' subcommands.
+	if len(os.Args) >= 2 && !startsWithDash(os.Args[1]) {
+		cmd := os.Args[1]
+		known := false
+		for _, c := range []string{
+			"resolve", "add", "remove", "rm", "list", "ls", "aliases", "edit",
+			"grep", "find", "explore", "yank", "run", "exec", "plugin",
+			"plugin-exec", "import", "context", "init", "sync", "list-names",
+			"doctor", "version",
+		} {
+			if cmd == c {
+				known = true
+				break
+			}
+		}
+		if !known {
+			os.Args = append([]string{os.Args[0], "resolve"}, os.Args[1:]...)
+		}
+	}
+
 	var cli CLI
 	ctx := kong.Parse(
 		&cli,

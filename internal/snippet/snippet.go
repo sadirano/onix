@@ -241,7 +241,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	binDir := filepath.Join(home, "bin")
 	_ = os.MkdirAll(binDir, 0o755)
 
-	writeCmdWrapper(binDir, exe, s["o"], "resolve")
+	writeCmdWrapper(binDir, exe, s["o"])
 	writeCmdWrapper(binDir, exe, s["n"], "edit")
 	writeCmdWrapper(binDir, exe, s["s"], "explore")
 	writeCmdWrapper(binDir, exe, s["y"], "yank")

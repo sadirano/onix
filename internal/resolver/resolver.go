@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 
 // ErrCancelled is returned by Resolve when the user cancels the interactive
 // destination prompt for an unknown alias.
-var ErrCancelled = fmt.Errorf("cancelled")
+var ErrCancelled = errors.New("prompt cancelled")
 
 // Resolve finds the absolute path for an alias.
 //
@@ -52,7 +53,7 @@ func Resolve(home, name string, prompter func(string) string) (string, error) {
 			return "", err
 		}
 		if prompter == nil {
-			return "", fmt.Errorf("unknown alias %q (run: onix list)", name)
+			return "", fmt.Errorf("unknown alias %q", name)
 		}
 		dest := prompter(name)
 		if dest == "" {
@@ -87,7 +88,7 @@ func resolveSegmented(home, input string) (string, error) {
 	}
 	a, ok := s.Lookup(alias)
 	if !ok {
-		return "", fmt.Errorf("unknown alias %q (run: onix list)", alias)
+		return "", fmt.Errorf("unknown alias %q", alias)
 	}
 
 	segFile, err := segments.LoadSegments(home)
