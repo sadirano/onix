@@ -108,3 +108,21 @@ func TestSegments_LoadMissingReturnsEmpty(t *testing.T) {
 		t.Fatalf("expected empty segments, got %+v", sf)
 	}
 }
+
+func TestLoadSegments_BadTOML(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(Path(dir), []byte(`invalid [ TOML`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadSegments(dir)
+	if err == nil {
+		t.Fatal("expected error for bad TOML, got nil")
+	}
+}
+
+func TestLookupCaseInsensitive_Nil(t *testing.T) {
+	v, ok := lookupCaseInsensitive(nil, "foo")
+	if ok || v != "" {
+		t.Errorf("lookupCaseInsensitive(nil) = %q, %v, want \"\", false", v, ok)
+	}
+}
