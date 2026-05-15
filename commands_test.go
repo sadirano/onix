@@ -201,3 +201,54 @@ func captureStdio(fn func() error) (stdout, stderr string, runErr error) {
 	_, _ = io.Copy(&errBuf, errR)
 	return outBuf.String(), errBuf.String(), runErr
 }
+
+func TestVersionCmd(t *testing.T) {
+	home := t.TempDir()
+	t.Run("plain", func(t *testing.T) {
+		stdout, _, err := captureStdio(func() error {
+			return (&VersionCmd{}).Run(&env{Home: home})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(stdout, "onix:") || !strings.Contains(stdout, "go:") {
+			t.Errorf("version output missing labels: %q", stdout)
+		}
+	})
+
+	t.Run("JSON", func(t *testing.T) {
+		stdout, _, err := captureStdio(func() error {
+			return (&VersionCmd{}).Run(&env{Home: home, JSON: true})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(stdout, "{") {
+			t.Errorf("expected JSON object, got: %q", stdout)
+		}
+		if !strings.Contains(stdout, `"onix"`) || !strings.Contains(stdout, `"go"`) {
+			t.Errorf("JSON output missing fields: %q", stdout)
+		}
+	})
+}
+
+func TestListNamesCmd(t *testing.T) {
+	home := t.TempDir()
+	// Register some aliases
+	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(&env{Home: home})
+	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(&env{Home: home})
+
+	stdout, _, err := captureStdio(func() error {
+		return (&ListNamesCmd{}).Run(&env{Home: home})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), stdout)
+	}
+	if lines[0] != "a" || lines[1] != "b" {
+		t.Errorf("expected [a, b], got %v", lines)
+	}
+}
