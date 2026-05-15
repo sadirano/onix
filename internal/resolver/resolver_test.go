@@ -163,3 +163,65 @@ src  = "source"
 		})
 	}
 }
+
+func TestResolve_Basic(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{"a": {Path: "C:/a"}}}
+	store.SaveStore(dir, s)
+
+	t.Run("fast path", func(t *testing.T) {
+		got, err := Resolve(dir, "a", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != filepath.FromSlash("C:/a") {
+			t.Errorf("got %q, want C:/a", got)
+		}
+	})
+
+	t.Run("slow path", func(t *testing.T) {
+		// Delete file to force slow path (or just use non-fast alias name if any)
+		// Wait, slow path is also triggered if Resolve reads full store.
+		// Resolve always tries fast path first.
+		got, err := Resolve(dir, "A", nil) // Case insensitive
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != filepath.FromSlash("C:/a") {
+			t.Errorf("got %q, want C:/a", got)
+		}
+	})
+}
+
+func TestResolve_WithPrompter(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "new-path")
+
+	t.Run("success", func(t *testing.T) {
+		prompter := func(name string) string {
+			return target
+		}
+		got, err := Resolve(dir, "new", prompter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != target {
+			t.Errorf("got %q, want %q", got, target)
+		}
+		// Verify it was saved
+		s, _ := store.LoadStore(dir)
+		if a, ok := s.Lookup("new"); !ok || filepath.ToSlash(a.Path) != filepath.ToSlash(target) {
+			t.Errorf("alias not saved correctly: %+v", a)
+		}
+	})
+
+	t.Run("cancelled", func(t *testing.T) {
+		prompter := func(name string) string {
+			return ""
+		}
+		_, err := Resolve(dir, "cancelled", prompter)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+}
