@@ -11,6 +11,10 @@ import (
 	"github.com/sadirano/onix/internal/store"
 )
 
+// ErrCancelled is returned by Resolve when the user cancels the interactive
+// destination prompt for an unknown alias.
+var ErrCancelled = fmt.Errorf("cancelled")
+
 // Resolve finds the absolute path for an alias.
 //
 // It first attempts a fast byte-scan of aliases.toml to bypass full TOML
@@ -52,7 +56,7 @@ func Resolve(home, name string, prompter func(string) string) (string, error) {
 		}
 		dest := prompter(name)
 		if dest == "" {
-			return "", fmt.Errorf("unknown alias %q (run: onix list)", name)
+			return "", ErrCancelled
 		}
 		abs, err := filepath.Abs(store.ExpandTilde(dest))
 		if err != nil {

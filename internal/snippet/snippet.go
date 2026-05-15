@@ -32,6 +32,13 @@ const pwshO = `function global:%s {
         & $global:onixExe aliases
         return
     }
+
+    # Passthrough to onix for subcommands.
+    if ($Alias -in @('add','rm','remove','ls','list','aliases','edit','grep','find','explore','yank','run','exec','plugin','import','context','init','sync','doctor','version')) {
+        & $global:onixExe $Alias @args
+        return
+    }
+
     if ($Path) {
         # '%s foo C:\some\path' — register (or update) the alias and cd
         # into it. The directory is auto-created by 'onix add' if it
@@ -103,6 +110,12 @@ const bashO = `%s() {
         "$ONIX_EXE" aliases
         return
     fi
+    case "$1" in
+        add|rm|remove|ls|list|aliases|edit|grep|find|explore|yank|run|exec|plugin|import|context|init|sync|doctor|version)
+            "$ONIX_EXE" "$@"
+            return
+            ;;
+    esac
     local path
     if [ -n "$2" ]; then
         # '%s foo /some/path' — register (or update) the alias and cd into

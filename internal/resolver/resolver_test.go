@@ -220,8 +220,8 @@ func TestResolve_WithPrompter(t *testing.T) {
 			return ""
 		}
 		_, err := Resolve(dir, "cancelled", prompter)
-		if err == nil {
-			t.Fatal("expected error, got nil")
+		if err != ErrCancelled {
+			t.Fatalf("expected ErrCancelled, got %v", err)
 		}
 	})
 }

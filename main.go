@@ -10,11 +10,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
 
 	"github.com/alecthomas/kong"
+	"github.com/sadirano/onix/internal/resolver"
 )
 
 // CLI is the top-level kong grammar. Each field is a subcommand whose tag
@@ -106,7 +108,9 @@ func main() {
 			os.Exit(1)
 		}
 		if err := fastResolve(home, os.Args[2]); err != nil {
-			fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+			if !errors.Is(err, resolver.ErrCancelled) {
+				fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+			}
 			os.Exit(1)
 		}
 		return
@@ -118,7 +122,9 @@ func main() {
 			os.Exit(1)
 		}
 		if err := fastListNames(home); err != nil {
-			fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+			if !errors.Is(err, resolver.ErrCancelled) {
+				fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+			}
 			os.Exit(1)
 		}
 		return
@@ -150,7 +156,9 @@ func main() {
 	if err := ctx.Run(); err != nil {
 		// Subcommands return errors instead of calling os.Exit so kong can
 		// print them consistently and tests can assert on them.
-		fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+		if !errors.Is(err, resolver.ErrCancelled) {
+			fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }

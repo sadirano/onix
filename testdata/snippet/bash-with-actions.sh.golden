@@ -23,6 +23,12 @@ o() {
         "$ONIX_EXE" aliases
         return
     fi
+    case "$1" in
+        add|rm|remove|ls|list|aliases|edit|grep|find|explore|yank|run|exec|plugin|import|context|init|sync|doctor|version)
+            "$ONIX_EXE" "$@"
+            return
+            ;;
+    esac
     local path
     if [ -n "$2" ]; then
         # 'o foo /some/path' — register (or update) the alias and cd into
