@@ -1,0 +1,95 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/sadirano/onix/internal/plugins"
+)
+
+func TestResolveRepoURL(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"https://github.com/foo/bar", "https://github.com/foo/bar"},
+		{"/abs/path", "/abs/path"},
+		{"C:/abs/path", "C:/abs/path"},
+		{"foo/bar", "https://github.com/foo/bar.git"},
+		{"sadirano/onix-tts", "https://github.com/sadirano/onix-tts.git"},
+	}
+	for _, tc := range tests {
+		got := resolveRepoURL(tc.in)
+		if got != tc.want {
+			t.Errorf("resolveRepoURL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestReadPluginManifest(t *testing.T) {
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "onix.toml")
+	content := `
+[[entry]]
+name = "start"
+cmd  = "t-start"
+
+[[entry]]
+name = "stop"
+`
+	if err := os.WriteFile(manifestPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := readPluginManifest(dir)
+	if err != nil {
+		t.Fatalf("readPluginManifest: %v", err)
+	}
+
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].Name != "start" || entries[0].Cmd != "t-start" {
+		t.Errorf("entry 0 incorrect: %+v", entries[0])
+	}
+	if entries[1].Name != "stop" || entries[1].Cmd != "" {
+		t.Errorf("entry 1 incorrect: %+v", entries[1])
+	}
+}
+
+func TestPluginListCmd(t *testing.T) {
+	home := t.TempDir()
+	// Create plugins.toml
+	pf := &plugins.PluginsFile{
+		Plugins: []plugins.Plugin{
+			{Name: "tts", Repo: "sadirano/onix-tts", SHA: "abc"},
+		},
+	}
+	if err := plugins.SavePlugins(home, pf); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := captureStdio(func() error {
+		return (&PluginListCmd{}).Run(&env{Home: home})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(stdout, "NAME") || !strings.Contains(stdout, "tts") {
+		t.Errorf("output missing plugin data: %q", stdout)
+	}
+
+	// JSON mode
+	stdout, _, err = captureStdio(func() error {
+		return (&PluginListCmd{}).Run(&env{Home: home, JSON: true})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, `"Name": "tts"`) {
+		t.Errorf("JSON output missing plugin data: %q", stdout)
+	}
+}
