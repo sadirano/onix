@@ -93,3 +93,34 @@ func TestPluginListCmd(t *testing.T) {
 		t.Errorf("JSON output missing plugin data: %q", stdout)
 	}
 }
+
+func TestPluginRemoveCmd(t *testing.T) {
+	home := t.TempDir()
+	// Create plugins.toml with a plugin
+	pf := &plugins.PluginsFile{
+		Plugins: []plugins.Plugin{
+			{Name: "tts", Repo: "sadirano/onix-tts", SHA: "abc"},
+		},
+	}
+	if err := plugins.SavePlugins(home, pf); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove missing plugin
+	err := (&PluginRemoveCmd{Name: "nope"}).Run(&env{Home: home})
+	if err == nil {
+		t.Error("expected error removing missing plugin, got nil")
+	}
+
+	// Remove existing plugin
+	err = (&PluginRemoveCmd{Name: "tts"}).Run(&env{Home: home})
+	if err != nil {
+		t.Fatalf("PluginRemoveCmd.Run: %v", err)
+	}
+
+	// Verify it's gone
+	pf2, _ := plugins.LoadPlugins(home)
+	if len(pf2.Plugins) != 0 {
+		t.Errorf("plugin still exists after removal: %+v", pf2.Plugins)
+	}
+}
