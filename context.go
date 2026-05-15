@@ -141,6 +141,7 @@ func applyContexts(home, input, shell string, w io.Writer) error {
 	}
 
 	isBash := shell == "bash" || shell == "zsh"
+	isCmd := shell == "cmd"
 
 	// Apply in innermost-first order (right-to-left in the segments slice)
 	// to mirror the path-building direction.
@@ -158,12 +159,18 @@ func applyContexts(home, input, shell string, w io.Writer) error {
 		for _, k := range keys {
 			if isBash {
 				fmt.Fprintf(w, "export %s=%s\n", k, shQuote(cd.Env[k]))
+			} else if isCmd {
+				fmt.Fprintf(w, "set %s=%s\n", k, cd.Env[k])
 			} else {
 				fmt.Fprintf(w, "$env:%s = %s\n", k, psSingleQuote(cd.Env[k]))
 			}
 		}
 		// Exec: each argument individually quoted.
 		if len(cd.Exec) > 0 {
+			if isCmd {
+				fmt.Fprintf(w, "%s\n", strings.Join(cd.Exec, " "))
+				continue
+			}
 			quoted := make([]string, len(cd.Exec))
 			for j, arg := range cd.Exec {
 				if isBash {

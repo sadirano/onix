@@ -241,7 +241,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	binDir := filepath.Join(home, "bin")
 	_ = os.MkdirAll(binDir, 0o755)
 
-	writeCmdWrapper(binDir, exe, s["o"])
+	writeOCmdWrapper(binDir, exe, s["o"])
 	writeCmdWrapper(binDir, exe, s["n"], "edit")
 	writeCmdWrapper(binDir, exe, s["s"], "explore")
 	writeCmdWrapper(binDir, exe, s["y"], "yank")
@@ -267,6 +267,45 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	writeCompleterRegistration(&b, s, actions, plgs)
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+func writeOCmdWrapper(binDir, exe, name string) {
+	path := filepath.Join(binDir, name+".cmd")
+	// The 'o' wrapper is special. It mimics the PowerShell function's
+	// "no-args means aliases" behavior.
+	// For alias lookups, it performs a 'cd /d' to change the current
+	// directory. If launched from a non-interactive context (like Win+R),
+	// it also launches 'cmd /k' to ensure the user gets a persistent shell
+	// at the target location.
+	content := fmt.Sprintf(`@echo off
+if "%%~1"=="" (
+  "%s" aliases
+  exit /b
+)
+for %%%%a in (add rm remove ls list aliases edit grep find explore yank run exec plugin import context init sync doctor version) do (
+  if /i "%%~1"=="%%%%a" (
+    "%s" %%*
+    exit /b
+  )
+)
+
+setlocal enabledelayedexpansion
+for /f "usebackq delims=" %%%%i in ("%s" resolve "%%~1") do set "target=%%%%i"
+if "!target!"=="" exit /b 1
+
+cd /d "!target!"
+
+:: Apply segment contexts (env vars and exec) for Cmd.
+for /f "usebackq delims=" %%%%i in ("%s" context apply "%%~1" --shell cmd) do %%%%i
+
+:: If run from Win+R (or similar), %%cmdcmdline%% usually starts with cmd /c.
+:: We check for this to provide a persistent shell window.
+echo %%cmdcmdline%% | findstr /i /r /c:"^cmd  */c" >nul
+if not errorlevel 1 (
+  cmd /k
+)
+`, exe, exe, exe, exe)
+	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
 func writeCmdWrapper(binDir, exe, name string, args ...string) {

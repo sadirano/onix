@@ -113,6 +113,25 @@ func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 	}
 }
 
+func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
+	dir := t.TempDir()
+	if err := WritePwshShellSnippet(dir, nil, nil, nil); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	path := filepath.Join(dir, "bin", "o.cmd")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "aliases") {
+		t.Errorf("o.cmd missing 'aliases' handling:\n%s", content)
+	}
+	if !strings.Contains(content, "explore") {
+		t.Errorf("o.cmd missing 'explore' handling:\n%s", content)
+	}
+}
+
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
