@@ -298,9 +298,9 @@ cd /d "!target!"
 :: Apply segment contexts (env vars and exec) for Cmd.
 for /f "usebackq delims=" %%%%i in ("%s" context apply "%%~1" --shell cmd) do %%%%i
 
-:: If run from Win+R (or similar), %%cmdcmdline%% usually starts with cmd /c.
+:: If run from Win+R (or similar), %%cmdcmdline%% contains /c.
 :: We check for this to provide a persistent shell window.
-echo %%cmdcmdline%% | findstr /i /r /c:"^cmd  */c" >nul
+echo %%cmdcmdline%% | findstr /i /c:" /c " >nul
 if not errorlevel 1 (
   cmd /k
 )
