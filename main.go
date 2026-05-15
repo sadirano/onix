@@ -79,7 +79,10 @@ func main() {
 
 			fmt.Fprintf(os.Stderr, "```markdown\n")
 			fmt.Fprintf(os.Stderr, "### Environment\n")
-			fmt.Fprintf(os.Stderr, "- Version: %s\n", buildVersion)
+			fmt.Fprintf(os.Stderr, "- Version: %s\n", resolveBuildVersion())
+			if commit := resolveBuildCommit(); commit != "" {
+				fmt.Fprintf(os.Stderr, "- Commit:  %s\n", commit)
+			}
 			fmt.Fprintf(os.Stderr, "- GOOS:    %s\n", runtime.GOOS)
 			fmt.Fprintf(os.Stderr, "- GOARCH:  %s\n", runtime.GOARCH)
 			fmt.Fprintf(os.Stderr, "- Runtime: %s\n\n", runtime.Version())

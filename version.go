@@ -20,18 +20,24 @@ type VersionCmd struct{}
 
 func (c *VersionCmd) Run(e *env) error {
 	v := resolveBuildVersion()
+	commit := resolveBuildCommit()
+
 	if e.JSON {
 		res := struct {
 			Onix   string `json:"onix"`
+			Commit string `json:"commit,omitempty"`
 			Go     string `json:"go"`
 			OSArch string `json:"os_arch"`
-		}{v, runtime.Version(), fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)}
+		}{v, commit, runtime.Version(), fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(res)
 	}
 
 	fmt.Printf("onix:    %s\n", v)
+	if commit != "" {
+		fmt.Printf("commit:  %s\n", commit)
+	}
 	fmt.Printf("go:      %s\n", runtime.Version())
 	fmt.Printf("os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	return nil
@@ -61,4 +67,18 @@ func resolveBuildVersion() string {
 		}
 	}
 	return "dev"
+}
+
+// resolveBuildCommit returns the full VCS revision if available.
+func resolveBuildCommit() string {
+	bi, ok := rdebug.ReadBuildInfo()
+	if !ok || bi == nil {
+		return ""
+	}
+	for _, s := range bi.Settings {
+		if s.Key == "vcs.revision" {
+			return s.Value
+		}
+	}
+	return ""
 }
