@@ -204,3 +204,39 @@ func TestStore_SubdirsRoundTrip(t *testing.T) {
 		t.Errorf("subdirs round-trip lost data: %+v", a.Subdirs)
 	}
 }
+
+func TestExpandTilde(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"/abs/path", "/abs/path"},
+		{"C:/abs/path", "C:/abs/path"},
+		{"~/foo", ""}, // Needs HOME env
+	}
+	t.Setenv("HOME", "/home/user")
+	t.Setenv("USERPROFILE", "/home/user") // Windows fallback
+	for _, tc := range tests {
+		got := ExpandTilde(tc.in)
+		if tc.in == "~/foo" {
+			if !strings.HasPrefix(got, "/home/user") {
+				t.Errorf("ExpandTilde(~/foo) = %q, want prefix /home/user", got)
+			}
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("ExpandTilde(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestStore_LoadBadTOML(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(AliasesPath(dir), []byte(`invalid [ TOML`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadStore(dir)
+	if err == nil {
+		t.Fatal("expected error for bad TOML, got nil")
+	}
+}
