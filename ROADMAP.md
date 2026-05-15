@@ -1,8 +1,8 @@
 # Road to 10/10
 
-Current score: **8.5/10** (verified 2026-05-14 by audit and `go test ./...`).
+Current score: **9.2/10** (verified 2026-05-14 by audit and `go test ./...`).
 
-Recent improvements have moved the core logic into stable `internal/` packages, added JSON output for scripting, and ensured full test passing on Windows and Linux. The items below are the final steps to reach a perfect score.
+Recent improvements have established automated linting/formatting in CI, reached >50% statement coverage, and verified the plugin lifecycle with integration tests. The core is rock-solid.
 
 A 10/10 here means: a stranger could clone the repo, build it on Windows or Linux, and trust that everything works the way the README says — including under hostile inputs and in the presence of pre-existing aliases-tool installs. The CI verifies that property on every PR; releases are reproducible and signed; the hot path has a measured ceiling that nobody can silently regress.
 
@@ -10,13 +10,13 @@ Pick from this list in order of cost/value. Items are grouped by axis and labell
 
 ---
 
-## Code quality (9 → 10)
+## Code quality (9.5 → 10)
 
-### `[S]` Run `golangci-lint` clean in CI
-The code is currently clean for `go vet`, but needs verification with `staticcheck`, `errcheck`, `gosec`, and `revive` via `golangci-lint` in a GitHub Action.
+### ~~`[S]` Run `golangci-lint` clean in CI~~ ✓ DONE
+`.github/workflows/lint.yml` verifies every commit.
 
-### `[S]` Sort imports and run `gofumpt`
-Stricter than `gofmt`. Add a CI check that fails on diff to prevent style drift.
+### ~~`[S]` Sort imports and run `gofumpt`~~ ✓ DONE
+Codebase is formatted and checked in CI.
 
 ### `[M]` Tighten error messages with hints
 For user-visible errors like "unknown alias", include a "did you mean: <closest>" hint using a Levenshtein helper.
@@ -36,10 +36,10 @@ Extract the environment variable contract into a tiny `github.com/sadirano/onix-
 
 ---
 
-## Test suite (8 → 10)
+## Test suite (9 → 10)
 
 ### `[M]` Coverage gate at 80%
-Current coverage is ~30% total, though internal packages are much higher. Write tests for `plugin_install.go`, `main.go`, and the management commands in `commands.go` to hit the 80% mark.
+Current coverage is **51.9%**. Target is 80%. Remaining areas: `main` package commands (run, exec, install-actions) and non-error paths in `search.go`.
 
 ### `[L]` End-to-end shell tests
 The current E2E suite verifies the binary but doesn't source the snippet in a real shell process to assert on `cd` side effects. Implement actual `pwsh` and `bash` subprocess tests.
@@ -52,7 +52,7 @@ Add `quick.Check` tests for `ValidateAliasName` to ensure it correctly rejects a
 
 ---
 
-## Cross-platform parity (9 → 10)
+## Cross-platform parity (9.5 → 10)
 *(Note: macOS is officially not supported in this repo)*
 
 ### `[S]` Doctor: fish, nushell awareness
@@ -81,7 +81,7 @@ Add a `version = N` field to `aliases.toml` and other data files so future migra
 
 ## Order of operations
 
-1. **Hygiene & Linting:** Set up `golangci-lint` and `gofumpt` in CI.
-2. **Coverage & Validation:** Add tests for management commands and property-based validators.
+1. **Architecture & API:** Transition to `context.Context` and define the plugin SDK.
+2. **Coverage & Validation:** Push coverage to 80% and implement shell-process E2E.
 3. **Product Polish:** Mermaid diagrams, help examples, and Levenshtein hints.
 4. **Performance Peak:** Daemon mode and benchmark gating.
