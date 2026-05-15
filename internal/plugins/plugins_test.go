@@ -125,9 +125,9 @@ func TestValidatePlugins_Collisions(t *testing.T) {
 			want: "builtin",
 		},
 		{
-			name: "missing sha without unpinned",
+			name:    "missing sha without unpinned",
 			plugins: []Plugin{{Name: "p", Repo: "x/p"}},
-			want:   "sha is required",
+			want:    "sha is required",
 		},
 		{
 			name:    "bad name characters",
@@ -153,11 +153,13 @@ func TestValidatePlugins_Collisions(t *testing.T) {
 func TestValidatePlugins_HappyPath(t *testing.T) {
 	pf := &PluginsFile{Plugins: []Plugin{
 		{Name: "tts", Repo: "sadirano/onix-tts", SHA: "abc123"},
-		{Name: "timer", Repo: "sadirano/onix-timer", SHA: "def456",
+		{
+			Name: "timer", Repo: "sadirano/onix-timer", SHA: "def456",
 			Entries: []PluginEntry{
 				{Name: "start", Cmd: "t-start"},
 				{Name: "stop", Cmd: "t-stop"},
-			}},
+			},
+		},
 	}}
 	if err := ValidatePlugins(pf, nil); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -167,12 +169,12 @@ func TestValidatePlugins_HappyPath(t *testing.T) {
 // TestDefaultWrapperName covers the basename-stripping convention.
 func TestDefaultWrapperName(t *testing.T) {
 	cases := map[string]string{
-		"sadirano/onix-tts":           "tts",
-		"sadirano/onix-search":        "search",
-		"sadirano/onix-timer":         "timer",
-		"user/foobar":                 "foobar",
-		"https://github.com/x/y.git":  "y",
-		"github.com/x/onix-anything":  "anything",
+		"sadirano/onix-tts":          "tts",
+		"sadirano/onix-search":       "search",
+		"sadirano/onix-timer":        "timer",
+		"user/foobar":                "foobar",
+		"https://github.com/x/y.git": "y",
+		"github.com/x/onix-anything": "anything",
 	}
 	for in, want := range cases {
 		if got := DefaultWrapperName(in); got != want {
@@ -185,7 +187,7 @@ func TestDefaultWrapperName(t *testing.T) {
 // home/plugins/<user>/<repo>/<basename>.exe.
 func TestPluginBinaryPath(t *testing.T) {
 	got := BinaryPath("C:/home", "sadirano/onix-tts")
-	want := filepath.Join("C:/home", "plugins", "sadirano", "onix-tts", "onix-tts.exe")
+	want := filepath.Join("C:/home", "plugins", "sadirano", "onix-tts", BinaryName("sadirano/onix-tts"))
 	if got != want {
 		t.Errorf("pluginBinaryPath = %q, want %q", got, want)
 	}

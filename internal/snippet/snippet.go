@@ -122,10 +122,13 @@ const bashO = `%s() {
 
 const bashN = `%s() { "$ONIX_EXE" edit "$1"; }
 `
+
 const bashS = `%s() { "$ONIX_EXE" explore "$1"; }
 `
+
 const bashY = `%s() { "$ONIX_EXE" yank "$1"; }
 `
+
 const bashR = `%s() {
     local alias=$1
     shift

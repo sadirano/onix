@@ -209,4 +209,3 @@ func confirmInstall(repo, name, sha, message string, entries []plugins.PluginEnt
 	}
 	return strings.EqualFold(strings.TrimSpace(ans), "y")
 }
-

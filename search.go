@@ -76,7 +76,7 @@ func (c *GrepCmd) Run(e *env) error {
 	if err := rgCmd.Start(); err != nil {
 		return fmt.Errorf("start rg: %w", err)
 	}
-	
+
 	selected, err := fzfCmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 130 {
@@ -84,7 +84,7 @@ func (c *GrepCmd) Run(e *env) error {
 		}
 		// fzf returns exit code 1 if nothing selected, but we should distinguish between error and no selection.
 		if _, ok := err.(*exec.ExitError); ok {
-			return nil 
+			return nil
 		}
 		return fmt.Errorf("fzf: %w", err)
 	}
@@ -203,10 +203,10 @@ func (c *FindCmd) Run(e *env) error {
 
 func openSelectionsInEditor(target string, selections []string) error {
 	ed := resolveEditor()
-	
+
 	// Pre-process selections. For grep, they are file:line:col:text.
 	// For find, they are just file.
-	
+
 	argv := []string{}
 	for _, s := range selections {
 		parts := strings.Split(s, ":")
@@ -214,7 +214,7 @@ func openSelectionsInEditor(target string, selections []string) error {
 			// grep format: file:line[:col]:text
 			file := parts[0]
 			line := parts[1]
-			
+
 			// Most editors support +<line>
 			argv = append(argv, fmt.Sprintf("+%s", line), file)
 		} else {

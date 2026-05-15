@@ -1,7 +1,7 @@
 # onix shell integration (generated; do not edit — run 'onix install-actions')
-# Source from $PROFILE: . '/ONIX_HOME\shell\onix.ps1'
+# Source from $PROFILE: . '/ONIX_HOME/shell/onix.ps1'
 
-$global:onixExe = '/usr/local/bin/onix'
+$global:onixExe = '/ONIX_EXE'
 
 $onixAliasCompleter = {
     param($wordToComplete, $commandAst, $cursorPosition)

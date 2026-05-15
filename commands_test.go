@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -99,8 +100,10 @@ func TestListCmd(t *testing.T) {
 	}
 
 	// Register two aliases.
-	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(&env{Home: home})
-	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(&env{Home: home})
+	pathA, _ := filepath.Abs("a")
+	pathB, _ := filepath.Abs("b")
+	(&AddCmd{Alias: "a", Path: pathA}).Run(&env{Home: home})
+	(&AddCmd{Alias: "b", Path: pathB}).Run(&env{Home: home})
 
 	t.Run("table output", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
@@ -127,7 +130,7 @@ func TestListCmd(t *testing.T) {
 		if !strings.HasPrefix(stdout, "[") {
 			t.Errorf("expected JSON array, got: %q", stdout)
 		}
-		if !strings.Contains(stdout, `"name": "a"`) || !strings.Contains(stdout, `"path": "C:/a"`) {
+		if !strings.Contains(stdout, `"name": "a"`) || !strings.Contains(stdout, fmt.Sprintf(`"path": "%s"`, filepath.ToSlash(pathA))) {
 			t.Errorf("JSON output missing data: %q", stdout)
 		}
 	})

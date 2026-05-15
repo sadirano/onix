@@ -170,13 +170,17 @@ func checkInstalledPlugins(home string) []checkResult {
 		label := "plugin:" + p.Name
 		bin := plugins.BinaryPath(home, p.Repo)
 		if _, err := os.Stat(bin); err != nil {
-			out = append(out, checkResult{label, "err",
-				fmt.Sprintf("binary missing at %s — run: onix plugin update %s", bin, p.Name)})
+			out = append(out, checkResult{
+				label, "err",
+				fmt.Sprintf("binary missing at %s — run: onix plugin update %s", bin, p.Name),
+			})
 			continue
 		}
 		if p.Unpinned {
-			out = append(out, checkResult{label, "warn",
-				fmt.Sprintf("UNPINNED — `onix plugin update` rebuilds from default branch (binary: %s)", bin)})
+			out = append(out, checkResult{
+				label, "warn",
+				fmt.Sprintf("UNPINNED — `onix plugin update` rebuilds from default branch (binary: %s)", bin),
+			})
 			continue
 		}
 		out = append(out, checkResult{label, "ok", fmt.Sprintf("%s @ %s", bin, shortSHA(p.SHA))})
@@ -242,12 +246,16 @@ func checkSnippetPin(home string) checkResult {
 	}
 	pin := extractSnippetPin(home)
 	if pin == "" {
-		return checkResult{"snippet pin", "warn",
-			"no binary pin in snippet — run: onix install-actions"}
+		return checkResult{
+			"snippet pin", "warn",
+			"no binary pin in snippet — run: onix install-actions",
+		}
 	}
 	if _, err := os.Stat(pin); err != nil {
-		return checkResult{"snippet pin", "warn",
-			fmt.Sprintf("%s missing — run install-actions from the new location", pin)}
+		return checkResult{
+			"snippet pin", "warn",
+			fmt.Sprintf("%s missing — run install-actions from the new location", pin),
+		}
 	}
 	return checkResult{"snippet pin", "ok", pin}
 }
@@ -270,15 +278,19 @@ func checkOnExePath(home string) checkResult {
 		// No onix on PATH. Shortcuts still work via the pinned binary.
 		// Mention this as an info detail so users adding scripts know they
 		// can opt into having `onix` directly available.
-		return checkResult{"onix on PATH", "ok",
-			"not on PATH (shortcuts use pinned binary; add to PATH for direct `onix` calls)"}
+		return checkResult{
+			"onix on PATH", "ok",
+			"not on PATH (shortcuts use pinned binary; add to PATH for direct `onix` calls)",
+		}
 	}
 	if pin == "" || samePath(pathExe, pin) {
 		return checkResult{"onix on PATH", "ok", pathExe}
 	}
-	return checkResult{"onix on PATH", "warn",
+	return checkResult{
+		"onix on PATH", "warn",
 		fmt.Sprintf("PATH=%s differs from pinned=%s — type `onix` invokes the PATH binary; shortcuts invoke the pinned one. Run install-actions from the binary you want pinned.",
-			pathExe, pin)}
+			pathExe, pin),
+	}
 }
 
 func checkEditor() checkResult {
@@ -363,7 +375,7 @@ func extractSnippetPin(home string) string {
 
 // extractPwshSnippetPin reads $global:onixExe = '<path>' from onix.ps1.
 // We trust the snippet's own formatting because it's machine-generated:
-// the prefix is exact, single quotes are literal, and `''` is the only
+// the prefix is exact, single quotes are literal, and `”` is the only
 // possible quote escape — so a small string search is fine here.
 func extractPwshSnippetPin(home string) string {
 	data, err := os.ReadFile(snippet.PwshPath(home))

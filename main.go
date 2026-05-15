@@ -25,9 +25,9 @@ type CLI struct {
 	Resolve ResolveCmd `cmd:"" help:"Print the resolved absolute path of an alias."`
 
 	// Alias management.
-	Add    AddCmd    `cmd:"" help:"Register or update an alias."`
-	Remove RemoveCmd `cmd:"" aliases:"rm" help:"Remove an alias."`
-	List   ListCmd   `cmd:"" aliases:"ls" help:"List all aliases."`
+	Add     AddCmd     `cmd:"" help:"Register or update an alias."`
+	Remove  RemoveCmd  `cmd:"" aliases:"rm" help:"Remove an alias."`
+	List    ListCmd    `cmd:"" aliases:"ls" help:"List all aliases."`
 	Aliases AliasesCmd `cmd:"" help:"Open the aliases.toml file in your editor."`
 
 	// Actions that operate on the resolved directory.
@@ -122,7 +122,8 @@ func main() {
 	}
 
 	var cli CLI
-	ctx := kong.Parse(&cli,
+	ctx := kong.Parse(
+		&cli,
 		kong.Name("onix"),
 		kong.Description("Fast directory alias resolver."),
 		kong.UsageOnError(),

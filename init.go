@@ -116,7 +116,7 @@ func sourceFromBashLike(snippet string) error {
 			continue
 		}
 
-		file, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0644)
+		file, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0o644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not open %s: %v\n", p, err)
 			continue

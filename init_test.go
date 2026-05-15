@@ -25,8 +25,8 @@ func TestWritePwshShellSnippet_NoActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	assertGolden(t, scrub(string(data), dir), 
- "pwsh-no-actions.ps1.golden")
+	assertGolden(t, scrub(string(data), dir),
+		"pwsh-no-actions.ps1.golden")
 }
 
 // TestWritePwshShellSnippet_WithActions verifies custom action functions.
@@ -40,8 +40,8 @@ func TestWritePwshShellSnippet_WithActions(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 	data, _ := os.ReadFile(snippet.PwshPath(dir))
-	assertGolden(t, scrub(string(data), dir), 
- "pwsh-with-actions.ps1.golden")
+	assertGolden(t, scrub(string(data), dir),
+		"pwsh-with-actions.ps1.golden")
 }
 
 // TestWritePwshShellSnippet_WithPlugins locks the wrapper-generation contract.
@@ -49,18 +49,20 @@ func TestWritePwshShellSnippet_WithPlugins(t *testing.T) {
 	dir := t.TempDir()
 	plgs := []plugins.Plugin{
 		{Name: "tts", Repo: "sadirano/onix-tts", SHA: "abc"},
-		{Name: "timer", Repo: "sadirano/onix-timer", SHA: "def",
+		{
+			Name: "timer", Repo: "sadirano/onix-timer", SHA: "def",
 			Entries: []plugins.PluginEntry{
 				{Name: "start", Cmd: "t-start"},
 				{Name: "stop"},
-			}},
+			},
+		},
 	}
 	if err := snippet.WritePwshShellSnippet(dir, nil, nil, plgs); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, _ := os.ReadFile(snippet.PwshPath(dir))
-	assertGolden(t, scrub(string(data), dir), 
- "pwsh-with-plugins.ps1.golden")
+	assertGolden(t, scrub(string(data), dir),
+		"pwsh-with-plugins.ps1.golden")
 }
 
 // TestWriteBashShellSnippet_NoActions mirrors the PowerShell "no actions" test.
@@ -73,8 +75,8 @@ func TestWriteBashShellSnippet_NoActions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	assertGolden(t, scrub(string(data), dir), 
- "bash-no-actions.sh.golden")
+	assertGolden(t, scrub(string(data), dir),
+		"bash-no-actions.sh.golden")
 }
 
 // TestWriteBashShellSnippet_WithActions verifies custom action wrappers.
@@ -88,8 +90,8 @@ func TestWriteBashShellSnippet_WithActions(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 	data, _ := os.ReadFile(snippet.BashPath(dir))
-	assertGolden(t, scrub(string(data), dir), 
- "bash-with-actions.sh.golden")
+	assertGolden(t, scrub(string(data), dir),
+		"bash-with-actions.sh.golden")
 }
 
 // TestWriteBashShellSnippet_WithPlugins mirrors the plugin-wrapper contract.
@@ -97,18 +99,20 @@ func TestWriteBashShellSnippet_WithPlugins(t *testing.T) {
 	dir := t.TempDir()
 	plgs := []plugins.Plugin{
 		{Name: "tts", Repo: "sadirano/onix-tts", SHA: "abc"},
-		{Name: "timer", Repo: "sadirano/onix-timer", SHA: "def",
+		{
+			Name: "timer", Repo: "sadirano/onix-timer", SHA: "def",
 			Entries: []plugins.PluginEntry{
 				{Name: "start", Cmd: "t-start"},
 				{Name: "stop"},
-			}},
+			},
+		},
 	}
 	if err := snippet.WriteBashShellSnippet(dir, nil, nil, plgs); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, _ := os.ReadFile(snippet.BashPath(dir))
-	assertGolden(t, scrub(string(data), dir), 
- "bash-with-plugins.sh.golden")
+	assertGolden(t, scrub(string(data), dir),
+		"bash-with-plugins.sh.golden")
 }
 
 // TestWriteShellSnippet_HostPlatformOnly confirms exactly one snippet on disk.
@@ -139,10 +143,10 @@ func assertGolden(t *testing.T, got, goldenName string) {
 
 	path := filepath.Join("testdata", "snippet", goldenName)
 	if *updateGolden {
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := os.WriteFile(path, []byte(normalize(got)), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(normalize(got)), 0o644); err != nil {
 			t.Fatalf("write golden: %v", err)
 		}
 	}
@@ -158,5 +162,10 @@ func assertGolden(t *testing.T, got, goldenName string) {
 
 // scrub deterministic paths that change every test run (like t.TempDir())
 func scrub(s, tempDir string) string {
-	return strings.ReplaceAll(s, tempDir, "/ONIX_HOME")
+	s = strings.ReplaceAll(s, tempDir, "/ONIX_HOME")
+	exe, _ := os.Executable()
+	if exe != "" {
+		s = strings.ReplaceAll(s, exe, "/ONIX_EXE")
+	}
+	return filepath.ToSlash(s)
 }

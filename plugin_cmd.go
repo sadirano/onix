@@ -343,7 +343,8 @@ func (c *PluginExecCmd) Run(e *env) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"ONIX_TARGET="+target,
 		"ONIX_ALIAS="+strings.ToLower(aliasName),
 		"ONIX_HOME="+e.Home,

@@ -118,7 +118,8 @@ func ExpandAction(a *Action, target, alias string, extras []string) []string {
 			argv = append(argv,
 				strings.ReplaceAll(
 					substituteSingles(raw, target, alias),
-					"{extras}", joinedExtras))
+					"{extras}", joinedExtras,
+				))
 			seenExtras = true
 		default:
 			argv = append(argv, substituteSingles(raw, target, alias))

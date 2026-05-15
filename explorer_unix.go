@@ -5,16 +5,12 @@ package main
 import (
 	"fmt"
 	"os/exec"
-	"runtime"
 )
 
 // openInExplorer opens the target path in the system file manager.
-// On Linux we use xdg-open; on macOS we use open.
+// On Linux we use xdg-open. macOS is not supported.
 func openInExplorer(target string) error {
 	bin := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		bin = "open"
-	}
 
 	// We use Start() rather than Run() so onix doesn't block while the
 	// explorer window is open.

@@ -121,15 +121,15 @@ func runValidatorTable(t *testing.T, fn func(string) error, kind string) {
 		}
 	}
 	bad := map[string]string{
-		"":            "empty",
-		"   ":         "empty",
-		"foo bar":     "whitespace",
-		"foo\tbar":    "whitespace",
-		"foo\nbar":    "whitespace",
-		"foo/bar":     "path",
-		"foo\\bar":    "path",
-		"foo@bar":     "@",
-		"\x00bar":     "control",
+		"":         "empty",
+		"   ":      "empty",
+		"foo bar":  "whitespace",
+		"foo\tbar": "whitespace",
+		"foo\nbar": "whitespace",
+		"foo/bar":  "path",
+		"foo\\bar": "path",
+		"foo@bar":  "@",
+		"\x00bar":  "control",
 	}
 	for name, hint := range bad {
 		err := fn(name)

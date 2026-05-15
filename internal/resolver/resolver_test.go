@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,12 +109,7 @@ func BenchmarkScanForAlias(b *testing.B) {
 func seedStore(t testing.TB, dir string, count int) {
 	s := &store.Store{Aliases: map[string]store.Alias{}}
 	for i := 0; i < count; i++ {
-		name := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(
-			strings.ReplaceAll(strings.ReplaceAll(
-				"alias"+strings.Repeat("x", i%10)+string(rune('0'+i%10)),
-				" ", ""), "\t", ""), "\n", ""), "\r", "")))
-		// Ensure unique name
-		name = "alias" + strings.Repeat("x", i/10) + string(rune('0'+i%10))
+		name := fmt.Sprintf("alias%d", i)
 		s.Set(name, store.Alias{Path: "C:/path/to/" + name})
 	}
 	if err := store.SaveStore(dir, s); err != nil {
@@ -137,7 +133,7 @@ func TestResolve_Segmented(t *testing.T) {
 	}
 
 	// Global subdirs.
-	if err := os.WriteFile(store.AliasesPath(dir)+"/../segments.toml", []byte(`
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`
 [subdirs]
 docs = "documentation"
 src  = "source"

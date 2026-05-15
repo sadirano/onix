@@ -28,16 +28,6 @@ jobs:
             goarch: arm64
             suffix: ""
             pkg_cmd: bash
-          - os: macos-latest
-            goos: darwin
-            goarch: amd64
-            suffix: ""
-            pkg_cmd: bash
-          - os: macos-latest
-            goos: darwin
-            goarch: arm64
-            suffix: ""
-            pkg_cmd: bash
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -69,8 +59,8 @@ jobs:
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           Write-Host "SHA256: $hash"
 
-      - name: Package (Linux/macOS)
-        if: matrix.goos == 'linux' || matrix.goos == 'darwin'
+      - name: Package (Linux)
+        if: matrix.goos == 'linux'
         run: |
           mkdir -p dist
           cp onix dist/

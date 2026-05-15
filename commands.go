@@ -81,7 +81,6 @@ func importZoxide(e *env) error {
 	return nil
 }
 
-
 // -----------------------------------------------------------------------------
 // resolve — the hot path.
 //
@@ -553,7 +552,7 @@ func resolveEditor() string {
 }
 
 // copyToClipboard writes s to the system clipboard. We use atotto/clipboard
-// so it works natively on Windows, macOS, and Linux (via xclip/xsel).
+// so it works natively on Windows and Linux (via xclip/xsel).
 func copyToClipboard(s string) error {
 	return clipboard.WriteAll(s)
 }
