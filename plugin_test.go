@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -122,5 +123,64 @@ func TestPluginRemoveCmd(t *testing.T) {
 	pf2, _ := plugins.LoadPlugins(home)
 	if len(pf2.Plugins) != 0 {
 		t.Errorf("plugin still exists after removal: %+v", pf2.Plugins)
+	}
+}
+
+func TestPluginAddCmd_Local(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	home := t.TempDir()
+	tempParent := t.TempDir()
+	repoDir := filepath.Join(tempParent, "onix-dummy")
+	if err := os.MkdirAll(repoDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Initialize a dummy plugin repo
+	run := func(dir string, name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s %v failed: %v\n%s", name, args, err, out)
+		}
+	}
+
+	run(repoDir, "git", "init")
+	run(repoDir, "git", "config", "user.email", "test@example.com")
+	run(repoDir, "git", "config", "user.name", "Test User")
+
+	if err := os.WriteFile(filepath.Join(repoDir, "go.mod"), []byte("module dummy\n\ngo 1.23\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "onix.toml"), []byte("[[entry]]\nname = \"run\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	run(repoDir, "git", "add", ".")
+	run(repoDir, "git", "commit", "-m", "initial commit")
+
+	shaBytes, _ := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD").Output()
+	sha := strings.TrimSpace(string(shaBytes))
+
+	// Run plugin add
+	// We use --yes to skip confirmation
+	cmd := &PluginAddCmd{
+		Repo: repoDir,
+		SHA:  sha,
+		Yes:  true,
+	}
+	if err := cmd.Run(&env{Home: home}); err != nil {
+		t.Fatalf("PluginAddCmd.Run: %v", err)
+	}
+
+	// Verify plugin is installed
+	pf, _ := plugins.LoadPlugins(home)
+	if len(pf.Plugins) != 1 || pf.Plugins[0].Name != "dummy" {
+		t.Errorf("plugin not installed correctly: %+v", pf.Plugins)
 	}
 }
