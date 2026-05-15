@@ -285,3 +285,36 @@ func TestYankCmd(t *testing.T) {
 		t.Errorf("got %q, want %q", stdout, target)
 	}
 }
+
+func TestFastResolve(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	(&AddCmd{Alias: "acme", Path: target}).Run(&env{Home: home})
+
+	stdout, _, err := captureStdio(func() error {
+		return fastResolve(home, "acme")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(stdout) != target {
+		t.Errorf("got %q, want %q", stdout, target)
+	}
+}
+
+func TestFastListNames(t *testing.T) {
+	home := t.TempDir()
+	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(&env{Home: home})
+	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(&env{Home: home})
+
+	stdout, _, err := captureStdio(func() error {
+		return fastListNames(home)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), stdout)
+	}
+}
