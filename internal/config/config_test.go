@@ -172,3 +172,20 @@ func TestExpandAction(t *testing.T) {
 		})
 	}
 }
+
+func TestBuiltinDefaults(t *testing.T) {
+	m := BuiltinDefaults()
+	if len(m) == 0 {
+		t.Error("BuiltinDefaults returned no entries")
+	}
+	if m["o"] != "o" {
+		t.Errorf("builtin 'o' missing or wrong: %q", m["o"])
+	}
+}
+
+func TestFindAction_Missing(t *testing.T) {
+	cfg := &Config{}
+	if cfg.FindAction("nope") != nil {
+		t.Error("FindAction found a non-existent action")
+	}
+}
