@@ -31,8 +31,8 @@ Thread a `slog.Logger` through `env` so every command can emit a structured trac
 ### ~~`[S]` Drop the `env` struct in favour of `context.Context`~~ ✓ DONE
 Refactor the `Run(e *env)` signature to `Run(ctx context.Context, e *env)` (or similar) to allow cancellation to flow into long-running plugin invocations and move towards standard Go patterns.
 
-### `[M]` Define a stable plugin-author API (SDK)
-Extract the environment variable contract into a tiny `github.com/sadirano/onix-sdk` repo with helper functions so plugin authors get IDE autocomplete.
+### ~~`[M]` Define a stable plugin-author API (SDK)~~ ✓ DONE
+Extract the environment variable contract into a tiny `github.com/sadirano/onix-sdk` repo with helper functions so plugin authors get IDE autocomplete. (Prototype implemented in `sdk/`).
 
 ---
 
@@ -110,7 +110,7 @@ Let actions invoke other actions in their template, enabling simple chains witho
 
 ## Reliability
 
-### `[M]` Concurrent-write safety
+### `[M]` Concurrent-write safety (future worry)
 Atomic writes already prevent file corruption, but two shells doing `onix add` simultaneously can still race on read-modify-write. Add a lock (advisory file lock on Linux, named mutex on Windows) around store mutations.
 
 ### `[M]` Context segment teardown
