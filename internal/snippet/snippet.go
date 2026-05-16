@@ -276,21 +276,34 @@ func writeOCmdWrapper(binDir, exe, name string) {
 	// anything else (subcommands, unknown names) is delegated to onix
 	// itself, which dispatches subcommands or prompts to register a new
 	// alias. Win+R invocations get a persistent shell via 'cmd /k'.
+	//
+	// NB: no setlocal. setlocal + cd reverts the working directory when
+	// the script exits, which would silently break the whole point of
+	// `o`. We use a unique variable name (_onix_target) to minimise
+	// collisions with whatever the user has in their shell.
+	//
+	// NB: %~1 is passed unquoted to the for /f backtick command. When
+	// the command starts with a quoted exe path AND contains another
+	// quoted token, for /f's usebackq tokenizer mis-parses the trailing
+	// quote and the inner command runs with corrupted args (silently —
+	// stdout capture returns nothing). Alias names are validated to
+	// contain no spaces or shell metachars, so quoting is unnecessary.
 	content := fmt.Sprintf(`@echo off
 if "%%~1"=="" (
   "%s" aliases
   exit /b
 )
 
-setlocal enabledelayedexpansion
-for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" resolve --no-prompt "%%~1" 2^>nul`+"`"+`) do set "target=%%%%i"
-if not defined target (
+set "_onix_target="
+for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" resolve --no-prompt %%~1 2^>nul`+"`"+`) do set "_onix_target=%%%%i"
+if not defined _onix_target (
   "%s" %%*
   exit /b
 )
 
-cd /d "!target!"
-for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" context apply "%%~1" --shell cmd`+"`"+`) do %%%%i
+cd /d "%%_onix_target%%"
+set "_onix_target="
+for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" context apply %%~1 --shell cmd`+"`"+`) do %%%%i
 if %%0 == "%%~f0" cmd /k
 `, exe, exe, exe, exe)
 	_ = os.WriteFile(path, []byte(content), 0o644)

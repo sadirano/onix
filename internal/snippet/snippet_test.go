@@ -130,8 +130,14 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if !strings.Contains(content, "resolve --no-prompt") {
 		t.Errorf("o.cmd missing 'resolve --no-prompt' lookup:\n%s", content)
 	}
-	if !strings.Contains(content, "if not defined target") {
+	if !strings.Contains(content, "if not defined _onix_target") {
 		t.Errorf("o.cmd missing subcommand passthrough fallback:\n%s", content)
+	}
+	// Regression guard: setlocal + cd reverts the working directory when
+	// the script exits, which would silently break `o`. The wrapper must
+	// not use setlocal.
+	if strings.Contains(content, "setlocal") {
+		t.Errorf("o.cmd must not use 'setlocal' — it would revert cd on script exit:\n%s", content)
 	}
 }
 
