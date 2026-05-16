@@ -77,8 +77,8 @@ On resolve, if the target no longer exists, prompt to update or remove. `onix do
 ### ~~`[S]` Per-alias metadata~~ ✓ DONE
 Optional `description`, `tags`, `owner`, `last_used` on alias entries. Surfaces in `onix list` and feeds future search/filter commands.
 
-### `[M]` Importers from `z`, `autojump`, `direnv`
-One-shot `onix import <tool>` that ingests existing alias-style stores so new users don't start empty. Idempotent and dry-run-able.
+### ~~`[M]` Importers from `z`, `autojump`, `direnv`~~ (WON'T DO)
+The maintainer doesn't use any of these tools, and supporting them adds shell/binary dependencies for a path that's already covered by hand-editing `aliases.toml`. Out of scope for the same reason as macOS/fish/nushell.
 
 ---
 

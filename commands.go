@@ -20,69 +20,6 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-// import — pull aliases from other tools.
-// -----------------------------------------------------------------------------
-
-type ImportCmd struct {
-	Zoxide bool `help:"Import from zoxide (requires 'zoxide' on PATH)."`
-}
-
-func (c *ImportCmd) Run(ctx context.Context, e *env) error {
-	if !c.Zoxide {
-		return fmt.Errorf("please specify a source (e.g. --zoxide)")
-	}
-
-	if c.Zoxide {
-		return importZoxide(ctx, e)
-	}
-	return nil
-}
-
-func importZoxide(ctx context.Context, e *env) error {
-	cmd := exec.CommandContext(ctx,"zoxide", "query", "-l")
-	out, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("call zoxide: %w (ensure it's on PATH)", err)
-	}
-
-	s, err := store.LoadStore(e.Home)
-	if err != nil {
-		return err
-	}
-
-	lines := strings.Split(string(out), "\n")
-	count := 0
-	for _, line := range lines {
-		path := strings.TrimSpace(line)
-		if path == "" {
-			continue
-		}
-		name := strings.ToLower(filepath.Base(path))
-		if name == "" || name == "." || name == "/" {
-			continue
-		}
-
-		if _, exists := s.Lookup(name); exists {
-			continue
-		}
-
-		if err := store.ValidateAliasName(name); err != nil {
-			continue
-		}
-
-		s.Set(name, store.Alias{Path: filepath.ToSlash(path)})
-		count++
-	}
-
-	if err := store.SaveStore(e.Home, s); err != nil {
-		return err
-	}
-
-	fmt.Printf("imported %d aliases from zoxide\n", count)
-	return nil
-}
-
-// -----------------------------------------------------------------------------
 // resolve — the hot path.
 //
 // `onix resolve <alias>` reads aliases.toml, looks up <alias>, prints its
