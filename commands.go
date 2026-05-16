@@ -128,8 +128,11 @@ func printJSON(v any) error {
 // -----------------------------------------------------------------------------
 
 type AddCmd struct {
-	Alias string `arg:"" help:"Alias name."`
-	Path  string `arg:"" optional:"" help:"Directory path (default: current working directory)."`
+	Alias       string   `arg:"" help:"Alias name."`
+	Path        string   `arg:"" optional:"" help:"Directory path (default: current working directory)."`
+	Description string   `help:"Human-readable description of the alias."`
+	Owner       string   `help:"The person or team responsible for this directory."`
+	Tags        []string `help:"Categorization labels (multiple flags)."`
 }
 
 func (c *AddCmd) Run(ctx context.Context, e *env) error {
@@ -160,7 +163,21 @@ func (c *AddCmd) Run(ctx context.Context, e *env) error {
 	if err != nil {
 		return err
 	}
-	s.Set(c.Alias, store.Alias{Path: filepath.ToSlash(abs)})
+
+	// Merge with existing alias if present.
+	alias, _ := s.Lookup(c.Alias)
+	alias.Path = filepath.ToSlash(abs)
+	if c.Description != "" {
+		alias.Description = c.Description
+	}
+	if c.Owner != "" {
+		alias.Owner = c.Owner
+	}
+	if len(c.Tags) > 0 {
+		alias.Tags = c.Tags
+	}
+
+	s.Set(c.Alias, alias)
 	if err := store.SaveStore(e.Home, s); err != nil {
 		return err
 	}
@@ -213,17 +230,25 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 
 	if e.JSON {
 		type aliasInfo struct {
-			Name    string            `json:"name"`
-			Path    string            `json:"path"`
-			Subdirs map[string]string `json:"subdirs,omitempty"`
+			Name        string            `json:"name"`
+			Path        string            `json:"path"`
+			Description string            `json:"description,omitempty"`
+			Tags        []string          `json:"tags,omitempty"`
+			Owner       string            `json:"owner,omitempty"`
+			LastUsed    int64             `json:"last_used,omitempty"`
+			Subdirs     map[string]string `json:"subdirs,omitempty"`
 		}
 		out := make([]aliasInfo, 0, len(names))
 		for _, n := range names {
 			a, _ := s.Lookup(n)
 			out = append(out, aliasInfo{
-				Name:    n,
-				Path:    a.Path,
-				Subdirs: a.Subdirs,
+				Name:        n,
+				Path:        a.Path,
+				Description: a.Description,
+				Tags:        a.Tags,
+				Owner:       a.Owner,
+				LastUsed:    a.LastUsed,
+				Subdirs:     a.Subdirs,
 			})
 		}
 		return printJSON(out)
@@ -234,10 +259,10 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ALIAS\tPATH")
+	fmt.Fprintln(w, "ALIAS\tPATH\tDESCRIPTION")
 	for _, n := range names {
 		a, _ := s.Lookup(n)
-		fmt.Fprintf(w, "%s\t%s\n", n, a.Path)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", n, a.Path, a.Description)
 	}
 	return w.Flush()
 }

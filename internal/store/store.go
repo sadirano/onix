@@ -22,8 +22,12 @@ const CurrentVersion = 2
 
 // Alias is one alias entry.
 type Alias struct {
-	Path    string            `toml:"path"`
-	Subdirs map[string]string `toml:"subdirs,omitempty"`
+	Path        string            `toml:"path"`
+	Description string            `toml:"description,omitempty"`
+	Tags        []string          `toml:"tags,omitempty"`
+	Owner       string            `toml:"owner,omitempty"`
+	LastUsed    int64             `toml:"last_used,omitempty"`
+	Subdirs     map[string]string `toml:"subdirs,omitempty"`
 }
 
 // AliasesPath returns home/aliases.toml.

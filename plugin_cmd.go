@@ -17,10 +17,10 @@ import (
 // PluginCmd is the umbrella for plugin subcommands. Each child is its
 // own kong command struct so help and validation stay localised.
 type PluginCmd struct {
-	Add    PluginAddCmd    `cmd:"" help:"Install a new plugin from GitHub."`
-	Update PluginUpdateCmd `cmd:"" help:"Update installed plugins."`
-	Remove PluginRemoveCmd `cmd:"" aliases:"rm" help:"Uninstall a plugin."`
-	List   PluginListCmd   `cmd:"" aliases:"ls" help:"List installed plugins."`
+	Add    PluginAddCmd    `cmd:"" help:"Install a new plugin from GitHub." examples:"onix plugin add sadirano/onix-tts --sha 123456"`
+	Update PluginUpdateCmd `cmd:"" help:"Update installed plugins." examples:"onix plugin update tts"`
+	Remove PluginRemoveCmd `cmd:"" aliases:"rm" help:"Uninstall a plugin." examples:"onix plugin rm tts"`
+	List   PluginListCmd   `cmd:"" aliases:"ls" help:"List installed plugins." examples:"onix plugin ls"`
 }
 
 // PluginAddCmd installs a new plugin.

@@ -71,10 +71,10 @@ Maintain a persistent nav stack so `o -` (back) and `o +` (forward) work across 
 ### `[M]` Multi-target aliases
 Allow one alias to resolve to several candidates with a fuzzy picker. Common when the same project name exists under different parents (e.g., `web` under two clients).
 
-### `[S]` Stale-alias detection and repair
+### ~~`[S]` Stale-alias detection and repair~~ (WON'T DO - Auto-creation is a feature)
 On resolve, if the target no longer exists, prompt to update or remove. `onix doctor` reports the full set so users can clean up in bulk.
 
-### `[S]` Per-alias metadata
+### ~~`[S]` Per-alias metadata~~ ✓ DONE
 Optional `description`, `tags`, `owner`, `last_used` on alias entries. Surfaces in `onix list` and feeds future search/filter commands.
 
 ### `[M]` Importers from `z`, `autojump`, `direnv`
@@ -130,7 +130,7 @@ Opt-in `onix stats` that reports a personal "most-used aliases", "stale aliases"
 
 ## Docs & Hygiene (9 → 10)
 
-### `[S]` Add per-command examples to `--help`
+### ~~`[S]` Add per-command examples to `--help`~~ ✓ DONE
 Use `kong`'s `examples:""` tags to provide inline usage examples for every subcommand.
 
 ### `[M]` Architecture diagram in the README

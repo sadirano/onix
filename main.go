@@ -26,39 +26,39 @@ import (
 // every Run() to a helper in its own file so main.go stays readable.
 type CLI struct {
 	// Hot path: print resolved path to stdout. Shell functions read this.
-	Resolve ResolveCmd `cmd:"" help:"Print the resolved absolute path of an alias."`
+	Resolve ResolveCmd `cmd:"" help:"Print the resolved absolute path of an alias." examples:"onix resolve web"`
 
 	// Alias management.
-	Add     AddCmd     `cmd:"" help:"Register or update an alias."`
-	Remove  RemoveCmd  `cmd:"" aliases:"rm" help:"Remove an alias."`
-	List    ListCmd    `cmd:"" aliases:"ls" help:"List all aliases."`
-	Aliases AliasesCmd `cmd:"" help:"Open the aliases.toml file in your editor."`
+	Add     AddCmd     `cmd:"" help:"Register or update an alias." examples:"onix add web C:/projects/web"`
+	Remove  RemoveCmd  `cmd:"" aliases:"rm" help:"Remove an alias." examples:"onix rm web"`
+	List    ListCmd    `cmd:"" aliases:"ls" help:"List all aliases." examples:"onix ls"`
+	Aliases AliasesCmd `cmd:"" help:"Open the aliases.toml file in your editor." examples:"onix aliases"`
 
 	// Actions that operate on the resolved directory.
-	Edit    EditCmd    `cmd:"" help:"Open the alias directory in your editor."`
-	Grep    GrepCmd    `cmd:"" help:"Search file contents in an alias directory using ripgrep and fzf."`
-	Find    FindCmd    `cmd:"" help:"Find files in an alias directory using Everything/fd and fzf."`
-	Explore ExploreCmd `cmd:"" help:"Open the alias directory in the OS file manager."`
-	Yank    YankCmd    `cmd:"" help:"Print the alias path and copy it to the clipboard."`
-	Run     RunCmd     `cmd:"" passthrough:"" help:"Run a command in the alias directory."`
+	Edit    EditCmd    `cmd:"" help:"Open the alias directory in your editor." examples:"onix edit web"`
+	Grep    GrepCmd    `cmd:"" help:"Search file contents in an alias directory using ripgrep and fzf." examples:"onix grep web \"some query\""`
+	Find    FindCmd    `cmd:"" help:"Find files in an alias directory using Everything/fd and fzf." examples:"onix find web \"some file\""`
+	Explore ExploreCmd `cmd:"" help:"Open the alias directory in the OS file manager." examples:"onix explore web"`
+	Yank    YankCmd    `cmd:"" help:"Print the alias path and copy it to the clipboard." examples:"onix yank web"`
+	Run     RunCmd     `cmd:"" passthrough:"" help:"Run a command in the alias directory." examples:"onix run web \"npm start\""`
 
 	// Custom action dispatch (declared in ~/.onix/config.toml).
-	Exec ExecCmd `cmd:"" passthrough:"" help:"Run a configured action against an alias."`
+	Exec ExecCmd `cmd:"" passthrough:"" help:"Run a configured action against an alias." examples:"onix exec test web"`
 
 	// External plugin management + runtime dispatch.
 	Plugin     PluginCmd     `cmd:"" help:"Install and manage external plugins."`
 	PluginExec PluginExecCmd `cmd:"" name:"plugin-exec" passthrough:"" help:"Internal: run a plugin against an alias (called by generated shell wrappers)."`
 
-	Import ImportCmd `cmd:"" help:"Import aliases from other tools (zoxide, autojump, etc)."`
+	Import ImportCmd `cmd:"" help:"Import aliases from other tools (zoxide, autojump, etc)." examples:"onix import --zoxide"`
 
 	Context ContextCmd `cmd:"" help:"Manage segment contexts."`
 
 	// Installation and diagnostics.
-	Init           InitCmd           `cmd:"" help:"Create ~/.onix and install shell integration."`
-	Sync           SyncCmd           `cmd:"" help:"Regenerate shell snippets and Windows wrappers."`
+	Init           InitCmd           `cmd:"" help:"Create ~/.onix and install shell integration." examples:"onix init"`
+	Sync           SyncCmd           `cmd:"" help:"Regenerate shell snippets and Windows wrappers." examples:"onix sync"`
 	ListNames      ListNamesCmd      `cmd:"" name:"list-names" help:"Print alias names (used by tab-completion)."`
-	Doctor         DoctorCmd         `cmd:"" help:"Check installation health."`
-	Version        VersionCmd        `cmd:"" help:"Print the onix version."`
+	Doctor         DoctorCmd         `cmd:"" help:"Check installation health." examples:"onix doctor"`
+	Version        VersionCmd        `cmd:"" help:"Print the onix version." examples:"onix version"`
 
 	// Global flags.
 	ConfigDir string `name:"config-dir" env:"ONIX_HOME" help:"Override ~/.onix location."`
