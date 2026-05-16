@@ -62,8 +62,8 @@ Implement a long-running daemon process that listens on a named pipe/Unix socket
 
 ## Navigation UX (NEW)
 
-### `[M]` Frecency-ranked tab completion
-Rank completion candidates by recency × frequency so the first Tab is almost always the one the user wants. Keep alphabetical fallback for ties.
+### ~~`[M]` Frecency-ranked tab completion~~ ✓ DONE
+Rank completion candidates by recency × frequency so the first Tab is almost always the one the user wants. Keep alphabetical fallback for ties. (Implemented via `usage.log` append-only scoring).
 
 ### `[M]` Cross-shell nav history (back/forward stack)
 Maintain a persistent nav stack so `o -` (back) and `o +` (forward) work across shells, like a browser. Backed by a small append-only log.
