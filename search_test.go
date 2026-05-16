@@ -36,6 +36,20 @@ func TestFindCmd_NotFound(t *testing.T) {
 	}
 }
 
+func TestGrepCmd_TooFewArgs(t *testing.T) {
+	err := (&GrepCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Errorf("expected usage error, got: %v", err)
+	}
+}
+
+func TestFindCmd_TooFewArgs(t *testing.T) {
+	err := (&FindCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Errorf("expected usage error, got: %v", err)
+	}
+}
+
 func TestOpenSelectionsInEditor(t *testing.T) {
 	// Set EDITOR to a command that does nothing
 	t.Setenv("EDITOR", "true")

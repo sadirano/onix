@@ -189,6 +189,59 @@ func TestCheckBashLikeProfile(t *testing.T) {
 	})
 }
 
+func TestShortSHA(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"abc", "abc"},
+		{"123456789012", "123456789012"},          // exactly 12, untouched
+		{"1234567890123", "123456789012"},          // 13 → 12
+		{"abcdef0123456789deadbeef", "abcdef012345"},
+	}
+	for _, tc := range tests {
+		if got := shortSHA(tc.in); got != tc.want {
+			t.Errorf("shortSHA(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestExtractBashSnippetPin(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "shell"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "# header\nexport ONIX_EXE='/usr/local/bin/onix'\nfoo() { :; }\n"
+		if err := os.WriteFile(snippet.BashPath(dir), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := extractBashSnippetPin(dir); got != "/usr/local/bin/onix" {
+			t.Errorf("got %q, want /usr/local/bin/onix", got)
+		}
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		dir := t.TempDir()
+		if got := extractBashSnippetPin(dir); got != "" {
+			t.Errorf("got %q, want empty for missing file", got)
+		}
+	})
+
+	t.Run("missing pin line", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "shell"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(snippet.BashPath(dir), []byte("# no pin here\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := extractBashSnippetPin(dir); got != "" {
+			t.Errorf("got %q, want empty when no pin line present", got)
+		}
+	})
+}
+
 func TestDoctorCmd(t *testing.T) {
 	home := t.TempDir()
 	// Initialize the home so doctor has something to check

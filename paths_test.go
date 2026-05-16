@@ -53,3 +53,31 @@ func TestPwshBin(t *testing.T) {
 		t.Error("pwshBin returned empty string")
 	}
 }
+
+func TestParseFastResolveArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		wantName  string
+		wantNP    bool
+		wantOk    bool
+	}{
+		{"simple alias", []string{"foo"}, "foo", false, true},
+		{"alias with no-prompt", []string{"foo", "--no-prompt"}, "foo", true, true},
+		{"no-prompt before alias", []string{"--no-prompt", "foo"}, "foo", true, true},
+		{"empty", []string{}, "", false, false},
+		{"flag rejected", []string{"-h"}, "", false, false},
+		{"unknown flag rejected", []string{"--verbose", "foo"}, "", false, false},
+		{"two positionals rejected", []string{"foo", "bar"}, "", false, false},
+		{"only no-prompt rejected", []string{"--no-prompt"}, "", true, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotName, gotNP, gotOk := parseFastResolveArgs(tc.args)
+			if gotName != tc.wantName || gotNP != tc.wantNP || gotOk != tc.wantOk {
+				t.Errorf("parseFastResolveArgs(%v) = (%q, %v, %v), want (%q, %v, %v)",
+					tc.args, gotName, gotNP, gotOk, tc.wantName, tc.wantNP, tc.wantOk)
+			}
+		})
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -227,6 +228,214 @@ func TestRemoveCmd(t *testing.T) {
 			t.Error("RemoveCmd on missing alias should have errored")
 		}
 	})
+}
+
+// noopExec returns a (binary, args) pair that exits 0 on the current host.
+func noopExec() (string, []string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", []string{"/c", "rem"}
+	}
+	return "true", nil
+}
+
+func TestRunCmd(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+
+	bin, args := noopExec()
+
+	t.Run("happy path", func(t *testing.T) {
+		argv := append([]string{"acme", bin}, args...)
+		_, _, err := captureStdio(func() error {
+			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home})
+		})
+		if err != nil {
+			t.Errorf("RunCmd.Run: %v", err)
+		}
+	})
+
+	t.Run("strips leading double-dash", func(t *testing.T) {
+		argv := append([]string{"acme", "--", bin}, args...)
+		_, _, err := captureStdio(func() error {
+			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home})
+		})
+		if err != nil {
+			t.Errorf("RunCmd.Run with -- separator: %v", err)
+		}
+	})
+
+	t.Run("rejects too few args", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return (&RunCmd{Args: []string{"acme"}}).Run(context.Background(), &env{Home: home})
+		})
+		if err == nil {
+			t.Error("RunCmd with only alias should error")
+		}
+	})
+
+	t.Run("rejects empty argv after --", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return (&RunCmd{Args: []string{"acme", "--"}}).Run(context.Background(), &env{Home: home})
+		})
+		if err == nil {
+			t.Error("RunCmd with bare -- should error")
+		}
+	})
+}
+
+func TestExecCmd(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+
+	bin, args := noopExec()
+	// Write config.toml declaring a 'noop' action that runs our no-op binary.
+	cfgBody := "version = 2\n[[actions]]\nname = \"noop\"\nexec = \"" + bin + "\"\nargs = ["
+	for i, a := range args {
+		if i > 0 {
+			cfgBody += ", "
+		}
+		cfgBody += "\"" + a + "\""
+	}
+	cfgBody += "]\n"
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfgBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("happy path", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return (&ExecCmd{Args: []string{"noop", "acme"}}).Run(context.Background(), &env{Home: home})
+		})
+		if err != nil {
+			t.Errorf("ExecCmd.Run: %v", err)
+		}
+	})
+
+	t.Run("rejects unknown action", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return (&ExecCmd{Args: []string{"nope", "acme"}}).Run(context.Background(), &env{Home: home})
+		})
+		if err == nil {
+			t.Error("ExecCmd with unknown action should error")
+		}
+	})
+
+	t.Run("rejects too few args", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return (&ExecCmd{Args: []string{"noop"}}).Run(context.Background(), &env{Home: home})
+		})
+		if err == nil {
+			t.Error("ExecCmd with only action should error")
+		}
+	})
+}
+
+func TestAliasesCmd_PropagatesEditorError(t *testing.T) {
+	home := t.TempDir()
+	// Editor that does not exist — exercises the failure branch of Run.
+	t.Setenv("EDITOR", filepath.Join(home, "does-not-exist"))
+	err := (&AliasesCmd{}).Run(context.Background(), &env{Home: home})
+	if err == nil {
+		t.Error("AliasesCmd with missing editor should error")
+	}
+}
+
+func TestEditCmd_PropagatesEditorError(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+
+	t.Setenv("EDITOR", filepath.Join(home, "does-not-exist"))
+	err := (&EditCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
+	if err == nil {
+		t.Error("EditCmd with missing editor should error")
+	}
+}
+
+func TestContextEditCmd_PropagatesEditorError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("EDITOR", filepath.Join(home, "does-not-exist"))
+
+	err := (&ContextEditCmd{}).Run(context.Background(), &env{Home: home})
+	if err == nil {
+		t.Error("ContextEditCmd with missing editor should error")
+	}
+	// The starter segments.toml should have been written before the editor invocation.
+	if _, statErr := os.Stat(filepath.Join(home, "segments.toml")); statErr != nil {
+		t.Errorf("starter segments.toml not written: %v", statErr)
+	}
+}
+
+func TestContextApplyCmd_Run(t *testing.T) {
+	home := t.TempDir()
+
+	t.Run("plain alias produces no output", func(t *testing.T) {
+		stdout, _, err := captureStdio(func() error {
+			return (&ContextApplyCmd{Alias: "plain", Shell: "pwsh"}).Run(context.Background(), &env{Home: home})
+		})
+		if err != nil {
+			t.Fatalf("ContextApplyCmd.Run: %v", err)
+		}
+		if stdout != "" {
+			t.Errorf("expected no output for plain alias, got: %q", stdout)
+		}
+	})
+
+	t.Run("segmented alias with no segments file is silent", func(t *testing.T) {
+		// No segments.toml file; applyContexts should still succeed silently.
+		_, _, err := captureStdio(func() error {
+			return (&ContextApplyCmd{Alias: "src@acme", Shell: "pwsh"}).Run(context.Background(), &env{Home: home})
+		})
+		if err != nil {
+			t.Errorf("ContextApplyCmd.Run on missing segments: %v", err)
+		}
+	})
+}
+
+// TestResolveCmd_RecordsUsage guards the slow-path resolve against silently
+// regressing on frecency: every successful resolve (including the kong path,
+// not just the hot-path bypass) must append to usage.log so `onix stats` and
+// tab-completion ranking reflect reality.
+func TestResolveCmd_RecordsUsage(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+
+	if _, _, err := captureStdio(func() error {
+		return (&ResolveCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
+	}); err != nil {
+		t.Fatalf("ResolveCmd.Run: %v", err)
+	}
+
+	usage, err := os.ReadFile(filepath.Join(home, "usage.log"))
+	if err != nil {
+		t.Fatalf("usage.log not created by slow-path resolve: %v", err)
+	}
+	if !strings.Contains(string(usage), "acme") {
+		t.Errorf("usage.log does not contain the resolved alias: %q", usage)
+	}
+}
+
+func TestSyncCmd(t *testing.T) {
+	home := t.TempDir()
+	// init sets up the directory tree and writes a base snippet.
+	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home}); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	stdout, _, err := captureStdio(func() error {
+		return (&SyncCmd{}).Run(context.Background(), &env{Home: home})
+	})
+	if err != nil {
+		t.Fatalf("SyncCmd.Run: %v", err)
+	}
+	if !strings.Contains(stdout, "regenerated") {
+		t.Errorf("expected 'regenerated' in output: %q", stdout)
+	}
+	if !strings.Contains(stdout, "re-source") {
+		t.Errorf("expected re-source hint in output: %q", stdout)
+	}
 }
 
 // captureStdio runs fn with os.Stdout and os.Stderr redirected to pipes,
