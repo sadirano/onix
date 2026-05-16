@@ -18,8 +18,8 @@ Pick from this list in order of cost/value. Items are grouped by axis and labell
 ### ~~`[S]` Sort imports and run `gofumpt`~~ ✓ DONE
 Codebase is formatted and checked in CI.
 
-### `[M]` Tighten error messages with hints
-For user-visible errors like "unknown alias", include a "did you mean: <closest>" hint using a Levenshtein helper.
+### ~~`[M]` Tighten error messages with hints~~ ✓ DONE
+For user-visible errors like "unknown alias", include a "did you mean: <closest>" hint using a Levenshtein helper. (Includes interactive fuzzy selection via fzf/numeric fallback).
 
 ### `[L]` Add a structured trace mode (`ONIX_DEBUG=1`)
 Thread a `slog.Logger` through `env` so every command can emit a structured trace on demand for easier remote debugging.

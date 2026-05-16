@@ -152,7 +152,7 @@ src  = "source"
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			got, err := Resolve(dir, tc.in, nil)
+			got, err := Resolve(dir, tc.in, nil, nil)
 			if err != nil {
 				t.Fatalf("resolve: %v", err)
 			}
@@ -170,7 +170,7 @@ func TestResolve_Basic(t *testing.T) {
 	store.SaveStore(dir, s)
 
 	t.Run("fast path", func(t *testing.T) {
-		got, err := Resolve(dir, "a", nil)
+		got, err := Resolve(dir, "a", nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -183,7 +183,7 @@ func TestResolve_Basic(t *testing.T) {
 		// Delete file to force slow path (or just use non-fast alias name if any)
 		// Wait, slow path is also triggered if Resolve reads full store.
 		// Resolve always tries fast path first.
-		got, err := Resolve(dir, "A", nil) // Case insensitive
+		got, err := Resolve(dir, "A", nil, nil) // Case insensitive
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -201,7 +201,7 @@ func TestResolve_WithPrompter(t *testing.T) {
 		prompter := func(name string) string {
 			return target
 		}
-		got, err := Resolve(dir, "new", prompter)
+		got, err := Resolve(dir, "new", prompter, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -219,7 +219,7 @@ func TestResolve_WithPrompter(t *testing.T) {
 		prompter := func(name string) string {
 			return ""
 		}
-		_, err := Resolve(dir, "cancelled", prompter)
+		_, err := Resolve(dir, "cancelled", prompter, nil)
 		if err != ErrCancelled {
 			t.Fatalf("expected ErrCancelled, got %v", err)
 		}

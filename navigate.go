@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 )
 
@@ -52,4 +54,44 @@ func promptDestination(aliasName string) string {
 		return ""
 	}
 	return line
+}
+
+// promptSelection presents a list of options and returns the selected one.
+// It auto-detects 'fzf' and falls back to a numeric list.
+func promptSelection(options []string) string {
+	if len(options) == 0 {
+		return ""
+	}
+
+	// Try fzf first
+	if fzf, err := exec.LookPath("fzf"); err == nil {
+		cmd := exec.Command(fzf, "--header", "Did you mean:", "--reverse", "--height", "20%")
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = strings.NewReader(strings.Join(options, "\n"))
+		out, err := cmd.Output()
+		if err == nil {
+			return strings.TrimSpace(string(out))
+		}
+		// If fzf was cancelled (exit code 130) or errored, we just return ""
+		// so the user can continue with the unknown alias error.
+		return ""
+	}
+
+	// Fallback to numeric prompt
+	fmt.Fprintln(os.Stderr, "Did you mean:")
+	for i, opt := range options {
+		fmt.Fprintf(os.Stderr, "  %d) %s\n", i+1, opt)
+	}
+
+	line, ok := readLine(fmt.Sprintf("Select [1-%d] or press Enter to cancel: ", len(options)))
+	if !ok || line == "" {
+		return ""
+	}
+
+	idx, err := strconv.Atoi(line)
+	if err != nil || idx < 1 || idx > len(options) {
+		return ""
+	}
+
+	return options[idx-1]
 }

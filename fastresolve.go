@@ -20,7 +20,7 @@ func fastResolve(home, name string, noPrompt bool) error {
 	if noPrompt {
 		prompter = nil
 	}
-	p, err := resolver.Resolve(home, name, prompter)
+	p, err := resolver.Resolve(home, name, prompter, promptSelection)
 	if err != nil {
 		return err
 	}

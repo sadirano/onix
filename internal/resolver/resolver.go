@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/sadirano/onix/internal/segments"
@@ -22,12 +23,14 @@ var ErrCancelled = errors.New("prompt cancelled")
 // parsing. If the alias isn't found or contains segments (@), it falls back
 // to the slow path using the Store and SegmentsFile.
 //
-// If the alias is still unknown and a prompter is provided, it calls the
-// prompter to get a target path, registers it, and returns the new path.
+// If the alias is still unknown:
+//  1. It computes Levenshtein distances to all known aliases.
+//  2. If close matches exist and a selector is provided, it prompts the user.
+//  3. If no match is selected and a prompter is provided, it prompts for a new path.
 //
 // Resolve does NOT create directories on disk. It returns a host-native path
 // (using filepath.FromSlash).
-func Resolve(home, name string, prompter func(string) string) (string, error) {
+func Resolve(home, name string, prompter func(string) string, selector func([]string) string) (string, error) {
 	if strings.Contains(name, "@") {
 		return resolveSegmented(home, name)
 	}
@@ -49,6 +52,50 @@ func Resolve(home, name string, prompter func(string) string) (string, error) {
 	}
 	a, ok := s.Lookup(name)
 	if !ok {
+		// Try fuzzy matching before giving up or prompting for a new path.
+		if selector != nil {
+			names := s.Names()
+			candidates := make([]string, 0)
+			// Map distance -> names for sorting
+			type match struct {
+				name string
+				dist int
+			}
+			matches := make([]match, 0)
+
+			for _, n := range names {
+				d := ComputeDistance(strings.ToLower(name), strings.ToLower(n))
+				// Heuristic: distance <= 3 and at most half the length of the shorter string.
+				limit := 3
+				if len(name) < 4 {
+					limit = 1
+				}
+				if d <= limit {
+					matches = append(matches, match{n, d})
+				}
+			}
+
+			if len(matches) > 0 {
+				// Sort by distance (descending)
+				sort.Slice(matches, func(i, j int) bool {
+					if matches[i].dist != matches[j].dist {
+						return matches[i].dist < matches[j].dist
+					}
+					return matches[i].name < matches[j].name
+				})
+				for _, m := range matches {
+					candidates = append(candidates, m.name)
+				}
+
+				selected := selector(candidates)
+				if selected != "" {
+					// Recursively resolve the selected alias (without prompter/selector
+					// to avoid loops, but since it's from s.Names() it must exist).
+					return Resolve(home, selected, nil, nil)
+				}
+			}
+		}
+
 		if err := store.ValidateAliasName(name); err != nil {
 			return "", err
 		}

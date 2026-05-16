@@ -570,7 +570,7 @@ func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 	if noPrompt {
 		prompter = nil
 	}
-	p, err := resolver.Resolve(e.Home, name, prompter)
+	p, err := resolver.Resolve(e.Home, name, prompter, promptSelection)
 	if err != nil {
 		return "", err
 	}
