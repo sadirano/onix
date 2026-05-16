@@ -188,9 +188,8 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string) err
 		// the existing `onix list-names` invocation byte-for-byte.
 		return fastListNames(e.Home)
 	case "edit":
-		// System-wide --edit currently maps to AliasesCmd (opens
-		// aliases.toml). File-arg passthrough lands in a follow-up commit.
-		return (&AliasesCmd{}).Run(ctx, e)
+		// System-wide --edit: open ~/.onix (or specific files within).
+		return (&EditCmd{Files: rest}).Run(ctx, e)
 	case "show":
 		return (&ShowCmd{Args: rest}).Run(ctx, e)
 	case "contexts":
@@ -273,9 +272,7 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 		// Today: remove the alias. File-delete support lands in a follow-up.
 		return (&RemoveCmd{Alias: alias}).Run(ctx, e)
 	case "edit":
-		// File-arg passthrough lands in a follow-up; for now ignore extras.
-		_ = actionArgs
-		return (&EditCmd{Alias: alias}).Run(ctx, e)
+		return (&EditCmd{Alias: alias, Files: actionArgs}).Run(ctx, e)
 	case "show":
 		return (&ShowCmd{Alias: alias, Args: actionArgs}).Run(ctx, e)
 	case "explore":

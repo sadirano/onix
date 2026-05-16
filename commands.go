@@ -232,17 +232,30 @@ func (c *AliasesCmd) Run(ctx context.Context, e *env) error {
 // -----------------------------------------------------------------------------
 
 type EditCmd struct {
-	Alias string `arg:"" help:"Alias name."`
+	// Alias selects the directory the editor opens in. Empty means the
+	// system-wide form: open ~/.onix (the new dispatcher uses this; the
+	// legacy `onix edit <alias>` subcommand requires it).
+	Alias string `arg:"" optional:"" help:"Alias name (omit for the onix config directory)."`
+
+	// Files lists paths relative to the resolved directory. When empty the
+	// editor opens the directory itself ("."), matching how most editors
+	// treat a project. With files we pass them verbatim so editor-specific
+	// `+line` syntax keeps working when callers prepend it.
+	Files []string `arg:"" optional:"" passthrough:"" help:"Files (relative to the resolved directory)."`
 }
 
 func (c *EditCmd) Run(ctx context.Context, e *env) error {
-	target, err := resolveAliasPath(e, c.Alias)
+	dir, err := c.targetDir(e)
 	if err != nil {
 		return err
 	}
 	ed := resolveEditor()
-	cmd := exec.CommandContext(ctx,ed, ".")
-	cmd.Dir = target
+	args := c.Files
+	if len(args) == 0 {
+		args = []string{"."}
+	}
+	cmd := exec.CommandContext(ctx, ed, args...)
+	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -250,6 +263,15 @@ func (c *EditCmd) Run(ctx context.Context, e *env) error {
 		return fmt.Errorf("editor %s: %w", ed, err)
 	}
 	return nil
+}
+
+// targetDir resolves where the editor should run. Empty alias = the onix
+// config home; otherwise the alias's directory.
+func (c *EditCmd) targetDir(e *env) (string, error) {
+	if c.Alias == "" {
+		return e.Home, nil
+	}
+	return resolveAliasPath(e, c.Alias)
 }
 
 // -----------------------------------------------------------------------------
