@@ -123,8 +123,8 @@ Keep a one-deep journal of the last `remove`, `plugin remove`, or destructive `a
 
 ## Observability
 
-### `[S]` Local-only usage stats
-Opt-in `onix stats` that reports a personal "most-used aliases", "stale aliases", and "weekly nav count" from local-only data. Never sent anywhere.
+### ~~`[S]` Local-only usage stats~~ ✓ DONE
+`onix stats` reports counts (today/week/all-time) + top-N aliases by frecency, with `--full` for the dashboard view (top + cold aliases + by-hour histogram), `--cold` for the inverse view, `--since <duration>` for windowed views, and `--json` for scripting. Reads `usage.log` + `aliases.toml`, nothing leaves the machine.
 
 ---
 

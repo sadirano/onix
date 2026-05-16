@@ -49,8 +49,6 @@ type CLI struct {
 	Plugin     PluginCmd     `cmd:"" help:"Install and manage external plugins."`
 	PluginExec PluginExecCmd `cmd:"" name:"plugin-exec" passthrough:"" help:"Internal: run a plugin against an alias (called by generated shell wrappers)."`
 
-	Import ImportCmd `cmd:"" help:"Import aliases from other tools (zoxide, autojump, etc)." examples:"onix import --zoxide"`
-
 	Context ContextCmd `cmd:"" help:"Manage segment contexts."`
 
 	// Installation and diagnostics.
@@ -58,6 +56,7 @@ type CLI struct {
 	Sync           SyncCmd           `cmd:"" help:"Regenerate shell snippets and Windows wrappers." examples:"onix sync"`
 	ListNames      ListNamesCmd      `cmd:"" name:"list-names" help:"Print alias names (used by tab-completion)."`
 	Doctor         DoctorCmd         `cmd:"" help:"Check installation health." examples:"onix doctor"`
+	Stats          StatsCmd          `cmd:"" help:"Report local navigation patterns from your usage log." examples:"onix stats\nonix stats --full\nonix stats --cold --since 30d"`
 	Version        VersionCmd        `cmd:"" help:"Print the onix version." examples:"onix version"`
 
 	// Global flags.
@@ -146,8 +145,8 @@ func main() {
 		for _, c := range []string{
 			"resolve", "add", "remove", "rm", "list", "ls", "aliases", "edit",
 			"grep", "find", "explore", "yank", "run", "exec", "plugin",
-			"plugin-exec", "import", "context", "init", "sync", "list-names",
-			"doctor", "version",
+			"plugin-exec", "context", "init", "sync", "list-names",
+			"doctor", "stats", "version",
 		} {
 			if cmd == c {
 				known = true
