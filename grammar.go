@@ -192,7 +192,7 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string) err
 		// aliases.toml). File-arg passthrough lands in a follow-up commit.
 		return (&AliasesCmd{}).Run(ctx, e)
 	case "show":
-		return fmt.Errorf("--show is not implemented yet")
+		return (&ShowCmd{Args: rest}).Run(ctx, e)
 	case "contexts":
 		return (&ContextListCmd{}).Run(ctx, e)
 	case "init":
@@ -277,7 +277,7 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 		_ = actionArgs
 		return (&EditCmd{Alias: alias}).Run(ctx, e)
 	case "show":
-		return fmt.Errorf("--show is not implemented yet")
+		return (&ShowCmd{Alias: alias, Args: actionArgs}).Run(ctx, e)
 	case "explore":
 		return (&ExploreCmd{Alias: alias}).Run(ctx, e)
 	case "yank":
