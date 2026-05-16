@@ -131,10 +131,46 @@ func (c *AddCmd) Run(ctx context.Context, e *env) error {
 // -----------------------------------------------------------------------------
 
 type RemoveCmd struct {
-	Alias string `arg:"" help:"Alias name."`
+	// Alias names the alias to remove (legacy form) or the directory
+	// context for Files (new form). Empty selects ~/.onix.
+	Alias string `arg:"" optional:"" help:"Alias name."`
+
+	// Files lists paths to delete relative to the resolved directory.
+	// When non-empty the command acts as a deleter; when empty it removes
+	// the alias entry. Use --force to skip the confirm prompt and
+	// --recursive to remove directories.
+	Files []string `arg:"" optional:"" passthrough:"" help:"Files to delete (relative to the resolved directory)."`
+
+	Force     bool `name:"force" short:"F" help:"Skip confirmation and bypass guards on load-bearing onix files."`
+	Recursive bool `name:"recursive" short:"R" help:"Recursively delete directories."`
+}
+
+// loadBearingOnixFiles lists names that must not be deleted by accident.
+// Removing any of these silently breaks onix; we require --force for them
+// so the user has to explicitly opt in. Matched case-insensitively against
+// the basename of each target path.
+var loadBearingOnixFiles = map[string]bool{
+	"aliases.toml":  true,
+	"config.toml":   true,
+	"segments.toml": true,
+	"plugins.toml":  true,
+	"usage.log":     true,
 }
 
 func (c *RemoveCmd) Run(ctx context.Context, e *env) error {
+	if len(c.Files) == 0 {
+		// Legacy form: remove the alias.
+		if c.Alias == "" {
+			return fmt.Errorf("--remove requires an alias name or one or more files")
+		}
+		return c.removeAlias(e)
+	}
+	return c.deleteFiles(e)
+}
+
+// removeAlias deletes the alias entry from aliases.toml (no filesystem
+// changes — the user's directory is left untouched).
+func (c *RemoveCmd) removeAlias(e *env) error {
 	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return err
@@ -146,6 +182,72 @@ func (c *RemoveCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 	fmt.Printf("removed %s\n", strings.ToLower(c.Alias))
+	return nil
+}
+
+// deleteFiles deletes each path in Files relative to the resolved base
+// directory (alias dir if Alias is set, else ~/.onix). Confirms once for
+// the whole batch unless --force is set.
+func (c *RemoveCmd) deleteFiles(e *env) error {
+	base := e.Home
+	if c.Alias != "" {
+		d, err := resolveAliasPath(e, c.Alias)
+		if err != nil {
+			return err
+		}
+		base = d
+	}
+
+	// Resolve each target and run pre-delete safety checks before we
+	// touch anything. Bailing on the first problem keeps the operation
+	// atomic-feeling — the user doesn't see "deleted 2 of 5" with the
+	// other 3 silently rejected.
+	type target struct {
+		display string
+		abs     string
+		info    os.FileInfo
+	}
+	targets := make([]target, 0, len(c.Files))
+	for _, f := range c.Files {
+		abs := f
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(base, f)
+		}
+		info, err := os.Lstat(abs)
+		if err != nil {
+			return fmt.Errorf("delete %s: %w", f, err)
+		}
+		if info.IsDir() && !c.Recursive {
+			return fmt.Errorf("delete %s: is a directory (pass --recursive to remove)", f)
+		}
+		if !c.Force && c.Alias == "" && loadBearingOnixFiles[strings.ToLower(info.Name())] {
+			return fmt.Errorf("delete %s: refusing to delete load-bearing onix file without --force", f)
+		}
+		targets = append(targets, target{display: f, abs: abs, info: info})
+	}
+
+	if !c.Force {
+		fmt.Fprintf(os.Stderr, "Delete %d item(s) from %s? [y/N] ", len(targets), base)
+		var resp string
+		fmt.Fscanln(os.Stdin, &resp)
+		resp = strings.TrimSpace(strings.ToLower(resp))
+		if resp != "y" && resp != "yes" {
+			return fmt.Errorf("aborted")
+		}
+	}
+
+	for _, t := range targets {
+		var rmErr error
+		if t.info.IsDir() {
+			rmErr = os.RemoveAll(t.abs)
+		} else {
+			rmErr = os.Remove(t.abs)
+		}
+		if rmErr != nil {
+			return fmt.Errorf("delete %s: %w", t.display, rmErr)
+		}
+		fmt.Printf("deleted %s\n", t.display)
+	}
 	return nil
 }
 

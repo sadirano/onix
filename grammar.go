@@ -88,6 +88,8 @@ var systemActionFlags = map[string]string{
 	"--ls":            "list",
 	"-l":              "list",
 	"--list-names":    "list-names",
+	"--remove":        "remove",
+	"--rm":            "remove",
 	"--edit":          "edit",
 	"-e":              "edit",
 	"--show":          "show",
@@ -192,6 +194,12 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string) err
 		return (&EditCmd{Files: rest}).Run(ctx, e)
 	case "show":
 		return (&ShowCmd{Args: rest}).Run(ctx, e)
+	case "remove":
+		files, force, recursive, err := parseRemoveArgs(rest)
+		if err != nil {
+			return err
+		}
+		return (&RemoveCmd{Files: files, Force: force, Recursive: recursive}).Run(ctx, e)
 	case "contexts":
 		return (&ContextListCmd{}).Run(ctx, e)
 	case "init":
@@ -269,8 +277,11 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 	case "resolve":
 		return fastResolve(e.Home, alias, false)
 	case "remove":
-		// Today: remove the alias. File-delete support lands in a follow-up.
-		return (&RemoveCmd{Alias: alias}).Run(ctx, e)
+		files, force, recursive, err := parseRemoveArgs(actionArgs)
+		if err != nil {
+			return err
+		}
+		return (&RemoveCmd{Alias: alias, Files: files, Force: force, Recursive: recursive}).Run(ctx, e)
 	case "edit":
 		return (&EditCmd{Alias: alias, Files: actionArgs}).Run(ctx, e)
 	case "show":
@@ -364,6 +375,29 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 		return fastResolve(e.Home, alias, noPrompt)
 	}
 	return add.Run(ctx, e)
+}
+
+// parseRemoveArgs splits the argv after --remove/-rm into file positionals
+// and the --force/--recursive flags. Long and short forms are both
+// accepted. Unknown flags are returned as an error so a typo like
+// `--Force` doesn't silently fall through into the files slice and become
+// a file to delete.
+func parseRemoveArgs(args []string) (files []string, force, recursive bool, err error) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "--force", "-F":
+			force = true
+		case "--recursive", "-R":
+			recursive = true
+		default:
+			if strings.HasPrefix(a, "-") {
+				return nil, false, false, fmt.Errorf("unknown flag for --remove: %q", a)
+			}
+			files = append(files, a)
+		}
+	}
+	return files, force, recursive, nil
 }
 
 // runStatsFromArgs parses `--stats [--full] [--cold] [--since 30d]` and runs
