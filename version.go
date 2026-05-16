@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,7 +19,7 @@ var buildVersion = "dev"
 // if needed via the `key: value` convention.
 type VersionCmd struct{}
 
-func (c *VersionCmd) Run(e *env) error {
+func (c *VersionCmd) Run(ctx context.Context, e *env) error {
 	v := resolveBuildVersion()
 	commit := resolveBuildCommit()
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -28,7 +29,7 @@ func TestAddCmd_OutputContract(t *testing.T) {
 	}
 
 	stdout, stderr, err := captureStdio(func() error {
-		return (&AddCmd{Alias: "acme", Path: target}).Run(&env{Home: home})
+		return (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 	})
 	if err != nil {
 		t.Fatalf("AddCmd.Run: %v", err)
@@ -61,7 +62,7 @@ func TestAddCmd_AutoCreatesDir(t *testing.T) {
 	}
 
 	_, _, err := captureStdio(func() error {
-		return (&AddCmd{Alias: "newdir", Path: target}).Run(&env{Home: home})
+		return (&AddCmd{Alias: "newdir", Path: target}).Run(context.Background(), &env{Home: home})
 	})
 	if err != nil {
 		t.Fatalf("AddCmd.Run: %v", err)
@@ -83,7 +84,7 @@ func TestAddCmd_RejectsInvalidName(t *testing.T) {
 	bad := []string{"foo@bar", "foo/bar", "foo bar", ""}
 	for _, name := range bad {
 		_, _, err := captureStdio(func() error {
-			return (&AddCmd{Alias: name, Path: home}).Run(&env{Home: home})
+			return (&AddCmd{Alias: name, Path: home}).Run(context.Background(), &env{Home: home})
 		})
 		if err == nil {
 			t.Errorf("AddCmd with name %q should have errored", name)
@@ -102,12 +103,12 @@ func TestListCmd(t *testing.T) {
 	// Register two aliases.
 	pathA, _ := filepath.Abs("a")
 	pathB, _ := filepath.Abs("b")
-	(&AddCmd{Alias: "a", Path: pathA}).Run(&env{Home: home})
-	(&AddCmd{Alias: "b", Path: pathB}).Run(&env{Home: home})
+	(&AddCmd{Alias: "a", Path: pathA}).Run(context.Background(), &env{Home: home})
+	(&AddCmd{Alias: "b", Path: pathB}).Run(context.Background(), &env{Home: home})
 
 	t.Run("table output", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
-			return (&ListCmd{}).Run(&env{Home: home})
+			return (&ListCmd{}).Run(context.Background(), &env{Home: home})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -122,7 +123,7 @@ func TestListCmd(t *testing.T) {
 
 	t.Run("JSON output", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
-			return (&ListCmd{}).Run(&env{Home: home, JSON: true})
+			return (&ListCmd{}).Run(context.Background(), &env{Home: home, JSON: true})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -144,18 +145,18 @@ func TestRemoveCmd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	(&AddCmd{Alias: "acme", Path: "C:/acme"}).Run(&env{Home: home})
+	(&AddCmd{Alias: "acme", Path: "C:/acme"}).Run(context.Background(), &env{Home: home})
 
 	t.Run("remove existing", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&RemoveCmd{Alias: "acme"}).Run(&env{Home: home})
+			return (&RemoveCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
 		})
 		if err != nil {
 			t.Fatalf("RemoveCmd.Run: %v", err)
 		}
 		// Confirm it's gone from List.
 		stdout, _, _ := captureStdio(func() error {
-			return (&ListCmd{}).Run(&env{Home: home})
+			return (&ListCmd{}).Run(context.Background(), &env{Home: home})
 		})
 		if strings.Contains(stdout, "acme") {
 			t.Error("alias still present after removal")
@@ -164,7 +165,7 @@ func TestRemoveCmd(t *testing.T) {
 
 	t.Run("remove missing", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&RemoveCmd{Alias: "nope"}).Run(&env{Home: home})
+			return (&RemoveCmd{Alias: "nope"}).Run(context.Background(), &env{Home: home})
 		})
 		if err == nil {
 			t.Error("RemoveCmd on missing alias should have errored")
@@ -206,7 +207,7 @@ func TestVersionCmd(t *testing.T) {
 	home := t.TempDir()
 	t.Run("plain", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
-			return (&VersionCmd{}).Run(&env{Home: home})
+			return (&VersionCmd{}).Run(context.Background(), &env{Home: home})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -218,7 +219,7 @@ func TestVersionCmd(t *testing.T) {
 
 	t.Run("JSON", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
-			return (&VersionCmd{}).Run(&env{Home: home, JSON: true})
+			return (&VersionCmd{}).Run(context.Background(), &env{Home: home, JSON: true})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -235,11 +236,11 @@ func TestVersionCmd(t *testing.T) {
 func TestListNamesCmd(t *testing.T) {
 	home := t.TempDir()
 	// Register some aliases
-	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(&env{Home: home})
-	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(&env{Home: home})
+	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home})
+	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&ListNamesCmd{}).Run(&env{Home: home})
+		return (&ListNamesCmd{}).Run(context.Background(), &env{Home: home})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -256,10 +257,10 @@ func TestListNamesCmd(t *testing.T) {
 func TestResolveCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(&env{Home: home})
+	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&ResolveCmd{Alias: "acme"}).Run(&env{Home: home})
+		return (&ResolveCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -272,10 +273,10 @@ func TestResolveCmd(t *testing.T) {
 func TestYankCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(&env{Home: home})
+	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&YankCmd{Alias: "acme"}).Run(&env{Home: home})
+		return (&YankCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -289,10 +290,10 @@ func TestYankCmd(t *testing.T) {
 func TestFastResolve(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(&env{Home: home})
+	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
-		return fastResolve(home, "acme")
+		return fastResolve(home, "acme", false)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -304,8 +305,8 @@ func TestFastResolve(t *testing.T) {
 
 func TestFastListNames(t *testing.T) {
 	home := t.TempDir()
-	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(&env{Home: home})
-	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(&env{Home: home})
+	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home})
+	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
 		return fastListNames(home)

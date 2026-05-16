@@ -271,39 +271,27 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 
 func writeOCmdWrapper(binDir, exe, name string) {
 	path := filepath.Join(binDir, name+".cmd")
-	// The 'o' wrapper is special. It mimics the PowerShell function's
-	// "no-args means aliases" behavior.
-	// For alias lookups, it performs a 'cd /d' to change the current
-	// directory. If launched from a non-interactive context (like Win+R),
-	// it also launches 'cmd /k' to ensure the user gets a persistent shell
-	// at the target location.
+	// The 'o' wrapper mimics the PowerShell function's "no-args means
+	// aliases" behavior. For alias lookups it 'cd /d's into the target;
+	// anything else (subcommands, unknown names) is delegated to onix
+	// itself, which dispatches subcommands or prompts to register a new
+	// alias. Win+R invocations get a persistent shell via 'cmd /k'.
 	content := fmt.Sprintf(`@echo off
 if "%%~1"=="" (
   "%s" aliases
   exit /b
 )
-for %%%%a in (add rm remove ls list aliases edit grep find explore yank run exec plugin import context init sync doctor version) do (
-  if /i "%%~1"=="%%%%a" (
-    "%s" %%*
-    exit /b
-  )
-)
 
 setlocal enabledelayedexpansion
-for /f "usebackq delims=" %%%%i in ("%s" resolve "%%~1") do set "target=%%%%i"
-if "!target!"=="" exit /b 1
+for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" resolve --no-prompt "%%~1" 2^>nul`+"`"+`) do set "target=%%%%i"
+if not defined target (
+  "%s" %%*
+  exit /b
+)
 
 cd /d "!target!"
-
-:: Apply segment contexts (env vars and exec) for Cmd.
-for /f "usebackq delims=" %%%%i in ("%s" context apply "%%~1" --shell cmd) do %%%%i
-
-:: If run from Win+R (or similar), %%cmdcmdline%% contains /c.
-:: We check for this to provide a persistent shell window.
-echo %%cmdcmdline%% | findstr /i /c:" /c " >nul
-if not errorlevel 1 (
-  cmd /k
-)
+for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" context apply "%%~1" --shell cmd`+"`"+`) do %%%%i
+if %%0 == "%%~f0" cmd /k
 `, exe, exe, exe, exe)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }

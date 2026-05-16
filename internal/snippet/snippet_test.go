@@ -127,8 +127,11 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if !strings.Contains(content, "aliases") {
 		t.Errorf("o.cmd missing 'aliases' handling:\n%s", content)
 	}
-	if !strings.Contains(content, "explore") {
-		t.Errorf("o.cmd missing 'explore' handling:\n%s", content)
+	if !strings.Contains(content, "resolve --no-prompt") {
+		t.Errorf("o.cmd missing 'resolve --no-prompt' lookup:\n%s", content)
+	}
+	if !strings.Contains(content, "if not defined target") {
+		t.Errorf("o.cmd missing subcommand passthrough fallback:\n%s", content)
 	}
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 // hot path read the same "empty" state instead of falling through to the
 // not-found branch on every invocation until the first `onix add`.
 const starterAliases = `# onix aliases — edit with care, prefer 'onix add' / 'onix rm'
+version = 2
 `
 
 // starterConfig is the placeholder config.toml written on first init.
@@ -25,6 +27,8 @@ const starterAliases = `# onix aliases — edit with care, prefer 'onix add' / '
 // user to extend, but no actions are declared yet — so the snippet has
 // only the built-in functions.
 const starterConfig = `# onix configuration — declare custom actions here.
+version = 2
+
 # After editing, run: onix install-actions
 #
 # Example:
@@ -45,7 +49,7 @@ type InitCmd struct {
 	SkipProfile bool `help:"Don't modify the PowerShell $PROFILE." name:"skip-profile"`
 }
 
-func (c *InitCmd) Run(e *env) error {
+func (c *InitCmd) Run(ctx context.Context, e *env) error {
 	// 1. directory tree
 	if err := os.MkdirAll(filepath.Join(e.Home, "shell"), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", e.Home, err)

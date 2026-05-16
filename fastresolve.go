@@ -14,8 +14,12 @@ import (
 // It uses the shared resolver which combines fast byte-scanning with
 // a slow-path fallback. Side effects like directory creation are
 // handled here at the command layer.
-func fastResolve(home, name string) error {
-	p, err := resolver.Resolve(home, name, promptDestination)
+func fastResolve(home, name string, noPrompt bool) error {
+	prompter := promptDestination
+	if noPrompt {
+		prompter = nil
+	}
+	p, err := resolver.Resolve(home, name, prompter)
 	if err != nil {
 		return err
 	}

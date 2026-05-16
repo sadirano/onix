@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,7 +33,7 @@ type checkResult struct {
 	Detail string `json:"detail"`
 }
 
-func (c *DoctorCmd) Run(e *env) error {
+func (c *DoctorCmd) Run(ctx context.Context, e *env) error {
 	checks := []checkResult{
 		checkHome(e.Home),
 		checkAliasesFile(e.Home),

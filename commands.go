@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -26,20 +27,19 @@ type ImportCmd struct {
 	Zoxide bool `help:"Import from zoxide (requires 'zoxide' on PATH)."`
 }
 
-func (c *ImportCmd) Run(e *env) error {
+func (c *ImportCmd) Run(ctx context.Context, e *env) error {
 	if !c.Zoxide {
 		return fmt.Errorf("please specify a source (e.g. --zoxide)")
 	}
 
 	if c.Zoxide {
-		return importZoxide(e)
+		return importZoxide(ctx, e)
 	}
-
 	return nil
 }
 
-func importZoxide(e *env) error {
-	cmd := exec.Command("zoxide", "query", "-l")
+func importZoxide(ctx context.Context, e *env) error {
+	cmd := exec.CommandContext(ctx,"zoxide", "query", "-l")
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("call zoxide: %w (ensure it's on PATH)", err)
@@ -93,11 +93,12 @@ func importZoxide(e *env) error {
 // -----------------------------------------------------------------------------
 
 type ResolveCmd struct {
-	Alias string `arg:"" help:"Alias name (case-insensitive). Supports <seg>@<alias> segmented lookups."`
+	Alias    string `arg:"" help:"Alias name (case-insensitive). Supports <seg>@<alias> segmented lookups."`
+	NoPrompt bool   `name:"no-prompt" help:"Fail silently if the alias is unknown instead of prompting for a destination."`
 }
 
-func (c *ResolveCmd) Run(e *env) error {
-	path, err := resolveAliasPath(e, c.Alias)
+func (c *ResolveCmd) Run(ctx context.Context, e *env) error {
+	path, err := resolveAliasPathOpt(e, c.Alias, c.NoPrompt)
 	if err != nil {
 		return err
 	}
@@ -131,7 +132,7 @@ type AddCmd struct {
 	Path  string `arg:"" optional:"" help:"Directory path (default: current working directory)."`
 }
 
-func (c *AddCmd) Run(e *env) error {
+func (c *AddCmd) Run(ctx context.Context, e *env) error {
 	if err := store.ValidateAliasName(c.Alias); err != nil {
 		return err
 	}
@@ -179,7 +180,7 @@ type RemoveCmd struct {
 	Alias string `arg:"" help:"Alias name."`
 }
 
-func (c *RemoveCmd) Run(e *env) error {
+func (c *RemoveCmd) Run(ctx context.Context, e *env) error {
 	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return err
@@ -203,7 +204,7 @@ func (c *RemoveCmd) Run(e *env) error {
 
 type ListCmd struct{}
 
-func (c *ListCmd) Run(e *env) error {
+func (c *ListCmd) Run(ctx context.Context, e *env) error {
 	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return err
@@ -247,10 +248,10 @@ func (c *ListCmd) Run(e *env) error {
 
 type AliasesCmd struct{}
 
-func (c *AliasesCmd) Run(e *env) error {
+func (c *AliasesCmd) Run(ctx context.Context, e *env) error {
 	path := store.AliasesPath(e.Home)
 	ed := resolveEditor()
-	cmd := exec.Command(ed, path)
+	cmd := exec.CommandContext(ctx,ed, path)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -272,13 +273,13 @@ type EditCmd struct {
 	Alias string `arg:"" help:"Alias name."`
 }
 
-func (c *EditCmd) Run(e *env) error {
+func (c *EditCmd) Run(ctx context.Context, e *env) error {
 	target, err := resolveAliasPath(e, c.Alias)
 	if err != nil {
 		return err
 	}
 	ed := resolveEditor()
-	cmd := exec.Command(ed, ".")
+	cmd := exec.CommandContext(ctx,ed, ".")
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -301,7 +302,7 @@ type ExploreCmd struct {
 	Alias string `arg:"" help:"Alias name."`
 }
 
-func (c *ExploreCmd) Run(e *env) error {
+func (c *ExploreCmd) Run(ctx context.Context, e *env) error {
 	target, err := resolveAliasPath(e, c.Alias)
 	if err != nil {
 		return err
@@ -322,7 +323,7 @@ type YankCmd struct {
 	Alias string `arg:"" help:"Alias name."`
 }
 
-func (c *YankCmd) Run(e *env) error {
+func (c *YankCmd) Run(ctx context.Context, e *env) error {
 	target, err := resolveAliasPath(e, c.Alias)
 	if err != nil {
 		return err
@@ -357,7 +358,7 @@ type RunCmd struct {
 	Args []string `arg:"" name:"args" help:"<alias> <cmd> [args...]"`
 }
 
-func (c *RunCmd) Run(e *env) error {
+func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) < 2 {
 		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
 	}
@@ -377,7 +378,7 @@ func (c *RunCmd) Run(e *env) error {
 	if len(argv) == 0 {
 		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
 	}
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx,argv[0], argv[1:]...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -407,7 +408,7 @@ type ExecCmd struct {
 	Args []string `arg:"" name:"args" help:"<action> <alias> [args...]"`
 }
 
-func (c *ExecCmd) Run(e *env) error {
+func (c *ExecCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) < 2 {
 		return fmt.Errorf("usage: onix exec <action> <alias> [args...]")
 	}
@@ -439,7 +440,7 @@ func (c *ExecCmd) Run(e *env) error {
 		return fmt.Errorf("action %q produced empty argv", actionName)
 	}
 
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx,argv[0], argv[1:]...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -464,7 +465,7 @@ func (c *ExecCmd) Run(e *env) error {
 
 type SyncCmd struct{}
 
-func (c *SyncCmd) Run(e *env) error {
+func (c *SyncCmd) Run(ctx context.Context, e *env) error {
 	// Read both config.toml and plugins.toml first so we can list what
 	// the regenerated snippet covers; RegenerateShellSnippet does the
 	// actual file write.
@@ -517,7 +518,7 @@ func (c *SyncCmd) Run(e *env) error {
 
 type ListNamesCmd struct{}
 
-func (c *ListNamesCmd) Run(e *env) error {
+func (c *ListNamesCmd) Run(ctx context.Context, e *env) error {
 	s, err := store.LoadStore(e.Home)
 	if err != nil {
 		return err
@@ -536,7 +537,15 @@ func (c *ListNamesCmd) Run(e *env) error {
 // the resolved directory. It uses the shared resolver to find the path
 // and then ensures the directory exists on disk.
 func resolveAliasPath(e *env, name string) (string, error) {
-	p, err := resolver.Resolve(e.Home, name, promptDestination)
+	return resolveAliasPathOpt(e, name, false)
+}
+
+func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
+	prompter := promptDestination
+	if noPrompt {
+		prompter = nil
+	}
+	p, err := resolver.Resolve(e.Home, name, prompter)
 	if err != nil {
 		return "", err
 	}

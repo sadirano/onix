@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,7 @@ import (
 
 func TestInitCmd(t *testing.T) {
 	home := t.TempDir()
-	if err := (&InitCmd{SkipProfile: true}).Run(&env{Home: home}); err != nil {
+	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home}); err != nil {
 		t.Fatalf("InitCmd.Run: %v", err)
 	}
 

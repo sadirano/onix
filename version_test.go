@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -26,7 +27,7 @@ func TestVersionCmd_Run(t *testing.T) {
 
 			cmd := &VersionCmd{}
 			e := &env{JSON: tt.json}
-			err := cmd.Run(e)
+			err := cmd.Run(context.Background(), e)
 
 			w.Close()
 			os.Stdout = oldStdout

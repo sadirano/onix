@@ -10,9 +10,11 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
 
 	"github.com/alecthomas/kong"
@@ -64,6 +66,9 @@ type CLI struct {
 }
 
 func main() {
+	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Fprintf(os.Stderr, "\n[onix] CRASH: encountered an unexpected error\n")
@@ -101,19 +106,21 @@ func main() {
 	//   - `onix list-names`     — fires on every Tab press during completion
 	// Both bypass kong's reflection-based grammar setup (~2–3ms) so the
 	// only overhead is process spawn + file read + scan.
-	if len(os.Args) == 3 && os.Args[1] == "resolve" && !startsWithDash(os.Args[2]) {
-		home, err := resolveHome(os.Getenv("ONIX_HOME"))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "onix: %v\n", err)
-			os.Exit(1)
-		}
-		if err := fastResolve(home, os.Args[2]); err != nil {
-			if !errors.Is(err, resolver.ErrCancelled) {
+	if len(os.Args) >= 3 && os.Args[1] == "resolve" {
+		if name, noPrompt, ok := parseFastResolveArgs(os.Args[2:]); ok {
+			home, err := resolveHome(os.Getenv("ONIX_HOME"))
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+				os.Exit(1)
 			}
-			os.Exit(1)
+			if err := fastResolve(home, name, noPrompt); err != nil {
+				if !noPrompt && !errors.Is(err, resolver.ErrCancelled) {
+					fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+				}
+				os.Exit(1)
+			}
+			return
 		}
-		return
 	}
 	if len(os.Args) == 2 && os.Args[1] == "list-names" {
 		home, err := resolveHome(os.Getenv("ONIX_HOME"))
@@ -174,6 +181,7 @@ func main() {
 		Home: home,
 		JSON: cli.JSON,
 	})
+	ctx.BindTo(sigCtx, (*context.Context)(nil))
 
 	if err := ctx.Run(); err != nil {
 		// Subcommands return errors instead of calling os.Exit so kong can
@@ -190,6 +198,23 @@ func main() {
 // the fast path silently treating `-h` as an alias name.
 func startsWithDash(s string) bool {
 	return len(s) > 0 && s[0] == '-'
+}
+
+// parseFastResolveArgs picks the alias name and --no-prompt flag out of the
+// args for `onix resolve ...`. Returns ok=false for anything else (other
+// flags, --help, two positionals, etc.) so the slow kong path handles it.
+func parseFastResolveArgs(args []string) (name string, noPrompt bool, ok bool) {
+	for _, a := range args {
+		if a == "--no-prompt" {
+			noPrompt = true
+			continue
+		}
+		if startsWithDash(a) || name != "" {
+			return "", false, false
+		}
+		name = a
+	}
+	return name, noPrompt, name != ""
 }
 
 // env carries process-wide settings into every subcommand via kong.Bind.

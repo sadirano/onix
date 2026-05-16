@@ -30,7 +30,7 @@ function global:o {
     }
 
     if ($Path) {
-        # 'o foo C:\some\path' — register (or update) the alias and cd
+        # 'o foo C:/some/path' — register (or update) the alias and cd
         # into it. The directory is auto-created by 'onix add' if it
         # doesn't exist.
         $resolved = & $global:onixExe add $Alias $Path

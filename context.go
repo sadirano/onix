@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -32,7 +33,7 @@ type ContextApplyCmd struct {
 	Shell string `help:"Output shell format (pwsh, bash, zsh). Defaults to 'pwsh'." default:"pwsh"`
 }
 
-func (c *ContextApplyCmd) Run(e *env) error {
+func (c *ContextApplyCmd) Run(ctx context.Context, e *env) error {
 	return applyContexts(e.Home, c.Alias, c.Shell, os.Stdout)
 }
 
@@ -40,7 +41,7 @@ func (c *ContextApplyCmd) Run(e *env) error {
 // scannable table: segment name, env keys (sorted), exec command.
 type ContextListCmd struct{}
 
-func (c *ContextListCmd) Run(e *env) error {
+func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
 	sf, err := segments.LoadSegments(e.Home)
 	if err != nil {
 		return err
@@ -75,7 +76,7 @@ func (c *ContextListCmd) Run(e *env) error {
 // file with a commented starter template if it doesn't exist yet.
 type ContextEditCmd struct{}
 
-func (c *ContextEditCmd) Run(e *env) error {
+func (c *ContextEditCmd) Run(ctx context.Context, e *env) error {
 	p := segments.Path(e.Home)
 	if _, err := os.Stat(p); os.IsNotExist(err) {
 		const starter = `# onix segment registry — @-segment subdirs and shell contexts.
@@ -95,7 +96,7 @@ func (c *ContextEditCmd) Run(e *env) error {
 		}
 	}
 	ed := resolveEditor()
-	cmd := exec.Command(ed, p)
+	cmd := exec.CommandContext(ctx, ed, p)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

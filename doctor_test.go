@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -191,17 +192,17 @@ func TestCheckBashLikeProfile(t *testing.T) {
 func TestDoctorCmd(t *testing.T) {
 	home := t.TempDir()
 	// Initialize the home so doctor has something to check
-	if err := (&InitCmd{SkipProfile: true}).Run(&env{Home: home}); err != nil {
+	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Run doctor
-	if err := (&DoctorCmd{}).Run(&env{Home: home}); err != nil {
+	if err := (&DoctorCmd{}).Run(context.Background(), &env{Home: home}); err != nil {
 		t.Errorf("DoctorCmd.Run: %v", err)
 	}
 
 	// Run doctor in JSON mode
-	if err := (&DoctorCmd{}).Run(&env{Home: home, JSON: true}); err != nil {
+	if err := (&DoctorCmd{}).Run(context.Background(), &env{Home: home, JSON: true}); err != nil {
 		t.Errorf("DoctorCmd.Run (JSON): %v", err)
 	}
 }

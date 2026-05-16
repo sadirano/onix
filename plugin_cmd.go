@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -31,7 +32,7 @@ type PluginAddCmd struct {
 	Yes      bool   `help:"Skip confirmation prompt." short:"y"`
 }
 
-func (c *PluginAddCmd) Run(e *env) error {
+func (c *PluginAddCmd) Run(ctx context.Context, e *env) error {
 	if strings.TrimSpace(c.SHA) == "" && !c.Unpinned {
 		return fmt.Errorf("either --sha <hash> or --unpinned is required")
 	}
@@ -131,7 +132,7 @@ func (c *PluginAddCmd) Run(e *env) error {
 // PluginListCmd prints installed plugins.
 type PluginListCmd struct{}
 
-func (c *PluginListCmd) Run(e *env) error {
+func (c *PluginListCmd) Run(ctx context.Context, e *env) error {
 	pf, err := plugins.LoadPlugins(e.Home)
 	if err != nil {
 		return err
@@ -174,7 +175,7 @@ type PluginUpdateCmd struct {
 	Yes  bool   `help:"Skip confirmation prompt." short:"y"`
 }
 
-func (c *PluginUpdateCmd) Run(e *env) error {
+func (c *PluginUpdateCmd) Run(ctx context.Context, e *env) error {
 	pf, err := plugins.LoadPlugins(e.Home)
 	if err != nil {
 		return err
@@ -265,7 +266,7 @@ type PluginRemoveCmd struct {
 	Name string `arg:"" help:"Plugin name."`
 }
 
-func (c *PluginRemoveCmd) Run(e *env) error {
+func (c *PluginRemoveCmd) Run(ctx context.Context, e *env) error {
 	pf, err := plugins.LoadPlugins(e.Home)
 	if err != nil {
 		return err
@@ -295,7 +296,7 @@ type PluginExecCmd struct {
 	Args []string `arg:"" help:"Plugin name and arguments."`
 }
 
-func (c *PluginExecCmd) Run(e *env) error {
+func (c *PluginExecCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) < 2 {
 		return fmt.Errorf("usage: onix plugin-exec <plugin> [entry] <alias> [args...]")
 	}
@@ -337,7 +338,7 @@ func (c *PluginExecCmd) Run(e *env) error {
 		return err
 	}
 
-	cmd := exec.Command(bin, extras...)
+	cmd := exec.CommandContext(ctx,bin, extras...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,7 @@ exec    = ["make", "dev"]
 	}
 
 	stdout, _, err := captureStdio(func() error {
-		return (&ContextListCmd{}).Run(&env{Home: home})
+		return (&ContextListCmd{}).Run(context.Background(), &env{Home: home})
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,7 +17,7 @@ type GrepCmd struct {
 	Args []string `arg:"" name:"args" help:"<alias> [query] [extras...]"`
 }
 
-func (c *GrepCmd) Run(e *env) error {
+func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) < 1 {
 		return fmt.Errorf("usage: onix grep <alias> [query] [extras...]")
 	}
@@ -61,14 +62,14 @@ func (c *GrepCmd) Run(e *env) error {
 		"--preview-window", "right:60%:~1",
 	}
 
-	rgCmd := exec.Command("rg", rgArgs...)
+	rgCmd := exec.CommandContext(ctx,"rg", rgArgs...)
 	rgCmd.Dir = target
 	rgOut, err := rgCmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
 
-	fzfCmd := exec.Command("fzf", fzfArgs...)
+	fzfCmd := exec.CommandContext(ctx,"fzf", fzfArgs...)
 	fzfCmd.Dir = target
 	fzfCmd.Stdin = rgOut
 	fzfCmd.Stderr = os.Stderr // fzf UI uses stderr when stdout is captured
@@ -94,7 +95,7 @@ func (c *GrepCmd) Run(e *env) error {
 		return nil
 	}
 
-	return openSelectionsInEditor(target, lines)
+	return openSelectionsInEditor(ctx, target, lines)
 }
 
 // -----------------------------------------------------------------------------
@@ -105,7 +106,7 @@ type FindCmd struct {
 	Args []string `arg:"" name:"args" help:"<alias> [query] [extras...]"`
 }
 
-func (c *FindCmd) Run(e *env) error {
+func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) < 1 {
 		return fmt.Errorf("usage: onix find <alias> [query] [extras...]")
 	}
@@ -133,7 +134,7 @@ func (c *FindCmd) Run(e *env) error {
 				esArgs = append(esArgs, query)
 			}
 			esArgs = append(esArgs, extras...)
-			findCmd = exec.Command("es", esArgs...)
+			findCmd = exec.CommandContext(ctx,"es", esArgs...)
 		}
 	}
 
@@ -144,7 +145,7 @@ func (c *FindCmd) Run(e *env) error {
 			if query != "" {
 				fdArgs = append(fdArgs, query)
 			}
-			findCmd = exec.Command("fd", fdArgs...)
+			findCmd = exec.CommandContext(ctx,"fd", fdArgs...)
 			findCmd.Dir = target
 		} else {
 			// Fallback to find
@@ -153,7 +154,7 @@ func (c *FindCmd) Run(e *env) error {
 				findArgs = append(findArgs, "-name", "*"+query+"*")
 			}
 			findArgs = append(findArgs, extras...)
-			findCmd = exec.Command("find", findArgs...)
+			findCmd = exec.CommandContext(ctx,"find", findArgs...)
 			findCmd.Dir = target
 		}
 	}
@@ -173,7 +174,7 @@ func (c *FindCmd) Run(e *env) error {
 		"--multi",
 		"--preview", previewCmd,
 	}
-	fzfCmd := exec.Command("fzf", fzfArgs...)
+	fzfCmd := exec.CommandContext(ctx,"fzf", fzfArgs...)
 	fzfCmd.Dir = target
 	fzfCmd.Stdin = findOut
 	fzfCmd.Stderr = os.Stderr
@@ -198,10 +199,10 @@ func (c *FindCmd) Run(e *env) error {
 		return nil
 	}
 
-	return openSelectionsInEditor(target, lines)
+	return openSelectionsInEditor(ctx, target, lines)
 }
 
-func openSelectionsInEditor(target string, selections []string) error {
+func openSelectionsInEditor(ctx context.Context, target string, selections []string) error {
 	ed := resolveEditor()
 
 	// Pre-process selections. For grep, they are file:line:col:text.
@@ -227,7 +228,7 @@ func openSelectionsInEditor(target string, selections []string) error {
 		return nil
 	}
 
-	cmd := exec.Command(ed, argv...)
+	cmd := exec.CommandContext(ctx,ed, argv...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
