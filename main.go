@@ -100,6 +100,11 @@ func main() {
 		}
 	}()
 
+	// Argv preprocessing: rewrite multi-char short flags (-ls -> --list,
+	// -rm -> --remove) before any further parsing. Kong only handles
+	// single-rune shorts natively, so we normalise here.
+	os.Args = append([]string{os.Args[0]}, preprocessArgs(os.Args[1:])...)
+
 	// Hot-path shortcuts. Two commands run on every keystroke:
 	//   - `onix resolve <name>` — fires when the user presses Enter on `o`
 	//   - `onix list-names`     — fires on every Tab press during completion
@@ -136,25 +141,30 @@ func main() {
 		return
 	}
 
-	// Default to 'resolve' if the first argument is not a known command and
-	// not a flag. This allows 'onix <alias>' and 'o <alias>' to work
-	// without explicit 'resolve' subcommands.
-	if len(os.Args) >= 2 && !startsWithDash(os.Args[1]) {
-		cmd := os.Args[1]
-		known := false
-		for _, c := range []string{
-			"resolve", "add", "remove", "rm", "list", "ls", "aliases", "edit",
-			"grep", "find", "explore", "yank", "run", "exec", "plugin",
-			"plugin-exec", "context", "init", "sync", "list-names",
-			"doctor", "stats", "version",
-		} {
-			if cmd == c {
-				known = true
-				break
+	// New alias-flag grammar dispatcher. Handles:
+	//   onix <alias> [<path>] [--description X] [--owner X] [--tags X...]
+	//   onix <alias> --<action> [args...]
+	//   onix --<system-action> [args...]
+	// Falls through to kong (handled=false) when the user typed an old
+	// subcommand form (e.g. `onix resolve foo`, `onix plugin add ...`), so
+	// installed shell snippets keep working until they re-sync.
+	{
+		home, herr := resolveHome(os.Getenv("ONIX_HOME"))
+		if herr == nil {
+			// Build a minimal env for the new dispatcher. JSON is
+			// detected on a best-effort basis; the legacy kong path
+			// handles `--json` for unknown shapes.
+			e := &env{Home: home, JSON: hasFlag(os.Args[1:], "--json", "-j")}
+			handled, derr := tryDispatchNewGrammar(sigCtx, e, os.Args[1:])
+			if handled {
+				if derr != nil {
+					if !errors.Is(derr, resolver.ErrCancelled) {
+						fmt.Fprintf(os.Stderr, "onix: %v\n", derr)
+					}
+					os.Exit(1)
+				}
+				return
 			}
-		}
-		if !known {
-			os.Args = append([]string{os.Args[0], "resolve"}, os.Args[1:]...)
 		}
 	}
 
@@ -197,6 +207,20 @@ func main() {
 // the fast path silently treating `-h` as an alias name.
 func startsWithDash(s string) bool {
 	return len(s) > 0 && s[0] == '-'
+}
+
+// hasFlag reports whether any of names appears as a literal token in args.
+// Used to detect --json on a best-effort basis before the full dispatcher
+// has parsed argv. It does not understand `--json=value` (--json is a bool).
+func hasFlag(args []string, names ...string) bool {
+	for _, a := range args {
+		for _, n := range names {
+			if a == n {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // parseFastResolveArgs picks the alias name and --no-prompt flag out of the
