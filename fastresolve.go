@@ -17,10 +17,16 @@ import (
 // handled here at the command layer.
 func fastResolve(home, name string, noPrompt bool) error {
 	prompter := promptDestination
+	selector := promptSelection
 	if noPrompt {
+		// --no-prompt means truly no prompts: don't ask for a destination
+		// AND don't run the did-you-mean selector. Otherwise the cmd
+		// wrapper's `for /f` capture would silently auto-pick a close
+		// match and cd into the wrong directory.
 		prompter = nil
+		selector = nil
 	}
-	p, err := resolver.Resolve(home, name, prompter, promptSelection)
+	p, err := resolver.Resolve(home, name, prompter, selector)
 	if err != nil {
 		return err
 	}

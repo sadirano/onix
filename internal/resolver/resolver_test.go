@@ -193,6 +193,72 @@ func TestResolve_Basic(t *testing.T) {
 	})
 }
 
+// TestResolve_FuzzyMatch_DistanceLimit guards against the loose-match
+// regression where short typos selected far-off candidates ("sync" → "bin",
+// distance 3). The new limit is shorter-length/3, capped at 3.
+func TestResolve_FuzzyMatch_DistanceLimit(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{
+		"bin":  {Path: "C:/bin"},
+		"onix": {Path: "C:/onix"},
+		"play": {Path: "C:/play"},
+	}}
+	if err := store.SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+
+	selected := ""
+	selector := func(opts []string) string {
+		if len(opts) > 0 {
+			selected = opts[0]
+		}
+		return ""
+	}
+
+	// "sync" is distance 3 from "bin" but distance 4 from "onix" / "play".
+	// Under the new limit (shorter/3 = 1 for shorter=3, capped to 1) NONE
+	// of these are close enough to suggest. The selector should not fire.
+	_, err := Resolve(dir, "sync", nil, selector)
+	if err == nil {
+		t.Errorf("expected error for unknown alias 'sync', got nil")
+	}
+	if selected != "" {
+		t.Errorf("selector should not have been called for sync; got candidate %q", selected)
+	}
+
+	// Sanity: a real typo (one transposition) should still trigger the selector.
+	selected = ""
+	_, err = Resolve(dir, "onxi", nil, selector)
+	if err == nil {
+		t.Errorf("expected error for unknown alias 'onxi' when selector returns empty")
+	}
+	if selected != "onix" {
+		t.Errorf("real typo 'onxi' should suggest 'onix', got %q", selected)
+	}
+}
+
+// TestResolve_NilSelector_BypassesFuzzy ensures that passing a nil selector
+// completely skips the did-you-mean machinery. The hot-path fastResolve
+// relies on this when --no-prompt is set, otherwise the cmd-wrapper's
+// `for /f` capture would auto-pick a candidate.
+func TestResolve_NilSelector_BypassesFuzzy(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{
+		"onix": {Path: "C:/onix"},
+	}}
+	if err := store.SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Resolve(dir, "onxi", nil, nil)
+	if err == nil {
+		t.Errorf("expected error when selector is nil and alias is unknown")
+	}
+	if !strings.Contains(err.Error(), "unknown alias") {
+		t.Errorf("expected 'unknown alias' error, got %v", err)
+	}
+}
+
 func TestResolve_WithPrompter(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "new-path")

@@ -65,9 +65,18 @@ func Resolve(home, name string, prompter func(string) string, selector func([]st
 
 			for _, n := range names {
 				d := ComputeDistance(strings.ToLower(name), strings.ToLower(n))
-				// Heuristic: distance <= 3 and at most half the length of the shorter string.
-				limit := 3
-				if len(name) < 4 {
+				// Tight limit so close-looking-but-different names don't
+				// suggest each other. The old limit (3 for any 4+ char
+				// word) had "sync" matching "bin" — distance 3 is most of
+				// the word's length, not a typo. Allow 2 edits for names
+				// of length 4+ (covers single transpositions like
+				// "onxi" → "onix") and only 1 edit for shorter names.
+				shorter := len(name)
+				if len(n) < shorter {
+					shorter = len(n)
+				}
+				limit := 2
+				if shorter < 4 {
 					limit = 1
 				}
 				if d <= limit {

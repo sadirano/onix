@@ -504,16 +504,24 @@ func resolveAliasPath(e *env, name string) (string, error) {
 
 func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 	prompter := promptDestination
+	selector := promptSelection
 	if noPrompt {
+		// --no-prompt disables both the destination prompt and the
+		// did-you-mean selector. See fastResolve for the rationale.
 		prompter = nil
+		selector = nil
 	}
-	p, err := resolver.Resolve(e.Home, name, prompter, promptSelection)
+	p, err := resolver.Resolve(e.Home, name, prompter, selector)
 	if err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(p, 0o755); err != nil {
 		return "", fmt.Errorf("create directory %q: %w", p, err)
 	}
+	// Record usage for frecency on every successful resolve, regardless of
+	// which command triggered it (resolve/edit/yank/run/exec/...). Mirrors
+	// the equivalent call in fastResolve so both code paths agree.
+	_ = store.RecordUsage(e.Home, name)
 	return p, nil
 }
 
