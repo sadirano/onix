@@ -13,15 +13,20 @@ import (
 	"github.com/sadirano/onix/internal/segments"
 )
 
-// ContextCmd groups the segment-context subcommands under `onix context`.
+// ContextCmd is the legacy `onix context` surface, kept for backwards
+// compatibility with installed shell snippets only. The new grammar
+// exposes the same functionality as top-level flags:
 //
-// The primary consumer is the `o` shell function which calls
-// `onix context apply <alias>` after every Set-Location. The list/edit
-// commands are for humans managing their segments.toml.
+//	apply  -> onix --apply-context <alias>   (hot-path, called by `o`)
+//	list   -> onix --contexts
+//	edit   -> onix --edit segments.toml
+//
+// After users run `onix --sync` their shell wrappers stop calling these
+// subcommands. The structs themselves stay in case stale wrappers linger.
 type ContextCmd struct {
-	Apply ContextApplyCmd `cmd:"" name:"apply" help:"Print PowerShell context statements for a segmented alias (called by the o shell function)." examples:"onix context apply src@web"`
-	List  ContextListCmd  `cmd:"" name:"list" help:"List all segment contexts defined in segments.toml." examples:"onix context list"`
-	Edit  ContextEditCmd  `cmd:"" name:"edit" help:"Open segments.toml in your editor." examples:"onix context edit"`
+	Apply ContextApplyCmd `cmd:"" name:"apply" hidden:"" help:"(legacy) Print context statements; use --apply-context."`
+	List  ContextListCmd  `cmd:"" name:"list" hidden:"" help:"(legacy) List contexts; use --contexts."`
+	Edit  ContextEditCmd  `cmd:"" name:"edit" hidden:"" help:"(legacy) Edit segments.toml; use --edit segments.toml."`
 }
 
 // ContextApplyCmd is the hot-path command invoked by the `o` shell function
@@ -48,7 +53,7 @@ func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
 	}
 	if len(sf.Contexts) == 0 {
 		fmt.Println("(no contexts defined — add [[contexts]] blocks to ~/.onix/segments.toml)")
-		fmt.Println("run: onix context edit")
+		fmt.Println("run: onix --edit segments.toml")
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
