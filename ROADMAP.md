@@ -1,17 +1,19 @@
 # Road to 10/10
 
-Current score: **9.2/10** (verified 2026-05-14 by audit and `go test ./...`).
+Current score: **9.4/10** (verified 2026-05-17 by audit and `go test ./...`).
 
 A 10/10 here means: a stranger could clone the repo, build it on Windows or Linux, and trust that everything works the way the README says — including under hostile inputs and in the presence of pre-existing aliases-tool installs. The CI verifies that property on every PR; releases are reproducible and signed; the hot path has a measured ceiling that nobody can silently regress.
 
 Pick from this list in order of cost/value. Items are grouped by axis and labelled `[S]` small, `[M]` medium, `[L]` large.
 
+Since the previous revision, three items shipped: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, and least-privilege `GITHUB_TOKEN` on the test/lint workflows. `internal/store` coverage moved 78.6% → 82.1%. The remaining 80% gate is entirely a `main`-package job.
+
 ---
 
 ## Code quality
 
-### `[L]` Add a structured trace mode (`ONIX_DEBUG=1`)
-Thread a `slog.Logger` through `env` so every command can emit a structured trace on demand for easier remote debugging.
+### `[L]` Structured trace mode (`ONIX_DEBUG=1`)
+Thread a `slog.Logger` through `env` so every command can emit a structured trace on demand for easier remote debugging. Default off; zero allocations on the hot path when disabled.
 
 ---
 
@@ -28,19 +30,16 @@ Per-package coverage as of 2026-05-17:
 | `internal/resolver`| 75.7%    |
 | `internal/segments`| 88.6%    |
 | `internal/snippet` | 86.1%    |
-| `internal/store`   | 78.6%    |
+| `internal/store`   | 82.1%    |
 | `sdk`              | 92.3%    |
 
-The remaining gap is entirely in the `main` package — the alias-flag dispatcher and the handlers it routes to.
-
-### `[L]` End-to-end shell tests
-The current E2E suite verifies the binary but doesn't source the snippet in a real shell process to assert on `cd` side effects. Implement actual `pwsh` and `bash` subprocess tests.
+The whole remaining gap is the `main` package — the alias-flag dispatcher and the handlers it routes to. Once `main` clears 80% (and `internal/plugins` and `internal/resolver` cross with it), wire the gate into CI.
 
 ### `[M]` Benchmark regression gate
-Add `benchstat` comparison in CI against the main branch and gate at 20% slowdown for `BenchmarkHotPath_LookupOnly`.
+CI runs `benchstat bench_current.txt` informationally today. Add a second step that fetches the baseline from `main`, runs `benchstat baseline.txt current.txt`, and fails the build on >20% slowdown for `BenchmarkHotPath_LookupOnly`.
 
 ### `[S]` Property-based tests for name validators
-Add `quick.Check` tests for `ValidateAliasName` to ensure it correctly rejects all illegal characters across a wide range of random inputs.
+The table tests in `internal/store/store_test.go` cover known-bad inputs. Add `testing/quick.Check` runs against `ValidateAliasName` / `ValidateSegmentName` so an arbitrarily-generated rune string is either accepted *and* roundtrips through resolve, or rejected with a clear error — no third state.
 
 ---
 
@@ -48,17 +47,20 @@ Add `quick.Check` tests for `ValidateAliasName` to ensure it correctly rejects a
 *(Note: macOS, fish, and nushell are intentionally out of scope.)*
 
 ### `[L]` Daemon mode
-Implement a long-running daemon process that listens on a named pipe/Unix socket to eliminate process-spawn overhead for sub-millisecond tab-completion.
+Implement a long-running daemon process that listens on a named pipe / Unix socket to eliminate process-spawn overhead for sub-millisecond tab-completion. Opt-in; the standalone binary remains the supported default.
 
 ---
 
 ## Navigation UX
 
 ### `[M]` Cross-shell nav history (back/forward stack)
-Maintain a persistent nav stack so `o -` (back) and `o +` (forward) work across shells, like a browser. Backed by a small append-only log.
+Maintain a persistent nav stack so `o -` (back) and `o +` (forward) work across shells, like a browser. Backed by a small append-only log under `~/.onix/`.
 
 ### `[M]` Multi-target aliases
 Allow one alias to resolve to several candidates with a fuzzy picker. Common when the same project name exists under different parents (e.g., `web` under two clients).
+
+### `[S]` Undo for the last destructive operation
+Keep a one-deep journal of the last `remove`, `plugin remove`, or destructive `add` so `onix undo` restores it. Reduces fear of typos.
 
 ---
 
@@ -87,31 +89,35 @@ Let actions invoke other actions in their template, enabling simple chains witho
 
 ## Reliability
 
-### `[M]` Concurrent-write safety (future worry)
+### `[M]` Concurrent-write safety
 Atomic writes already prevent file corruption, but two shells doing `onix add` simultaneously can still race on read-modify-write. Add a lock (advisory file lock on Linux, named mutex on Windows) around store mutations.
 
 ### `[M]` Context segment teardown
 `context apply` sets env vars on entry but doesn't unset them when the user moves to a different alias. Track applied segments per shell so transitions are clean and idempotent.
 
-### `[S]` Undo for the last destructive operation
-Keep a one-deep journal of the last `remove`, `plugin remove`, or destructive `add` so `onix undo` restores it. Reduces fear of typos.
-
 ---
 
-## Docs & Hygiene
+## Supply chain & Hygiene
 
-### `[M]` Architecture diagram in the README
-Add a Mermaid diagram showing the interaction between the shell, snippet, binary, and TOML data files.
+CI workflows now declare least-privilege `GITHUB_TOKEN` permissions (closed CodeQL alert #1 on 2026-05-17). The remaining items in this axis:
 
 ### `[M]` Signed releases
 Use `cosign` to sign release blobs and document the verification command in the README.
+
+### `[S]` Dependency review in CI
+Add `actions/dependency-review-action` on pull_request so new transitive dependencies surface in the PR diff. Cheap, complements `govulncheck`.
+
+### `[S]` Pin GitHub Actions by commit SHA
+`actions/checkout@v4` and friends are pinned by major today. Pin to commit SHA (with version comment) so a malicious tag move can't silently change CI behavior. Renovate/Dependabot can keep them current.
 
 ---
 
 ## Order of operations
 
-1. **Coverage & Validation:** Push `main`-package coverage to 80% and implement shell-process E2E.
-2. **Daily-driver wins:** Cross-shell nav history, multi-target aliases. Small surface, big perceived improvement.
-3. **Scope leap:** Project-scope `.onix.toml`. Validate the layering inside the current architecture before tackling the workspace tier.
-4. **Sharing & ecosystem:** Workspace tier with sync, plugin capability model, verified registry.
-5. **Performance peak:** Daemon mode and benchmark gating.
+1. **Coverage gate:** push `main`-package coverage to 80% and turn on the gate. This is the single largest gap and the only one blocking a CI-enforced quality claim.
+2. **Hot-path safety net:** wire the benchstat-vs-main comparison so the perf claim is enforced, not asserted.
+3. **Daily-driver wins:** cross-shell nav history, multi-target aliases, undo. Small surface, big perceived improvement.
+4. **Scope leap:** project-scope `.onix.toml`. Validate layering inside the current architecture before tackling the workspace tier.
+5. **Sharing & ecosystem:** workspace tier with sync, plugin capability model, verified registry.
+6. **Supply-chain finish:** cosign-signed releases, dependency review, SHA-pinned actions.
+7. **Performance peak:** daemon mode.
