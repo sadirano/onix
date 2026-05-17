@@ -34,12 +34,12 @@ func TestPreprocessArgs_MultiCharShorts(t *testing.T) {
 
 func TestParseRemoveArgs(t *testing.T) {
 	cases := []struct {
-		name        string
-		in          []string
-		wantFiles   []string
-		wantForce   bool
-		wantRecur   bool
-		wantErr     bool
+		name      string
+		in        []string
+		wantFiles []string
+		wantForce bool
+		wantRecur bool
+		wantErr   bool
 	}{
 		{"empty", []string{}, nil, false, false, false},
 		{"single file", []string{"a.txt"}, []string{"a.txt"}, false, false, false},

@@ -53,4 +53,3 @@ func TestPwshBin(t *testing.T) {
 		t.Error("pwshBin returned empty string")
 	}
 }
-

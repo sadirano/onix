@@ -35,7 +35,7 @@ func TestUsage(t *testing.T) {
 	// Manual append to log with old timestamps.
 	p := filepath.Join(home, "usage.log")
 	f, _ := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0o644)
-	
+
 	now := time.Now().Unix()
 	// 2 hours ago (weight 5)
 	fmt.Fprintf(f, "%d,%s\n", now-7200, "oldie")

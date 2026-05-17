@@ -196,4 +196,3 @@ func TestE2E_ShellIntegration_Bash(t *testing.T) {
 		t.Errorf("bash 'o demo' changed to %q, want %q", got, demoDir)
 	}
 }
-

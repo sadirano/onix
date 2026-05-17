@@ -10,7 +10,7 @@ import (
 
 func TestFastListNames_Frecency(t *testing.T) {
 	home := t.TempDir()
-	
+
 	// Register three aliases.
 	_ = (&AddCmd{Alias: "apple", Path: "C:/apple"}).Run(context.Background(), &env{Home: home})
 	_ = (&AddCmd{Alias: "banana", Path: "C:/banana"}).Run(context.Background(), &env{Home: home})

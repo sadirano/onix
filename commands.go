@@ -415,7 +415,7 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	if len(argv) == 0 {
 		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
 	}
-	cmd := exec.CommandContext(ctx,argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -477,7 +477,7 @@ func (c *ExecCmd) Run(ctx context.Context, e *env) error {
 		return fmt.Errorf("action %q produced empty argv", actionName)
 	}
 
-	cmd := exec.CommandContext(ctx,argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

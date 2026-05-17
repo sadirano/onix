@@ -113,7 +113,8 @@ func buildShowCommand(ctx context.Context, mode string, args []string) (*exec.Cm
 		if len(args) > 0 {
 			script += " " + strings.Join(psQuoteArgs(args), " ")
 		}
-		return exec.CommandContext(ctx,
+		return exec.CommandContext(
+			ctx,
 			"powershell",
 			"-NoProfile", "-NonInteractive", "-Command", script,
 		), nil

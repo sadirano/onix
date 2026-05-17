@@ -195,8 +195,8 @@ func TestShortSHA(t *testing.T) {
 	}{
 		{"", ""},
 		{"abc", "abc"},
-		{"123456789012", "123456789012"},          // exactly 12, untouched
-		{"1234567890123", "123456789012"},          // 13 → 12
+		{"123456789012", "123456789012"},  // exactly 12, untouched
+		{"1234567890123", "123456789012"}, // 13 → 12
 		{"abcdef0123456789deadbeef", "abcdef012345"},
 	}
 	for _, tc := range tests {

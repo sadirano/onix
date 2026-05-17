@@ -32,14 +32,14 @@ type aliasStat struct {
 }
 
 type statsReport struct {
-	Today    int                   `json:"today"`
-	Week     int                   `json:"week"`
-	Total    int                   `json:"total"`
-	Distinct int                   `json:"distinct_aliases"`
-	Top      []aliasStatJSON       `json:"top,omitempty"`
-	Cold     []string              `json:"cold,omitempty"`
-	ByHour   *[24]int              `json:"by_hour,omitempty"`
-	SinceTS  int64                 `json:"since_ts,omitempty"`
+	Today    int             `json:"today"`
+	Week     int             `json:"week"`
+	Total    int             `json:"total"`
+	Distinct int             `json:"distinct_aliases"`
+	Top      []aliasStatJSON `json:"top,omitempty"`
+	Cold     []string        `json:"cold,omitempty"`
+	ByHour   *[24]int        `json:"by_hour,omitempty"`
+	SinceTS  int64           `json:"since_ts,omitempty"`
 }
 
 type aliasStatJSON struct {

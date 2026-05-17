@@ -16,7 +16,8 @@ import (
 func writeUsageLog(t *testing.T, home string, entries []struct {
 	ago   time.Duration
 	alias string
-}) {
+},
+) {
 	t.Helper()
 	path := filepath.Join(home, "usage.log")
 	f, err := os.Create(path)
@@ -253,9 +254,9 @@ func TestStatsCmd_Full(t *testing.T) {
 
 func TestParseSince(t *testing.T) {
 	tests := []struct {
-		in       string
-		want     time.Duration
-		wantErr  bool
+		in      string
+		want    time.Duration
+		wantErr bool
 	}{
 		{"", 0, false},
 		{"24h", 24 * time.Hour, false},

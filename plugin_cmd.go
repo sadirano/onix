@@ -338,7 +338,7 @@ func (c *PluginExecCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx,bin, extras...)
+	cmd := exec.CommandContext(ctx, bin, extras...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

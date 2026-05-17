@@ -62,14 +62,14 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 		"--preview-window", "right:60%:~1",
 	}
 
-	rgCmd := exec.CommandContext(ctx,"rg", rgArgs...)
+	rgCmd := exec.CommandContext(ctx, "rg", rgArgs...)
 	rgCmd.Dir = target
 	rgOut, err := rgCmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
 
-	fzfCmd := exec.CommandContext(ctx,"fzf", fzfArgs...)
+	fzfCmd := exec.CommandContext(ctx, "fzf", fzfArgs...)
 	fzfCmd.Dir = target
 	fzfCmd.Stdin = rgOut
 	fzfCmd.Stderr = os.Stderr // fzf UI uses stderr when stdout is captured
@@ -134,7 +134,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 				esArgs = append(esArgs, query)
 			}
 			esArgs = append(esArgs, extras...)
-			findCmd = exec.CommandContext(ctx,"es", esArgs...)
+			findCmd = exec.CommandContext(ctx, "es", esArgs...)
 		}
 	}
 
@@ -145,7 +145,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 			if query != "" {
 				fdArgs = append(fdArgs, query)
 			}
-			findCmd = exec.CommandContext(ctx,"fd", fdArgs...)
+			findCmd = exec.CommandContext(ctx, "fd", fdArgs...)
 			findCmd.Dir = target
 		} else {
 			// Fallback to find
@@ -154,7 +154,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 				findArgs = append(findArgs, "-name", "*"+query+"*")
 			}
 			findArgs = append(findArgs, extras...)
-			findCmd = exec.CommandContext(ctx,"find", findArgs...)
+			findCmd = exec.CommandContext(ctx, "find", findArgs...)
 			findCmd.Dir = target
 		}
 	}
@@ -174,7 +174,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 		"--multi",
 		"--preview", previewCmd,
 	}
-	fzfCmd := exec.CommandContext(ctx,"fzf", fzfArgs...)
+	fzfCmd := exec.CommandContext(ctx, "fzf", fzfArgs...)
 	fzfCmd.Dir = target
 	fzfCmd.Stdin = findOut
 	fzfCmd.Stderr = os.Stderr
@@ -228,7 +228,7 @@ func openSelectionsInEditor(ctx context.Context, target string, selections []str
 		return nil
 	}
 
-	cmd := exec.CommandContext(ctx,ed, argv...)
+	cmd := exec.CommandContext(ctx, ed, argv...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
