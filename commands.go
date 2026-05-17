@@ -199,7 +199,7 @@ func (c *RemoveCmd) deleteFiles(e *env) error {
 	if !c.Force {
 		fmt.Fprintf(os.Stderr, "Delete %d item(s) from %s? [y/N] ", len(targets), base)
 		var resp string
-		fmt.Fscanln(os.Stdin, &resp)
+		_, _ = fmt.Fscanln(os.Stdin, &resp)
 		resp = strings.TrimSpace(strings.ToLower(resp))
 		if resp != "y" && resp != "yes" {
 			return fmt.Errorf("aborted")

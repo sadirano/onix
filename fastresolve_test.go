@@ -12,9 +12,9 @@ func TestFastListNames_Frecency(t *testing.T) {
 	home := t.TempDir()
 	
 	// Register three aliases.
-	(&AddCmd{Alias: "apple", Path: "C:/apple"}).Run(context.Background(), &env{Home: home})
-	(&AddCmd{Alias: "banana", Path: "C:/banana"}).Run(context.Background(), &env{Home: home})
-	(&AddCmd{Alias: "cherry", Path: "C:/cherry"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "apple", Path: "C:/apple"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "banana", Path: "C:/banana"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "cherry", Path: "C:/cherry"}).Run(context.Background(), &env{Home: home})
 
 	// Initial sort should be alphabetical: apple, banana, cherry.
 	stdout, _, _ := captureStdio(func() error {
@@ -26,9 +26,9 @@ func TestFastListNames_Frecency(t *testing.T) {
 	}
 
 	// Record usage: banana (most), cherry (second), apple (none).
-	store.RecordUsage(home, "banana")
-	store.RecordUsage(home, "banana")
-	store.RecordUsage(home, "cherry")
+	_ = store.RecordUsage(home, "banana")
+	_ = store.RecordUsage(home, "banana")
+	_ = store.RecordUsage(home, "cherry")
 
 	// New sort should be: banana, cherry, apple.
 	stdout, _, _ = captureStdio(func() error {

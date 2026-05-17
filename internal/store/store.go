@@ -210,23 +210,6 @@ func validateName(kind, name string) error {
 	return nil
 }
 
-func isBareKey(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		switch {
-		case c >= 'a' && c <= 'z':
-		case c >= 'A' && c <= 'Z':
-		case c >= '0' && c <= '9':
-		case c == '_' || c == '-':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
 // ExpandTilde expands a leading ~ to the user home directory.
 func ExpandTilde(p string) string {
 	if !strings.HasPrefix(p, "~") {

@@ -167,7 +167,7 @@ src  = "source"
 func TestResolve_Basic(t *testing.T) {
 	dir := t.TempDir()
 	s := &store.Store{Aliases: map[string]store.Alias{"a": {Path: "C:/a"}}}
-	store.SaveStore(dir, s)
+	_ = store.SaveStore(dir, s)
 
 	t.Run("fast path", func(t *testing.T) {
 		got, err := Resolve(dir, "a", nil, nil)

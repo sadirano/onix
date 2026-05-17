@@ -160,8 +160,8 @@ func TestListCmd(t *testing.T) {
 	// Register two aliases.
 	pathA, _ := filepath.Abs("a")
 	pathB, _ := filepath.Abs("b")
-	(&AddCmd{Alias: "a", Path: pathA}).Run(context.Background(), &env{Home: home})
-	(&AddCmd{Alias: "b", Path: pathB}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "a", Path: pathA}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "b", Path: pathB}).Run(context.Background(), &env{Home: home})
 
 	t.Run("table output", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
@@ -202,7 +202,7 @@ func TestRemoveCmd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	(&AddCmd{Alias: "acme", Path: "C:/acme"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: "C:/acme"}).Run(context.Background(), &env{Home: home})
 
 	t.Run("remove existing", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
@@ -241,7 +241,7 @@ func noopExec() (string, []string) {
 func TestRunCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	bin, args := noopExec()
 
@@ -287,7 +287,7 @@ func TestRunCmd(t *testing.T) {
 func TestExecCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	bin, args := noopExec()
 	// Write config.toml declaring a 'noop' action that runs our no-op binary.
@@ -334,7 +334,7 @@ func TestExecCmd(t *testing.T) {
 func TestEditCmd_PropagatesEditorError(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	t.Setenv("EDITOR", filepath.Join(home, "does-not-exist"))
 	err := (&EditCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
@@ -373,7 +373,7 @@ func TestApplyContexts_SegmentedNoFile(t *testing.T) {
 func TestFastResolve_RecordsUsage(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	if _, _, err := captureStdio(func() error {
 		return fastResolve(home, "acme", false)
@@ -474,8 +474,8 @@ func TestVersionCmd(t *testing.T) {
 func TestFastListNames(t *testing.T) {
 	home := t.TempDir()
 	// Register some aliases
-	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home})
-	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
 		return fastListNames(home)
@@ -495,7 +495,7 @@ func TestFastListNames(t *testing.T) {
 func TestFastResolve_PrintsPath(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
 		return fastResolve(home, "acme", false)
@@ -511,7 +511,7 @@ func TestFastResolve_PrintsPath(t *testing.T) {
 func TestYankCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
 		return (&YankCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})

@@ -159,7 +159,7 @@ func TestStatsCmd_ColdView(t *testing.T) {
 	home := t.TempDir()
 	// Register three aliases.
 	for _, name := range []string{"used", "neglected", "verydead"} {
-		(&AddCmd{Alias: name, Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+		_ = (&AddCmd{Alias: name, Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
 	}
 	// Only one of them shows recent usage.
 	writeUsageLog(t, home, []struct {
@@ -185,7 +185,7 @@ func TestStatsCmd_ColdView(t *testing.T) {
 
 func TestStatsCmd_ColdView_AllUsed(t *testing.T) {
 	home := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
 	writeUsageLog(t, home, []struct {
 		ago   time.Duration
 		alias string
@@ -206,7 +206,7 @@ func TestStatsCmd_ColdView_AllUsed(t *testing.T) {
 
 func TestStatsCmd_ColdView_SegmentWarmsBase(t *testing.T) {
 	home := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
 	// Only segmented use: `docs@acme`. Should still warm `acme`.
 	writeUsageLog(t, home, []struct {
 		ago   time.Duration
@@ -228,8 +228,8 @@ func TestStatsCmd_ColdView_SegmentWarmsBase(t *testing.T) {
 
 func TestStatsCmd_Full(t *testing.T) {
 	home := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
-	(&AddCmd{Alias: "cold", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "cold", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
 	writeUsageLog(t, home, []struct {
 		ago   time.Duration
 		alias string

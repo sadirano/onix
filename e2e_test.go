@@ -10,8 +10,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/sadirano/onix/internal/snippet"
 )
 
 var onixExe string
@@ -178,10 +176,10 @@ func TestE2E_ShellIntegration_Bash(t *testing.T) {
 		t.Skipf("bash is not usable (maybe WSL not configured): %v\n%s", err, out)
 	}
 
-	r.run("--init", "--skip-profile")
+	_, _, _ = r.run("--init", "--skip-profile")
 
 	demoDir := t.TempDir()
-	r.run("demo", demoDir)
+	_, _, _ = r.run("demo", demoDir)
 
 	snip := filepath.Join(home, "shell", "onix.sh")
 	script := fmt.Sprintf(`source '%s'; o demo && pwd`, filepath.ToSlash(snip))
@@ -199,6 +197,3 @@ func TestE2E_ShellIntegration_Bash(t *testing.T) {
 	}
 }
 
-func (r *onixRunner) writeBashSnippet() error {
-	return snippet.WriteBashShellSnippet(r.home, nil, nil, nil)
-}

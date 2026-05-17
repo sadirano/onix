@@ -10,7 +10,7 @@ func TestGrepCmd_NotFound(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	err := (&GrepCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home})
 	if err == nil {
@@ -25,7 +25,7 @@ func TestFindCmd_NotFound(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	home := t.TempDir()
 	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	err := (&FindCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home})
 	if err == nil {
