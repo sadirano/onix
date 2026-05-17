@@ -39,30 +39,33 @@ function Step($label, [scriptblock]$block) {
 }
 
 Step "init" {
-    & $exe init --skip-profile
+    & $exe --init --skip-profile
 }
 
 Step "add" {
-    & $exe add demo $env:TEMP
+    # New grammar: `onix <alias> <path>` registers/updates the alias.
+    & $exe demo $env:TEMP
 }
 
 Step "list" {
-    & $exe list
+    & $exe --list
 }
 
 Step "resolve" {
-    $p = & $exe resolve demo
+    # Bare `onix <alias>` is the hot-path resolve.
+    $p = & $exe demo
     if (-not $p) { throw "resolve returned empty" }
     Write-Host "resolved -> $p"
 }
 
 Step "yank" {
-    & $exe yank demo | Out-Null
+    & $exe demo -y | Out-Null
 }
 
 # M2 — custom actions. Write a tiny config.toml declaring an action that
 # runs `cmd.exe /c echo hi from <alias>`, regenerate the shell snippet, run
-# it via `onix exec`, and verify the output contains the expected string.
+# it via `onix <alias> -X <action>`, and verify the output contains the
+# expected string.
 Step "custom-action" {
     $cfg = Join-Path $env:ONIX_HOME 'config.toml'
     @'
@@ -72,15 +75,15 @@ exec = "cmd.exe"
 args = ["/c", "echo", "hello", "from", "{alias}"]
 '@ | Set-Content -Path $cfg
 
-    & $exe install-actions
-    if ($LASTEXITCODE -ne 0) { throw "install-actions failed" }
+    & $exe --sync
+    if ($LASTEXITCODE -ne 0) { throw "--sync failed" }
 
-    $out = & $exe exec say demo
-    if ($LASTEXITCODE -ne 0) { throw "exec say demo failed" }
+    $out = & $exe demo -X say
+    if ($LASTEXITCODE -ne 0) { throw "demo -X say failed" }
     if ($out -notmatch 'hello from demo') {
         throw "unexpected output: $out"
     }
-    Write-Host "exec say demo -> $out"
+    Write-Host "demo -X say -> $out"
 
     # The regenerated snippet must reference the new action AND be pinned
     # to the absolute path of the binary that generated it. Pinning is what
@@ -101,7 +104,7 @@ args = ["/c", "echo", "hello", "from", "{alias}"]
 }
 
 Step "list-names" {
-    $names = & $exe list-names
+    $names = & $exe --list-names
     if ($LASTEXITCODE -ne 0) { throw "list-names failed" }
     if ($names -notcontains 'demo') {
         throw "list-names did not include 'demo' (got: $names)"
@@ -161,6 +164,9 @@ source-template = "/tickets/${tasks}"
     if ($LASTEXITCODE -eq 0) {
         throw "resolve --no-prompt mystery@demo unexpectedly succeeded: '$undef'"
     }
+    # Reset $LASTEXITCODE so the Step wrapper doesn't trip on the expected
+    # error above.
+    $global:LASTEXITCODE = 0
 
     Write-Host "  docs@demo       -> $mapped"
     Write-Host "  tasks:42@demo   -> $inline"
@@ -234,9 +240,10 @@ Step "plugin-add" {
     & $exe plugin add $probeDir --unpinned --yes --name probe
     if ($LASTEXITCODE -ne 0) { throw "plugin add failed" }
 
-    # plugins.toml must record the new plugin.
+    # plugins.toml must record the new plugin. go-toml's marshaller uses
+    # single-quoted strings, so match either quote style.
     $plugins = Get-Content (Join-Path $env:ONIX_HOME 'plugins.toml') -Raw
-    if ($plugins -notmatch 'name = "probe"') {
+    if ($plugins -notmatch "name = ['""]probe['""]") {
         throw "plugins.toml missing probe plugin"
     }
 
@@ -253,18 +260,28 @@ Step "plugin-add" {
     if ($snippet -notmatch 'function global:p-pong') {
         throw "snippet missing entry wrapper 'function global:p-pong' (cmd override)"
     }
-    if ($snippet -notmatch 'plugin-exec probe "ping" \$Alias') {
-        throw "ping wrapper does not pass entry=ping to plugin-exec"
+    # The ping wrapper invokes the alias-flag form `<alias> --plugin probe:ping`.
+    if ($snippet -notmatch '\$Alias --plugin probe:ping') {
+        throw "ping wrapper does not pass entry=ping to --plugin"
     }
-    if ($snippet -notmatch 'Register-ArgumentCompleter.*probe.*ping.*p-pong') {
-        throw "snippet completer missing one of: probe, ping, p-pong"
+    # The CommandName list is alphabetically sorted in the snippet, so
+    # check each wrapper name individually rather than enforcing an order.
+    if ($snippet -notmatch '-CommandName [^\r\n]*\bprobe\b') {
+        throw "snippet completer missing probe"
+    }
+    if ($snippet -notmatch '-CommandName [^\r\n]*\bping\b') {
+        throw "snippet completer missing ping"
+    }
+    if ($snippet -notmatch '-CommandName [^\r\n]*\bp-pong\b') {
+        throw "snippet completer missing p-pong"
     }
 }
 
 Step "plugin-exec" {
-    # The probe binary prints every ONIX_* env var. We exec it via
-    # plugin-exec and verify the values flow through correctly.
-    $out = & $exe plugin-exec probe "ping" demo -- foo bar
+    # The probe binary prints every ONIX_* env var. We invoke it via the
+    # alias-flag form `onix <alias> -p <plugin>:<entry>` and verify the
+    # values flow through correctly.
+    $out = & $exe demo -p probe:ping -- foo bar
     if ($LASTEXITCODE -ne 0) { throw "plugin-exec failed" }
     $text = $out -join "`n"
     if ($text -notmatch 'alias=demo') {
@@ -282,6 +299,7 @@ Step "plugin-exec" {
 }
 
 Step "plugin-list" {
+    # Plugin management remains the only kong subtree.
     $out = & $exe plugin list
     if ($LASTEXITCODE -ne 0) { throw "plugin list failed" }
     if (($out -join "`n") -notmatch '\bprobe\b') {
@@ -292,7 +310,7 @@ Step "plugin-list" {
 Step "plugin-doctor" {
     # Doctor must surface the unpinned warning (we installed with
     # --unpinned) and confirm the binary exists.
-    $out = & $exe doctor 2>&1
+    $out = & $exe --doctor 2>&1
     $LASTEXITCODE = 0
     $text = $out -join "`n"
     if ($text -notmatch 'plugin:probe') {
@@ -321,13 +339,13 @@ Remove-Item -Recurse -Force $probeDir
 Step "doctor" {
     # doctor exits non-zero only when there's an actual error; warnings are fine
     # because we deliberately skipped the $PROFILE step above.
-    & $exe doctor
+    & $exe --doctor
     # Allow non-zero here because the smoke env has no real PROFILE sourced.
     $script:LASTEXITCODE = 0
 }
 
 Step "version" {
-    & $exe version
+    & $exe --version
 }
 
 # 4. Hot-path microbench. We also measure a no-op Go binary built with the
@@ -337,18 +355,18 @@ Step "version" {
 Write-Host "--- hot-path timing (10 iterations)"
 $timings = @()
 for ($i = 0; $i -lt 10; $i++) {
-    $t = Measure-Command { & $exe resolve demo | Out-Null }
+    $t = Measure-Command { & $exe demo | Out-Null }
     $timings += $t.TotalMilliseconds
 }
 $avg = ($timings | Measure-Object -Average).Average
 $min = ($timings | Measure-Object -Minimum).Minimum
 Write-Host ("  onix resolve   min={0:N2}ms  avg={1:N2}ms" -f $min, $avg)
 
-# Tab-completion path: every Tab keystroke triggers `onix list-names`, so
+# Tab-completion path: every Tab keystroke triggers `onix --list-names`, so
 # it has its own hot-path bypass. Measure it the same way.
 $ltimings = @()
 for ($i = 0; $i -lt 10; $i++) {
-    $t = Measure-Command { & $exe list-names | Out-Null }
+    $t = Measure-Command { & $exe --list-names | Out-Null }
     $ltimings += $t.TotalMilliseconds
 }
 $lAvg = ($ltimings | Measure-Object -Average).Average
