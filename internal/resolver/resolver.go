@@ -147,17 +147,21 @@ func resolveSegmented(home, input string) (string, error) {
 		return "", fmt.Errorf("unknown alias %q", alias)
 	}
 
-	segFile, err := segments.LoadSegments(home)
-	if err != nil {
+	// Load segments.toml to surface parse / validation errors early, even
+	// though PR 2 doesn't consume any of its fields during resolution yet.
+	// Segments-spec PR 4 wires [[contexts]] into the loop below.
+	if _, err := segments.LoadSegments(home); err != nil {
 		return "", err
 	}
 
 	target := a.Path
 	for i := len(segs) - 1; i >= 0; i-- {
-		// Inline value (segs[i].Value) is parsed but not yet honored at this
-		// layer — the segments spec PR 4 wires it through. For now,
-		// resolution continues to use the segment name only.
-		part := segments.ResolveSegment(segs[i].Name, a.Subdirs, segFile.Subdirs)
+		// PR 2: literal-name fallback with the auto-`/` joiner. The old
+		// per-alias / global Subdirs maps are gone; segments-spec PR 4
+		// replaces this loop with [[contexts]]-driven resolution and an
+		// unknown-segment prompt. Inline value (segs[i].Value) is parsed
+		// but ignored here.
+		part := segs[i].Name
 		target = strings.TrimRight(target, "/") + "/" + strings.Trim(part, "/")
 	}
 

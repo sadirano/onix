@@ -307,8 +307,8 @@ func TestCheckSegmentsFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := checkSegmentsFile(home)
-		if r.Status != "ok" || !strings.Contains(r.Detail, "no subdirs or contexts") {
-			t.Errorf("got %+v, want ok/no subdirs or contexts", r)
+		if r.Status != "ok" || !strings.Contains(r.Detail, "no contexts") {
+			t.Errorf("got %+v, want ok/no contexts", r)
 		}
 	})
 }

@@ -240,13 +240,12 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 
 	if e.JSON {
 		type aliasInfo struct {
-			Name        string            `json:"name"`
-			Path        string            `json:"path"`
-			Description string            `json:"description,omitempty"`
-			Tags        []string          `json:"tags,omitempty"`
-			Owner       string            `json:"owner,omitempty"`
-			LastUsed    int64             `json:"last_used,omitempty"`
-			Subdirs     map[string]string `json:"subdirs,omitempty"`
+			Name        string   `json:"name"`
+			Path        string   `json:"path"`
+			Description string   `json:"description,omitempty"`
+			Tags        []string `json:"tags,omitempty"`
+			Owner       string   `json:"owner,omitempty"`
+			LastUsed    int64    `json:"last_used,omitempty"`
 		}
 		out := make([]aliasInfo, 0, len(names))
 		for _, n := range names {
@@ -258,7 +257,6 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 				Tags:        a.Tags,
 				Owner:       a.Owner,
 				LastUsed:    a.LastUsed,
-				Subdirs:     a.Subdirs,
 			})
 		}
 		return printJSON(e.Stdout, out)

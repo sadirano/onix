@@ -175,8 +175,9 @@ func TestValidateNames_Property(t *testing.T) {
 	})
 
 	t.Run("segment_validator_matches_spec", func(t *testing.T) {
-		// Segments are map keys inside Alias.Subdirs; an independently-derived
-		// spec is the cheapest way to surface a "validator-forgot-a-rune" gap.
+		// Segment names live as `[[contexts]] segment = ...` keys in
+		// segments.toml; an independently-derived spec is the cheapest way
+		// to surface a "validator-forgot-a-rune" gap.
 		f := func(name string) bool {
 			err := ValidateSegmentName(name)
 			legal := isLegalName(name)
@@ -235,40 +236,35 @@ func TestStore_AtomicWrite(t *testing.T) {
 	}
 }
 
-// TestStore_SubdirsRoundTrip locks the on-disk shape for per-alias subdir overrides.
-func TestStore_SubdirsRoundTrip(t *testing.T) {
+// TestLoadStore_IgnoresLegacyAliasSubdirs confirms that an aliases.toml
+// written by a pre-redesign onix (with a per-alias `subdirs = {...}` block)
+// loads without error — the field is gone from Alias but the decoder
+// silently drops unknown keys. The path still loads; the subdirs are
+// dropped, which is the documented breaking change.
+func TestLoadStore_IgnoresLegacyAliasSubdirs(t *testing.T) {
 	dir := t.TempDir()
-	s := &Store{Aliases: map[string]Alias{}}
-	s.Set("acme", Alias{
-		Path:    "C:/projects/acme",
-		Subdirs: map[string]string{"docs": "doc-internal", "src": "source-acme"},
-	})
-	if err := SaveStore(dir, s); err != nil {
-		t.Fatal(err)
-	}
-	body, err := os.ReadFile(AliasesPath(dir))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Confirm the file has both the path line and the subdirs subtable.
-	got := string(body)
-	for _, want := range []string{`[acme]`, `path = `, `C:/projects/acme`, `[acme.subdirs]`, `docs = `, `doc-internal`, `src = `, `source-acme`} {
-		if !strings.Contains(got, want) {
-			t.Errorf("aliases.toml missing %q\n--- file ---\n%s", want, got)
-		}
-	}
+	legacy := `version = 2
 
-	// Reload and confirm the map survived.
-	s2, err := LoadStore(dir)
-	if err != nil {
+[acme]
+path = "C:/projects/acme"
+
+[acme.subdirs]
+docs = "doc-internal"
+src  = "source-acme"
+`
+	if err := os.WriteFile(AliasesPath(dir), []byte(legacy), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a, ok := s2.Lookup("acme")
-	if !ok {
-		t.Fatal("acme missing after reload")
+	s, err := LoadStore(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
 	}
-	if a.Subdirs["docs"] != "doc-internal" || a.Subdirs["src"] != "source-acme" {
-		t.Errorf("subdirs round-trip lost data: %+v", a.Subdirs)
+	a, ok := s.Lookup("acme")
+	if !ok {
+		t.Fatal("acme missing after load")
+	}
+	if a.Path != "C:/projects/acme" {
+		t.Errorf("path = %q, want C:/projects/acme", a.Path)
 	}
 }
 

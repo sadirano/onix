@@ -21,13 +21,17 @@ type Store struct {
 const CurrentVersion = 2
 
 // Alias is one alias entry.
+//
+// Per-alias `subdirs = {...}` blocks are silently dropped on load (the
+// segments redesign moved subdir mapping into [[contexts]] in
+// segments.toml). The decoder ignores unknown keys, so legacy entries
+// load cleanly with the field absent here.
 type Alias struct {
-	Path        string            `toml:"path"`
-	Description string            `toml:"description,omitempty"`
-	Tags        []string          `toml:"tags,omitempty"`
-	Owner       string            `toml:"owner,omitempty"`
-	LastUsed    int64             `toml:"last_used,omitempty"`
-	Subdirs     map[string]string `toml:"subdirs,omitempty"`
+	Path        string   `toml:"path"`
+	Description string   `toml:"description,omitempty"`
+	Tags        []string `toml:"tags,omitempty"`
+	Owner       string   `toml:"owner,omitempty"`
+	LastUsed    int64    `toml:"last_used,omitempty"`
 }
 
 // AliasesPath returns home/aliases.toml.
@@ -67,11 +71,6 @@ func LoadStore(home string) (*Store, error) {
 		}
 		if err := ValidateAliasName(name); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
-		}
-		for seg := range a.Subdirs {
-			if err := ValidateSegmentName(seg); err != nil {
-				return nil, fmt.Errorf("%s: alias %q: %w", p, name, err)
-			}
 		}
 		s.Aliases[name] = a
 	}

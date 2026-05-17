@@ -3,6 +3,7 @@ package segments
 import (
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -53,55 +54,23 @@ func TestParseSegmentedAlias(t *testing.T) {
 	}
 }
 
-// TestResolveSegment_PrecedenceChain captures the lookup rules.
-func TestResolveSegment_PrecedenceChain(t *testing.T) {
-	aliasSubs := map[string]string{"docs": "doc-internal"}
-	globalSubs := map[string]string{"docs": "documentation", "src": "source"}
-
-	t.Run("per-alias wins over global", func(t *testing.T) {
-		got := ResolveSegment("docs", aliasSubs, globalSubs)
-		if got != "doc-internal" {
-			t.Errorf("docs = %q, want doc-internal", got)
-		}
-	})
-
-	t.Run("global wins when no per-alias", func(t *testing.T) {
-		got := ResolveSegment("src", aliasSubs, globalSubs)
-		if got != "source" {
-			t.Errorf("src = %q, want source", got)
-		}
-	})
-
-	t.Run("literal fallback when unmapped", func(t *testing.T) {
-		got := ResolveSegment("undocumented", aliasSubs, globalSubs)
-		if got != "undocumented" {
-			t.Errorf("undocumented = %q, want literal fallback", got)
-		}
-	})
-
-	t.Run("case-insensitive match", func(t *testing.T) {
-		got := ResolveSegment("SRC", aliasSubs, globalSubs)
-		if got != "source" {
-			t.Errorf("SRC = %q, want source (case-insensitive lookup)", got)
-		}
-	})
-
-	t.Run("empty per-alias value falls through to global", func(t *testing.T) {
-		got := ResolveSegment("docs", map[string]string{"docs": " "}, globalSubs)
-		if got != "documentation" {
-			t.Errorf("docs = %q, want documentation (empty override skipped)", got)
-		}
-	})
-}
-
-// TestSegments_LoadRoundTrip writes a segments.toml by hand.
-func TestSegments_LoadRoundTrip(t *testing.T) {
+// TestLoadSegments_AllSourceTypes confirms a single [[contexts]] entry per
+// source kind loads cleanly.
+func TestLoadSegments_AllSourceTypes(t *testing.T) {
 	dir := t.TempDir()
-	body := `
-[subdirs]
-docs = "documentation"
-src  = "source"
-ts   = "tests"
+	body := `version = 3
+
+[[contexts]]
+segment = "tasks"
+source-template = "/${tasks}"
+
+[[contexts]]
+segment = "branch"
+source-exec = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+
+[[contexts]]
+segment = "current"
+source-file = "@home/state/current"
 `
 	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -110,11 +79,94 @@ ts   = "tests"
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if got := sf.Subdirs["docs"]; got != "documentation" {
-		t.Errorf("docs = %q, want documentation", got)
+	if got, want := len(sf.Contexts), 3; got != want {
+		t.Fatalf("contexts = %d, want %d", got, want)
 	}
-	if got := sf.Subdirs["ts"]; got != "tests" {
-		t.Errorf("ts = %q, want tests", got)
+	if sf.Contexts[0].SourceTemplate != "/${tasks}" {
+		t.Errorf("template source missing: %+v", sf.Contexts[0])
+	}
+	if got := sf.Contexts[1].SourceExec; len(got) != 4 || got[0] != "git" {
+		t.Errorf("exec source missing: %+v", sf.Contexts[1])
+	}
+	if sf.Contexts[2].SourceFile != "@home/state/current" {
+		t.Errorf("file source missing: %+v", sf.Contexts[2])
+	}
+}
+
+// TestLoadSegments_MultipleSourcesError catches a context that declares
+// more than one source-* field. Error mentions the segment name.
+func TestLoadSegments_MultipleSourcesError(t *testing.T) {
+	dir := t.TempDir()
+	body := `version = 3
+
+[[contexts]]
+segment = "ambiguous"
+source-template = "/${ambiguous}"
+source-file = "@home/state/x"
+`
+	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadSegments(dir)
+	if err == nil {
+		t.Fatal("expected error for multiple sources, got nil")
+	}
+	if !strings.Contains(err.Error(), "ambiguous") {
+		t.Errorf("error should mention segment name, got: %v", err)
+	}
+}
+
+// TestLoadSegments_IgnoresLegacySubdirs confirms a top-level [subdirs] table
+// is silently dropped. Users see the unknown-segment prompt on first use of
+// the segment under the new resolver (segments-spec PR 4).
+func TestLoadSegments_IgnoresLegacySubdirs(t *testing.T) {
+	dir := t.TempDir()
+	body := `version = 2
+
+[subdirs]
+docs = "documentation"
+src  = "source"
+`
+	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sf, err := LoadSegments(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(sf.Contexts) != 0 {
+		t.Errorf("contexts = %d, want 0", len(sf.Contexts))
+	}
+}
+
+// TestLoadSegments_ContextWithoutSourceIsAllowed locks the spec rule that
+// env/exec-only contexts are valid — they drive apply-context's shell-side
+// emission but contribute no path fragment.
+func TestLoadSegments_ContextWithoutSourceIsAllowed(t *testing.T) {
+	dir := t.TempDir()
+	body := `version = 3
+
+[[contexts]]
+segment = "prod"
+env = { DEPLOY_ENV = "production" }
+exec = ["kubectl", "config", "use-context", "prod"]
+`
+	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sf, err := LoadSegments(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(sf.Contexts) != 1 {
+		t.Fatalf("contexts = %d, want 1", len(sf.Contexts))
+	}
+	cd := sf.Contexts[0]
+	if cd.Env["DEPLOY_ENV"] != "production" {
+		t.Errorf("env not preserved: %+v", cd.Env)
+	}
+	if cd.SourceTemplate != "" || len(cd.SourceExec) != 0 || cd.SourceFile != "" {
+		t.Errorf("no source-* expected, got %+v", cd)
 	}
 }
 
@@ -124,8 +176,11 @@ func TestSegments_LoadMissingReturnsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sf == nil || len(sf.Subdirs) != 0 {
+	if sf == nil || len(sf.Contexts) != 0 {
 		t.Fatalf("expected empty segments, got %+v", sf)
+	}
+	if sf.Version != CurrentVersion {
+		t.Errorf("version = %d, want %d", sf.Version, CurrentVersion)
 	}
 }
 
@@ -140,9 +195,20 @@ func TestLoadSegments_BadTOML(t *testing.T) {
 	}
 }
 
-func TestLookupCaseInsensitive_Nil(t *testing.T) {
-	v, ok := lookupCaseInsensitive(nil, "foo")
-	if ok || v != "" {
-		t.Errorf("lookupCaseInsensitive(nil) = %q, %v, want \"\", false", v, ok)
+// TestLoadSegments_InvalidSegmentName guards against an `@` or whitespace
+// leaking into a [[contexts]] entry.
+func TestLoadSegments_InvalidSegmentName(t *testing.T) {
+	dir := t.TempDir()
+	body := `version = 3
+
+[[contexts]]
+segment = "bad@name"
+source-template = "/x"
+`
+	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSegments(dir); err == nil {
+		t.Fatal("expected error for invalid segment name, got nil")
 	}
 }

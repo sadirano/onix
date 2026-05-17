@@ -112,7 +112,7 @@ func checkSegmentsFile(home string) checkResult {
 	p := segments.Path(home)
 	if _, err := os.Stat(p); err != nil {
 		if os.IsNotExist(err) {
-			return checkResult{"segments.toml", "ok", "absent (no global subdirs)"}
+			return checkResult{"segments.toml", "ok", "absent (no contexts)"}
 		}
 		return checkResult{"segments.toml", "warn", fmt.Sprintf("%s: %v", p, err)}
 	}
@@ -120,10 +120,10 @@ func checkSegmentsFile(home string) checkResult {
 	if err != nil {
 		return checkResult{"segments.toml", "err", err.Error()}
 	}
-	if len(sf.Subdirs) == 0 && len(sf.Contexts) == 0 {
-		return checkResult{"segments.toml", "ok", fmt.Sprintf("%s (no subdirs or contexts)", p)}
+	if len(sf.Contexts) == 0 {
+		return checkResult{"segments.toml", "ok", fmt.Sprintf("%s (no contexts)", p)}
 	}
-	return checkResult{"segments.toml", "ok", fmt.Sprintf("%d subdir(s), %d context(s)", len(sf.Subdirs), len(sf.Contexts))}
+	return checkResult{"segments.toml", "ok", fmt.Sprintf("%d context(s)", len(sf.Contexts))}
 }
 
 // checkPluginsFile validates plugins.toml parses and reports the plugin

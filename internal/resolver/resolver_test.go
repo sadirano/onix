@@ -117,26 +117,28 @@ func seedStore(t testing.TB, dir string, count int) {
 	}
 }
 
-// TestResolve_Segmented captures the multi-segment resolution rules.
+// TestResolve_Segmented captures PR 2's segmented-alias behaviour:
+// literal-name fallback with the auto-`/` joiner. The per-alias and global
+// `Subdirs` maps are gone; segments-spec PR 4 replaces this loop with
+// [[contexts]]-driven resolution that consumes inline values, source-*
+// fields, and the unknown-segment prompt.
 func TestResolve_Segmented(t *testing.T) {
 	dir := t.TempDir()
 
-	// Aliases: one with a per-alias subdir override.
 	s := &store.Store{Aliases: map[string]store.Alias{}}
-	s.Set("acme", store.Alias{
-		Path:    "C:/projects/acme",
-		Subdirs: map[string]string{"docs": "doc-internal"},
-	})
+	s.Set("acme", store.Alias{Path: "C:/projects/acme"})
 	s.Set("vanilla", store.Alias{Path: "C:/projects/vanilla"})
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
 
-	// Global subdirs.
-	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`
-[subdirs]
-docs = "documentation"
-src  = "source"
+	// A v3 segments.toml with one context — present here to exercise the
+	// load path. PR 2's resolver doesn't yet consume it.
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
+
+[[contexts]]
+segment = "docs"
+source-template = "/documentation"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -145,13 +147,12 @@ src  = "source"
 		in   string
 		want string
 	}{
-		{"docs@acme", "C:/projects/acme/doc-internal"},
-		{"docs@vanilla", "C:/projects/vanilla/documentation"},
+		{"docs@acme", "C:/projects/acme/docs"},
+		{"docs@vanilla", "C:/projects/vanilla/docs"},
 		{"random@acme", "C:/projects/acme/random"},
-		{"src@docs@vanilla", "C:/projects/vanilla/documentation/source"},
-		// Inline value is parsed but currently ignored — resolution uses
-		// the segment name only. Segments-spec PR 4 wires the value through.
-		{"docs:ignored@acme", "C:/projects/acme/doc-internal"},
+		{"src@docs@vanilla", "C:/projects/vanilla/docs/src"},
+		// Inline value is parsed but ignored by the PR 2 resolver.
+		{"docs:ignored@acme", "C:/projects/acme/docs"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {

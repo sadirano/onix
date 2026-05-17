@@ -12,21 +12,32 @@ import (
 )
 
 // ContextDef is one [[contexts]] entry in segments.toml.
+//
+// A context with no source-* field still drives apply-context's env / exec
+// scripting; it just doesn't contribute to path resolution.
 type ContextDef struct {
-	Segment string            `toml:"segment"`
-	Env     map[string]string `toml:"env,omitempty"`
-	Exec    []string          `toml:"exec,omitempty"`
+	Segment        string            `toml:"segment"`
+	Param          string            `toml:"param,omitempty"`
+	SourceTemplate string            `toml:"source-template,omitempty"`
+	SourceExec     []string          `toml:"source-exec,omitempty"`
+	SourceFile     string            `toml:"source-file,omitempty"`
+	Env            map[string]string `toml:"env,omitempty"`
+	Exec           []string          `toml:"exec,omitempty"`
 }
 
 // SegmentsFile is the on-disk shape of ~/.onix/segments.toml.
+//
+// The top-level [subdirs] table from prior versions is silently dropped on
+// load — it has no representation here. Users who relied on it see the
+// unknown-segment prompt on first use of each segment under the new
+// resolver (segments-spec PR 4).
 type SegmentsFile struct {
-	Version  int               `toml:"version"`
-	Subdirs  map[string]string `toml:"subdirs,omitempty"`
-	Contexts []ContextDef      `toml:"contexts,omitempty"`
+	Version  int          `toml:"version"`
+	Contexts []ContextDef `toml:"contexts,omitempty"`
 }
 
 // CurrentVersion is the latest schema version for segments.toml.
-const CurrentVersion = 2
+const CurrentVersion = 3
 
 // Path returns home/segments.toml.
 func Path(home string) string {
@@ -38,7 +49,7 @@ func LoadSegments(home string) (*SegmentsFile, error) {
 	p := Path(home)
 	data, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
-		return &SegmentsFile{Version: CurrentVersion, Subdirs: map[string]string{}}, nil
+		return &SegmentsFile{Version: CurrentVersion}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", p, err)
@@ -49,52 +60,39 @@ func LoadSegments(home string) (*SegmentsFile, error) {
 	}
 
 	if sf.Version == 0 {
-		sf.Version = 2
+		sf.Version = CurrentVersion
 	}
 
-	for seg := range sf.Subdirs {
-		if err := store.ValidateSegmentName(seg); err != nil {
-			return nil, fmt.Errorf("%s: %w", p, err)
-		}
-	}
-
-	for _, cd := range sf.Contexts {
+	for i := range sf.Contexts {
+		cd := &sf.Contexts[i]
 		if err := store.ValidateSegmentName(cd.Segment); err != nil {
 			return nil, fmt.Errorf("%s: context: %w", p, err)
 		}
+		if err := validateSources(cd); err != nil {
+			return nil, fmt.Errorf("%s: context %q: %w", p, cd.Segment, err)
+		}
 	}
 
-	if sf.Subdirs == nil {
-		sf.Subdirs = map[string]string{}
-	}
 	return sf, nil
 }
 
-// ResolveSegment maps one segment name to a path fragment.
-func ResolveSegment(seg string, aliasSubs, globalSubs map[string]string) string {
-	if v, ok := lookupCaseInsensitive(aliasSubs, seg); ok && strings.TrimSpace(v) != "" {
-		return v
+// validateSources enforces the spec's "exactly one of source-*" rule.
+// Zero is allowed: env-/exec-only contexts contribute no path fragment.
+func validateSources(cd *ContextDef) error {
+	n := 0
+	if cd.SourceTemplate != "" {
+		n++
 	}
-	if v, ok := lookupCaseInsensitive(globalSubs, seg); ok && strings.TrimSpace(v) != "" {
-		return v
+	if len(cd.SourceExec) > 0 {
+		n++
 	}
-	return seg
-}
-
-func lookupCaseInsensitive(m map[string]string, key string) (string, bool) {
-	if m == nil {
-		return "", false
+	if cd.SourceFile != "" {
+		n++
 	}
-	if v, ok := m[key]; ok {
-		return v, true
+	if n > 1 {
+		return errors.New("at most one of source-template, source-exec, source-file may be set")
 	}
-	target := strings.ToLower(key)
-	for k, v := range m {
-		if strings.ToLower(k) == target {
-			return v, true
-		}
-	}
-	return "", false
+	return nil
 }
 
 // ParsedSegment is one segment token, possibly carrying an inline value
