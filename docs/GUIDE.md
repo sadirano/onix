@@ -73,123 +73,136 @@ Pick a folder, press Enter — the alias is registered automatically. No separat
 ## Sub-Alias Navigation
 
 Sub-alias navigation lets you jump into a specific subdirectory inside an alias without
-registering a new alias for every path combination you visit.
+registering a new alias for every path combination you visit. Each `@`-separated
+segment is defined as a `[[contexts]]` entry in `~/.onix/segments.toml`.
 
-### Subdir shortcuts — `sub@alias`
+### Define a segment
 
-```
-s an@sms
-```
+```toml
+# ~/.onix/segments.toml
+version = 3
 
-Resolves `sms` (the alias), then looks up `an` in the two-level subdir registry and
-appends the result. If `an=anexos` is in the registry, you land in `<sms>/anexos`.
+[[contexts]]
+segment = "docs"
+source-template = "/documentation"   # the leading `/` makes it a directory
 
-**Subdir registry** — two levels, case-insensitive lookup:
-
-| File | Scope |
-|------|-------|
-| `~/.onix/subdirs.env` | Global — available for all aliases |
-| `<alias_dir>/subdirs.env` | Local — overrides global for entries with the same key |
-
-Both use the same `key=value` format as the alias file. Local entries win when a key
-appears in both files. If a name isn't in either registry, it's used literally as the
-directory name — raw directory names always work without registration.
-
-```
-# ~/.onix/subdirs.env
-an=anexos
-doc=documentacao
-ts=testes
-cfg=configuracoes
+[[contexts]]
+segment = "src"
+source-template = "/source"
 ```
 
 ```
-s an@sms        → shell in <sms>/anexos
-n doc@sms       → editor in <sms>/documentacao
-y ts@sms        → print path of <sms>/testes
-o outros@sms    → explorer in <sms>/outros  (literal fallback)
+s docs@sms       → shell in <sms>/documentation
+n src@sms        → editor in <sms>/source
 ```
 
-All existing action shortcuts (`s`, `n`, `o`, `y`, `r`, `f`) work with this form. The
-`-s` flag still stacks on top if needed:
+If you invoke a segment that isn't defined, onix opens an interactive prompt that
+walks you through creating the `[[contexts]]` entry and saves it for you. Segments
+without a `source-template` / `source-exec` / `source-file` field never contribute
+a path fragment — they can still set env vars or run a shell command after `cd`
+(see "Context scripting" below).
+
+### Inline values — `seg:value@alias`
+
+When the dimension you want to inject changes per invocation (a task ID, client
+name, branch, sprint…), pass it as the segment's inline value:
 
 ```
-s an@sms -s subdir      → <sms>/anexos/subdir
+s tasks:432@acme
 ```
 
-### Context layers — `seg1@seg2@alias`
-
-When your directory tree has a rotating dimension (a current task, client, branch, sprint…)
-you can inject its value into the path without typing it every time.
-
-```
-s task@client@place
+```toml
+[[contexts]]
+segment = "tasks"
+source-template = "/tickets/${tasks}"   # ${tasks} binds to the inline value
 ```
 
-Segments are processed right-to-left (closest to the alias first). Each segment either:
-- Has a **context config** → resolves a runtime value and applies a path template
-- Has no context config → falls back to the subdir registry (or literal name)
+Result: `<acme>/tickets/432`.
 
-**Configure a segment's context:**
+The variable name defaults to the segment name. Set `param = "..."` on the context
+to use a different `${...}` reference inside the template.
 
-```
-onix ctx client env CLIENT_ID {value}         # read from %CLIENT_ID% env var
-onix ctx task   env TASK_ID   task/{value}    # template: /task/<taskID>
-```
+### Composing segments — `seg1@seg2@alias`
 
-| Subcommand | Syntax | Effect |
-|------------|--------|--------|
-| Set (env)  | `onix ctx <seg> env <var> [template]` | Read context from environment variable |
-| Set (cmd)  | `onix ctx <seg> cmd <command> [template]` | Run command, use its stdout |
-| Set (file) | `onix ctx <seg> file <path> [template]` | Read first line of a file |
-| Show       | `onix ctx <seg>` | Print the current config for this segment |
-| Clear      | `onix ctx <seg> --clear` | Remove the config |
+Segments are processed right-to-left (innermost first). Templates own their
+separators: a leading `/` joins as a directory, no leading `/` appends directly.
 
-**Template syntax** — the `[template]` argument controls what the segment contributes to
-the path. `{value}` is replaced with the resolved context value:
+```toml
+[[contexts]]
+segment = "client"
+source-template = "/${client}"
 
-| Template | Resolved value | Path contribution |
-|----------|---------------|-------------------|
-| *(omitted)* | `12345` | `12345` |
-| `{value}` | `12345` | `12345` |
-| `task/{value}` | `12345` | `task/12345` |
-| `client/{value}/docs` | `abc` | `client/abc/docs` |
-
-Leading and trailing slashes in the template are stripped automatically.
-
-**Full example:**
-
-Setup:
-```
-onix ctx client env CLIENT_ID {value}
-onix ctx task   env TASK_ID   task/{value}
+[[contexts]]
+segment = "task"
+source-template = "_${task}.md"   # no leading / — appends to the previous fragment
 ```
 
-With `CLIENT_ID=abc` and `TASK_ID=12345`:
-
 ```
-s task@client@place
-→ <place>/abc/task/12345
-
-n task@client@place -s config
-→ editor at <place>/abc/task/12345/config
+f task:432@client:bob@projb     → opens <projb>/bob_432.md in $EDITOR
 ```
 
-**Context sources:**
+### Source kinds
 
-| Source | Config key | Reads from |
-|--------|-----------|------------|
-| `env`  | `var`     | Environment variable |
-| `file` | `file`    | First line of a file (supports `~`) |
-| `cmd`  | `cmd`     | stdout of a shell command |
+Each `[[contexts]]` entry uses one of three source kinds. Mixing more than one is a
+load-time error.
 
+| Field | Behaviour |
+|-------|-----------|
+| `source-template` | A string with `${VAR}` references. Vars resolve in order: segment inline value → context's `env` map → process env → error. |
+| `source-exec`     | `["cmd", "arg", ...]`. Each arg is template-expanded, the command runs in the alias base directory, and trimmed stdout becomes the fragment. |
+| `source-file`     | A path. Accepts `@home/...`, `@alias/...`, `~/...`, or absolute. File contents (trimmed) are the fragment. |
+
+```toml
+[[contexts]]
+segment = "branch"
+source-exec = ["pwsh", "-c", "'/' + (git rev-parse --abbrev-ref HEAD)"]
+
+[[contexts]]
+segment = "current"
+source-file = "@home/state/current-task"
 ```
-onix ctx branch cmd "git rev-parse --abbrev-ref HEAD"
-onix ctx sprint file ~/.onix/current-sprint
+
+### Context scripting
+
+The same `[[contexts]]` entry can also drive shell-side side effects when the user
+navigates to the alias — env vars to export and a command to run on `cd`:
+
+```toml
+[[contexts]]
+segment = "prod"
+source-template = "/prod"
+env = { DEPLOY_ENV = "production", KUBECTL_CTX = "prod-cluster" }
+exec = ["kubectl", "config", "use-context", "prod-cluster"]
 ```
 
-Context configs are stored in `~/.onix/contexts/<segment>` as plain key=value files.
-They are per-segment (identified by the name before the `@`), not per-alias.
+`o web@prod` resolves to `<web>/prod`, exports `DEPLOY_ENV` / `KUBECTL_CTX`, and
+runs the `kubectl` switch — all from one shortcut.
+
+### Migrating from `[subdirs]`
+
+The pre-3.0 `[subdirs]` table and per-alias `subdirs = {...}` blocks are no longer
+read. The recipe is one `[[contexts]]` block per former entry:
+
+```toml
+# before
+[subdirs]
+docs = "documentation"
+
+# after
+[[contexts]]
+segment = "docs"
+source-template = "/documentation"
+```
+
+On first use of an undefined segment, the interactive prompt picks the right form
+for you. See [SEGMENTS_SPEC.md](design/SEGMENTS_SPEC.md) for the full grammar and
+traversal-guard rules.
+
+### Legacy `onix ctx` reference (pre-3.0)
+
+The earlier `onix ctx <seg> env|cmd|file ...` subcommand was retired with the
+redesign. Anything you used to set via that command should now be a single
+`[[contexts]]` block in `segments.toml`.
 
 ---
 
@@ -503,14 +516,12 @@ y acme                          # resolved path → print + clipboard + ONIX_LAS
 o acme -s internal -n           # land in a subdir and open editor in one shot
 img acme screenshot-name        # paste clipboard image into project
 
-# Sub-alias navigation
-s an@sms                        # shell in <sms>/anexos  (subdir registry)
-n doc@sms                       # editor in <sms>/documentacao
-s task@client@place             # multi-segment: <place>/{clientID}/task/{taskID}
+# Sub-alias navigation (segments defined as [[contexts]] in segments.toml)
+s docs@sms                      # shell in <sms>/documentation
+n src@sms                       # editor in <sms>/source
+s tasks:432@acme                # inline value: <acme>/tickets/432
+f task:432@client:bob@projb     # multi-segment: <projb>/bob_432.md
 
-# Context segment setup
-onix ctx client env CLIENT_ID {value}
-onix ctx task   env TASK_ID   task/{value}
-onix ctx branch cmd "git rev-parse --abbrev-ref HEAD"
-onix ctx sprint file ~/.onix/current-sprint
+# Define new segments by editing ~/.onix/segments.toml or letting the
+# unknown-segment prompt walk you through it on first use.
 ```

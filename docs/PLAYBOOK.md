@@ -104,42 +104,58 @@ onix api -n
 
 ## 9) Sub-Alias Navigation
 
-Single segment — subdir registry lookup:
+Segments are defined as `[[contexts]]` entries in `~/.onix/segments.toml`.
+On first use of an undefined segment, an interactive prompt walks you
+through creating one.
+
+Static template:
 
 ```powershell
-# Registry: ~/.onix/subdirs.env
-# an=anexos   doc=documentacao   ts=testes
+# segments.toml
+# [[contexts]]
+# segment = "docs"
+# source-template = "/documentation"
 
-s an@sms        # shell in <sms>/anexos
-n doc@sms       # editor in <sms>/documentacao
-y ts@sms        # print path of <sms>/testes
-o outros@sms    # literal fallback (not in registry)
-s an@sms -s config   # stacks: <sms>/anexos/config
+s docs@sms       # shell in <sms>/documentation
+y src@sms        # print path of <sms>/source
 ```
 
-Multi-segment chain with context:
+Inline value (`seg:value`):
 
 ```powershell
-# Setup (one time)
-onix ctx client env CLIENT_ID {value}
-onix ctx task   env TASK_ID   task/{value}
-onix ctx branch cmd "git rev-parse --abbrev-ref HEAD" {value}
-onix ctx sprint file ~/.onix/sprint {value}
+# segments.toml
+# [[contexts]]
+# segment = "tasks"
+# source-template = "/tickets/${tasks}"
 
-# Use
-s task@client@place     # <place>/{CLIENT_ID}/task/{TASK_ID}
-n branch@proj           # editor in <proj>/<current-branch>
+s tasks:432@acme         # <acme>/tickets/432
 ```
 
-Context management:
+Multi-segment composition:
 
 ```powershell
-onix ctx <seg>                          # show current config
-onix ctx <seg> env <VAR> [template]     # configure from env var
-onix ctx <seg> cmd <command> [template] # configure from command output
-onix ctx <seg> file <path> [template]   # configure from file
-onix ctx <seg> --clear                  # remove config
+# segments.toml
+# [[contexts]]
+# segment = "client"
+# source-template = "/${client}"
+#
+# [[contexts]]
+# segment = "task"
+# source-template = "_${task}.md"     # no leading / — appends as filename
+
+f task:432@client:bob@projb     # opens <projb>/bob_432.md
 ```
+
+Source kinds (exactly one per `[[contexts]]`):
+
+| Field             | Behaviour |
+|-------------------|-----------|
+| `source-template` | `${VAR}` expansion; inline value → context env → process env. |
+| `source-exec`     | Run cmd in alias base; trimmed stdout is the fragment. |
+| `source-file`     | Read file (supports `@home/...`, `@alias/...`, `~/...`). |
+
+The same `[[contexts]]` block can also carry `env = {...}` and `exec = [...]`
+to script shell side effects on `cd`.
 
 ## 10) Fast Smoke Run
 

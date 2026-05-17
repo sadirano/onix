@@ -1,6 +1,8 @@
 # Segments redesign — implementation plan
 
-**Status:** draft, awaiting sign-off.
+**Status:** implemented. PR 1 = cbe2b37 (parser), PR 2 = 88b1bf7 (schema),
+PR 3 = e866fc7 (library), PR 4 = f6c9d85 (resolver + prompt), PR 5 = this
+doc-refresh commit.
 **Spec:** [SEGMENTS_SPEC.md](SEGMENTS_SPEC.md) (2026-05-17).
 **Scope:** sequence the PRs that take us from the current `Subdirs`-map model
 to the spec'd `[[contexts]]`-driven resolver, and define the test/bench

@@ -75,36 +75,43 @@ Template variables: `{target}` is the resolved path, `{alias}` is the alias name
 
 ## Sub-aliases (`@`-segments)
 
-Append subdirectory shortcuts to any alias with `@`:
+Append subdirectory shortcuts to any alias with `@`. Each segment is defined as a `[[contexts]]` entry in `~/.onix/segments.toml`:
 
 ```powershell
 o docs@acme              # cd into <acme-path>/documentation
 n src@acme               # editor at <acme-path>/source
-o ts@acme                # tests subdir
-o anything@acme          # falls back to literal: <acme-path>/anything
-o sub1@sub2@acme         # multi-segment, innermost first: <acme-path>/sub2/sub1
+o tasks:432@acme         # inline value: cd into <acme-path>/tickets/432
+o client:bob@projb       # multi-segment, innermost first
 ```
-
-Define the global registry in `~/.onix/segments.toml`:
 
 ```toml
-[subdirs]
-docs = "documentation"
-src  = "source"
-ts   = "tests"
+# ~/.onix/segments.toml
+version = 3
+
+[[contexts]]
+segment = "docs"
+source-template = "/documentation"   # leading `/` makes it a subdirectory
+
+[[contexts]]
+segment = "src"
+source-template = "/source"
+
+[[contexts]]
+segment = "tasks"
+source-template = "/tickets/${tasks}"   # ${tasks} binds to the inline value
 ```
 
-Per-alias overrides live next to the alias entry:
+Three ways to resolve a segment — pick one per `[[contexts]]` entry:
 
-```toml
-[acme]
-path = "C:/projects/acme"
+| Field | Behaviour |
+|-------|-----------|
+| `source-template` | A string with `${VAR}` references. Inline values bind under `${<segment>}` (or `${param}` if `param` is set). Falls back to the context's `env` map and then process env. |
+| `source-exec` | A command + args. Run in the alias base; trimmed stdout is the fragment. |
+| `source-file` | A path (supports `@home/...`, `@alias/...`, `~/...`, absolute). File contents are the fragment. |
 
-[acme.subdirs]
-docs = "doc-internal"    # this acme uses a different docs layout
-```
+Templates own their separators — `"/foo"` appends as a directory, `"_${task}.md"` appends as a filename suffix. Encountering an unknown segment triggers an interactive prompt that walks you through defining it and saves the new `[[contexts]]` entry to disk.
 
-Lookup order is per-alias subdirs → global registry → literal fallback, so unregistered segments still navigate sensibly without setup. Lookups are case-insensitive.
+Lookups are case-insensitive. See [docs/design/SEGMENTS_SPEC.md](docs/design/SEGMENTS_SPEC.md) for the full grammar and traversal-guard rules.
 
 ## Plugins
 
@@ -143,11 +150,11 @@ Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The include
 
 ## Status and scope
 
-This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, sub-alias subdir shortcuts from `segments.toml`, and cross-platform tab completion.
+This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
 
 **Note: macOS is NOT supported in this repository.** If you require macOS support, please feel free to create your own fork.
 
-Sub-alias context resolvers (env/cmd/file segments with templates), search shortcuts (`sg`, `ff`) as first-party features, and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
+Search shortcuts (`sg`, `ff`) as first-party features and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
 
 ## Architecture
 
@@ -173,7 +180,7 @@ graph TD
 ### Core Packages
 
 - **`internal/store`**: Manages `aliases.toml`, the primary database of name-to-path mappings. Includes atomic write logic and name validation.
-- **`internal/segments`**: Handles `@`-segment resolution and global subdirectory mappings in `segments.toml`.
+- **`internal/segments`**: Parses `@`-segment grammar, expands `${VAR}` templates, evaluates `source-template` / `source-exec` / `source-file` sources, and enforces the traversal guard on the resulting fragments before they join the alias path.
 - **`internal/config`**: Manages `config.toml`, where users define custom action wrappers with template substitution.
 - **`internal/plugins`**: Handles external plugin installation, verification (SHA pinning), and execution environment.
 - **`internal/snippet`**: Generates the PowerShell and Bash/Zsh glue code that integrates Onix into your shell.

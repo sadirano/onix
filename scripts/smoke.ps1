@@ -108,45 +108,64 @@ Step "list-names" {
     }
 }
 
-# M4 — @-segment sub-aliases. Write a tiny global subdirs registry and
-# verify resolve handles three cases: global mapping, multi-segment
-# (innermost-first), and literal fallback for unregistered segments.
+# M4 — @-segment sub-aliases. Write [[contexts]] entries and verify
+# resolve handles: a static template, an inline-value template, a
+# composed two-segment input, and the --no-prompt error path for an
+# undefined segment.
 Step "segments" {
     $segs = Join-Path $env:ONIX_HOME 'segments.toml'
     @'
-[subdirs]
-docs = "documentation"
-src  = "source"
+version = 3
+
+[[contexts]]
+segment = "docs"
+source-template = "/documentation"
+
+[[contexts]]
+segment = "src"
+source-template = "/source"
+
+[[contexts]]
+segment = "tasks"
+source-template = "/tickets/${tasks}"
 '@ | Set-Content -Path $segs
 
-    # Plain alias still works (no @ in input).
-    $plain = & $exe resolve demo
+    # Plain alias still works (no @ in input). Bare `onix <alias>` resolves.
+    $plain = & $exe demo --no-prompt
     if ($LASTEXITCODE -ne 0) { throw "resolve demo failed" }
+    $plainSlashed = $plain.Replace('\', '/')
 
-    # Single segment → global mapping applied.
-    $mapped = & $exe resolve "docs@demo"
+    # Static template.
+    $mapped = & $exe "docs@demo" --no-prompt
     if ($LASTEXITCODE -ne 0) { throw "resolve docs@demo failed" }
-    if ($mapped -ne "$plain/documentation") {
+    if ($mapped.Replace('\', '/') -ne "$plainSlashed/documentation") {
         throw "resolve docs@demo = '$mapped', expected '$plain/documentation'"
     }
 
-    # Unregistered segment → literal fallback (no error).
-    $literal = & $exe resolve "random@demo"
-    if ($LASTEXITCODE -ne 0) { throw "resolve random@demo failed" }
-    if ($literal -ne "$plain/random") {
-        throw "resolve random@demo = '$literal', expected '$plain/random'"
+    # Inline value.
+    $inline = & $exe "tasks:42@demo" --no-prompt
+    if ($LASTEXITCODE -ne 0) { throw "resolve tasks:42@demo failed" }
+    if ($inline.Replace('\', '/') -ne "$plainSlashed/tickets/42") {
+        throw "resolve tasks:42@demo = '$inline', expected '$plain/tickets/42'"
     }
 
-    # Multi-segment: innermost-first. bar@foo@demo → demo/foo/bar.
-    $multi = & $exe resolve "bar@foo@demo"
-    if ($LASTEXITCODE -ne 0) { throw "resolve bar@foo@demo failed" }
-    if ($multi -ne "$plain/foo/bar") {
-        throw "resolve bar@foo@demo = '$multi', expected '$plain/foo/bar'"
+    # Composition: innermost-first. src@docs@demo → demo/documentation/source.
+    $multi = & $exe "src@docs@demo" --no-prompt
+    if ($LASTEXITCODE -ne 0) { throw "resolve src@docs@demo failed" }
+    if ($multi.Replace('\', '/') -ne "$plainSlashed/documentation/source") {
+        throw "resolve src@docs@demo = '$multi', expected '$plain/documentation/source'"
     }
 
-    Write-Host "  docs@demo   -> $mapped"
-    Write-Host "  random@demo -> $literal"
-    Write-Host "  bar@foo@demo -> $multi"
+    # Undefined segment under --no-prompt is a hard error.
+    $undef = & $exe "mystery@demo" --no-prompt 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        throw "resolve --no-prompt mystery@demo unexpectedly succeeded: '$undef'"
+    }
+
+    Write-Host "  docs@demo       -> $mapped"
+    Write-Host "  tasks:42@demo   -> $inline"
+    Write-Host "  src@docs@demo   -> $multi"
+    Write-Host "  mystery@demo    -> errored under --no-prompt (expected)"
 }
 
 # M3 — plugin install end-to-end. We synthesize a tiny "probe" plugin in
