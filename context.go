@@ -87,7 +87,7 @@ func applyContexts(home, input, shell string, w io.Writer) error {
 	// Apply in innermost-first order (right-to-left in the segments slice)
 	// to mirror the path-building direction.
 	for i := len(segs) - 1; i >= 0; i-- {
-		cd, ok := ctxMap[strings.ToLower(segs[i])]
+		cd, ok := ctxMap[strings.ToLower(segs[i].Name)]
 		if !ok {
 			continue
 		}

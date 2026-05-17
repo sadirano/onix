@@ -97,8 +97,25 @@ func lookupCaseInsensitive(m map[string]string, key string) (string, bool) {
 	return "", false
 }
 
-// ParseSegmentedAlias splits "seg1@seg2@...@alias" into the segments list and the alias name.
-func ParseSegmentedAlias(input string) (segments []string, alias string) {
+// ParsedSegment is one segment token, possibly carrying an inline value
+// supplied via the `seg:value` syntax.
+//
+// The empty inline value (`seg:`) is treated as "no inline value" per the
+// segments spec: HasValue is false, Value is "".
+type ParsedSegment struct {
+	Name     string
+	Value    string
+	HasValue bool
+}
+
+// ParseSegmentedAlias splits "seg1[:v1]@seg2[:v2]@...@alias" into the
+// segments list and the alias name. Empty segments (from consecutive `@`s)
+// are dropped — matching the historical TrimSpace behaviour.
+//
+// Inline values: the first `:` in a segment separates the segment name from
+// its inline value. `a:b:c` parses as name="a", value="b:c". `seg:` (empty
+// value) parses as HasValue=false.
+func ParseSegmentedAlias(input string) (segments []ParsedSegment, alias string) {
 	i := strings.LastIndex(input, "@")
 	if i < 0 {
 		return nil, input
@@ -106,9 +123,22 @@ func ParseSegmentedAlias(input string) (segments []string, alias string) {
 	left := input[:i]
 	alias = input[i+1:]
 	for _, s := range strings.Split(left, "@") {
-		if strings.TrimSpace(s) != "" {
-			segments = append(segments, s)
+		trimmed := strings.TrimSpace(s)
+		if trimmed == "" {
+			continue
 		}
+		segments = append(segments, parseSegmentToken(trimmed))
 	}
 	return segments, alias
+}
+
+func parseSegmentToken(tok string) ParsedSegment {
+	if j := strings.IndexByte(tok, ':'); j >= 0 {
+		value := tok[j+1:]
+		if value == "" {
+			return ParsedSegment{Name: tok[:j]}
+		}
+		return ParsedSegment{Name: tok[:j], Value: value, HasValue: true}
+	}
+	return ParsedSegment{Name: tok}
 }

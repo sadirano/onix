@@ -149,6 +149,9 @@ src  = "source"
 		{"docs@vanilla", "C:/projects/vanilla/documentation"},
 		{"random@acme", "C:/projects/acme/random"},
 		{"src@docs@vanilla", "C:/projects/vanilla/documentation/source"},
+		// Inline value is parsed but currently ignored — resolution uses
+		// the segment name only. Segments-spec PR 4 wires the value through.
+		{"docs:ignored@acme", "C:/projects/acme/doc-internal"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {

@@ -154,7 +154,10 @@ func resolveSegmented(home, input string) (string, error) {
 
 	target := a.Path
 	for i := len(segs) - 1; i >= 0; i-- {
-		part := segments.ResolveSegment(segs[i], a.Subdirs, segFile.Subdirs)
+		// Inline value (segs[i].Value) is parsed but not yet honored at this
+		// layer — the segments spec PR 4 wires it through. For now,
+		// resolution continues to use the segment name only.
+		part := segments.ResolveSegment(segs[i].Name, a.Subdirs, segFile.Subdirs)
 		target = strings.TrimRight(target, "/") + "/" + strings.Trim(part, "/")
 	}
 

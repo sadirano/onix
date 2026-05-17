@@ -7,24 +7,44 @@ import (
 )
 
 // TestParseSegmentedAlias locks the parser contract.
+//
+// Covers both the legacy bare-segment form and the spec's `seg:value`
+// inline-value form. The empty inline value (`seg:`) is recorded as
+// HasValue=false per the segments spec.
 func TestParseSegmentedAlias(t *testing.T) {
 	tests := []struct {
 		in       string
-		wantSegs []string
+		wantSegs []ParsedSegment
 		wantAls  string
 	}{
 		{"acme", nil, "acme"},
-		{"docs@acme", []string{"docs"}, "acme"},
-		{"task@client@place", []string{"task", "client"}, "place"},
-		{"a@b@c@d", []string{"a", "b", "c"}, "d"},
+		{"docs@acme", []ParsedSegment{{Name: "docs"}}, "acme"},
+		{"task@client@place", []ParsedSegment{{Name: "task"}, {Name: "client"}}, "place"},
+		{"a@b@c@d", []ParsedSegment{{Name: "a"}, {Name: "b"}, {Name: "c"}}, "d"},
 		{"@trailing", nil, "trailing"},
-		{"a@@b", []string{"a"}, "b"},
+		{"a@@b", []ParsedSegment{{Name: "a"}}, "b"},
+
+		// Inline values.
+		{"tasks:123@proja", []ParsedSegment{{Name: "tasks", Value: "123", HasValue: true}}, "proja"},
+		{"client:bob@projb", []ParsedSegment{{Name: "client", Value: "bob", HasValue: true}}, "projb"},
+		{
+			"task:432@client:bob@projb",
+			[]ParsedSegment{
+				{Name: "task", Value: "432", HasValue: true},
+				{Name: "client", Value: "bob", HasValue: true},
+			},
+			"projb",
+		},
+		// Empty inline value: HasValue is false, Value is "".
+		{"seg:@a", []ParsedSegment{{Name: "seg"}}, "a"},
+		// First colon wins — the remainder is the value verbatim.
+		{"a:b:c@d", []ParsedSegment{{Name: "a", Value: "b:c", HasValue: true}}, "d"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
 			segs, als := ParseSegmentedAlias(tc.in)
 			if !reflect.DeepEqual(segs, tc.wantSegs) {
-				t.Errorf("segments = %v, want %v", segs, tc.wantSegs)
+				t.Errorf("segments = %#v, want %#v", segs, tc.wantSegs)
 			}
 			if als != tc.wantAls {
 				t.Errorf("alias = %q, want %q", als, tc.wantAls)
