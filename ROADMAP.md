@@ -1,12 +1,12 @@
 # Road to 10/10
 
-Current score: **9.4/10** (verified 2026-05-17 by audit and `go test ./...`).
+Current score: **9.5/10** (verified 2026-05-17 by audit and `go test ./...`).
 
 A 10/10 here means: a stranger could clone the repo, build it on Windows or Linux, and trust that everything works the way the README says — including under hostile inputs and in the presence of pre-existing aliases-tool installs. The CI verifies that property on every PR; releases are reproducible and signed; the hot path has a measured ceiling that nobody can silently regress.
 
 Pick from this list in order of cost/value. Items are grouped by axis and labelled `[S]` small, `[M]` medium, `[L]` large.
 
-Since the previous revision, three items shipped: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, and least-privilege `GITHUB_TOKEN` on the test/lint workflows. `internal/store` coverage moved 78.6% → 82.1%. The remaining 80% gate is entirely a `main`-package job.
+Since the previous revision, five items shipped: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, least-privilege `GITHUB_TOKEN` on the test/lint workflows, third-party actions pinned by commit SHA, and the `actions/dependency-review` job on pull_request. `internal/store` coverage moved 78.6% → 82.1%. The remaining 80% gate is entirely a `main`-package job.
 
 ---
 
@@ -99,16 +99,10 @@ Atomic writes already prevent file corruption, but two shells doing `onix add` s
 
 ## Supply chain & Hygiene
 
-CI workflows now declare least-privilege `GITHUB_TOKEN` permissions (closed CodeQL alert #1 on 2026-05-17). The remaining items in this axis:
+CI workflows declare least-privilege `GITHUB_TOKEN` permissions (closed CodeQL alert #1), pin third-party actions by commit SHA, and run `actions/dependency-review` on every pull_request. The remaining item in this axis:
 
 ### `[M]` Signed releases
 Use `cosign` to sign release blobs and document the verification command in the README.
-
-### `[S]` Dependency review in CI
-Add `actions/dependency-review-action` on pull_request so new transitive dependencies surface in the PR diff. Cheap, complements `govulncheck`.
-
-### `[S]` Pin GitHub Actions by commit SHA
-`actions/checkout@v4` and friends are pinned by major today. Pin to commit SHA (with version comment) so a malicious tag move can't silently change CI behavior. Renovate/Dependabot can keep them current.
 
 ---
 
@@ -119,5 +113,5 @@ Add `actions/dependency-review-action` on pull_request so new transitive depende
 3. **Daily-driver wins:** cross-shell nav history, multi-target aliases, undo. Small surface, big perceived improvement.
 4. **Scope leap:** project-scope `.onix.toml`. Validate layering inside the current architecture before tackling the workspace tier.
 5. **Sharing & ecosystem:** workspace tier with sync, plugin capability model, verified registry.
-6. **Supply-chain finish:** cosign-signed releases, dependency review, SHA-pinned actions.
+6. **Supply-chain finish:** cosign-signed releases.
 7. **Performance peak:** daemon mode.
