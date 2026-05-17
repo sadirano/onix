@@ -7,11 +7,9 @@ import (
 	"testing"
 )
 
-// TestParseSegmentedAlias locks the parser contract.
-//
-// Covers both the legacy bare-segment form and the spec's `seg:value`
-// inline-value form. The empty inline value (`seg:`) is recorded as
-// HasValue=false per the segments spec.
+// TestParseSegmentedAlias locks the parser contract: bare-segment form,
+// `seg:value` inline-value form, and the empty-inline-value (`seg:`)
+// case where HasValue must be false.
 func TestParseSegmentedAlias(t *testing.T) {
 	tests := []struct {
 		in       string
@@ -116,9 +114,9 @@ source-file = "@home/state/x"
 	}
 }
 
-// TestLoadSegments_IgnoresLegacySubdirs confirms a top-level [subdirs] table
-// is silently dropped. Users see the unknown-segment prompt on first use of
-// the segment under the new resolver (segments-spec PR 4).
+// TestLoadSegments_IgnoresLegacySubdirs confirms that an unknown top-level
+// table (here a `[subdirs]` block) is silently dropped on load and produces
+// zero contexts.
 func TestLoadSegments_IgnoresLegacySubdirs(t *testing.T) {
 	dir := t.TempDir()
 	body := `version = 2
@@ -139,9 +137,9 @@ src  = "source"
 	}
 }
 
-// TestLoadSegments_ContextWithoutSourceIsAllowed locks the spec rule that
-// env/exec-only contexts are valid — they drive apply-context's shell-side
-// emission but contribute no path fragment.
+// TestLoadSegments_ContextWithoutSourceIsAllowed confirms a context with no
+// source-* field loads cleanly. Such a context contributes no path fragment;
+// its env/exec map still drives apply-context's shell-side emission.
 func TestLoadSegments_ContextWithoutSourceIsAllowed(t *testing.T) {
 	dir := t.TempDir()
 	body := `version = 3

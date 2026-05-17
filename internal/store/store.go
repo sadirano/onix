@@ -20,12 +20,9 @@ type Store struct {
 // CurrentVersion is the latest schema version for aliases.toml.
 const CurrentVersion = 2
 
-// Alias is one alias entry.
-//
-// Per-alias `subdirs = {...}` blocks are silently dropped on load (the
-// segments redesign moved subdir mapping into [[contexts]] in
-// segments.toml). The decoder ignores unknown keys, so legacy entries
-// load cleanly with the field absent here.
+// Alias is one alias entry. The decoder ignores unknown keys, so files
+// produced by older onix versions load cleanly even when they carry fields
+// not represented here.
 type Alias struct {
 	Path        string   `toml:"path"`
 	Description string   `toml:"description,omitempty"`

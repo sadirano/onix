@@ -50,10 +50,10 @@ func ExpandTemplate(tmpl, where string, lookup func(name string) (string, bool))
 // GuardFragment rejects a post-expansion fragment that would let a template
 // escape its alias.
 //
-// Rules (from the segments spec):
+// Rules:
 //   - No null byte anywhere.
 //   - Splitting on `/` and `\`, no component may equal `..`.
-//   - The fragment may begin with at most one leading `/` (template's
+//   - The fragment may begin with at most one leading `/` (the template's
 //     directory-separator prefix). A second `/`, a leading `\`, a leading
 //     `~`, or a leading drive-letter pattern (e.g. `C:`) is rejected.
 //

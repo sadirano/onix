@@ -106,8 +106,8 @@ var systemActionFlags = map[string]string{
 }
 
 // printUsage writes the alias-flag grammar reference to stdout. It's
-// hand-rolled because kong's auto-generated help reflects the legacy
-// subcommand tree — which the dispatcher no longer uses.
+// hand-rolled because kong's auto-generated help only covers the `plugin`
+// subtree — the alias-flag dispatcher owns everything else.
 func printUsage(w io.Writer) {
 	const usage = `onix — fast directory alias resolver
 

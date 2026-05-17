@@ -193,9 +193,8 @@ source-template = "/source"
 	}
 }
 
-// TestResolve_Segmented_InlineValue locks the spec's `seg:value` flow: the
-// inline value is bound to ${<param>} (default: <segment>) inside the
-// template.
+// TestResolve_Segmented_InlineValue locks the `seg:value` flow: the inline
+// value binds to ${<param>} (default: <segment>) inside the template.
 func TestResolve_Segmented_InlineValue(t *testing.T) {
 	dir := t.TempDir()
 	s := &store.Store{Aliases: map[string]store.Alias{}}
@@ -222,9 +221,9 @@ source-template = "/${tasks}"
 	}
 }
 
-// TestResolve_Segmented_NoLeadingSlash exercises the spec's "templates own
-// their separators" rule: a template without a leading `/` appends directly,
-// so two segments can compose into a single filename.
+// TestResolve_Segmented_NoLeadingSlash exercises the "templates own their
+// separators" rule: a template without a leading `/` appends directly, so
+// two segments can compose into a single filename.
 func TestResolve_Segmented_NoLeadingSlash(t *testing.T) {
 	dir := t.TempDir()
 	s := &store.Store{Aliases: map[string]store.Alias{}}

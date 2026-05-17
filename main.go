@@ -100,7 +100,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 		return runPluginKong(sigCtx, e, processedArgs, stdout, stderr)
 	}
 
-	// Dispatch the new alias-flag grammar.
+	// Dispatch the alias-flag grammar.
 	if err := dispatchNewGrammar(sigCtx, e, processedArgs[1:], stdout, stderr); err != nil {
 		if !errors.Is(err, resolver.ErrCancelled) {
 			fmt.Fprintf(stderr, "onix: %v\n", err)

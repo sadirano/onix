@@ -107,7 +107,7 @@ func TestExpandTemplate_ErrorMentionsVar(t *testing.T) {
 	}
 }
 
-// TestGuardFragment covers the traversal-guard rules from the spec.
+// TestGuardFragment covers each rejection rule of the traversal guard.
 func TestGuardFragment(t *testing.T) {
 	tests := []struct {
 		name     string

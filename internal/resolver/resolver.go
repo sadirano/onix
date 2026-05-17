@@ -198,9 +198,8 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 			return "", err
 		}
 		if fragment == "" {
-			// Spec is silent on empty fragments. Treating "no fragment" as
-			// a no-op is the least surprising default; if a user wants a
-			// trailing slash they can put it in the template.
+			// An empty fragment contributes nothing to the path. If the user
+			// wants a trailing separator they can include it in the template.
 			continue
 		}
 		if err := segments.GuardFragment(ps.Name, fragment); err != nil {
@@ -213,11 +212,10 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 }
 
 // evalSegment resolves one segment's fragment by dispatching on the
-// context's source-* field. A context with no source-* is treated as
-// "contributes no path fragment" — its env/exec scripting is still
-// applied later by applyContexts.
+// context's source-* field. A context with no source-* contributes no path
+// fragment — its env/exec scripting still runs at the apply-context step.
 //
-// Variable resolution chain (per segments spec):
+// Variable resolution chain inside templates and exec args:
 //  1. Segment-bound inline value under ${<param>} (default: <segment>).
 //  2. Context's static env map.
 //  3. Process environment (os.LookupEnv).

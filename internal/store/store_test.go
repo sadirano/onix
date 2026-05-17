@@ -236,11 +236,9 @@ func TestStore_AtomicWrite(t *testing.T) {
 	}
 }
 
-// TestLoadStore_IgnoresLegacyAliasSubdirs confirms that an aliases.toml
-// written by a pre-redesign onix (with a per-alias `subdirs = {...}` block)
-// loads without error — the field is gone from Alias but the decoder
-// silently drops unknown keys. The path still loads; the subdirs are
-// dropped, which is the documented breaking change.
+// TestLoadStore_IgnoresLegacyAliasSubdirs confirms an aliases.toml that
+// carries unknown keys (here a per-alias `subdirs` table) loads cleanly —
+// the path field survives, the unknown table is dropped.
 func TestLoadStore_IgnoresLegacyAliasSubdirs(t *testing.T) {
 	dir := t.TempDir()
 	legacy := `version = 2

@@ -65,7 +65,7 @@ func promptDestination(aliasName string, stderr io.Writer, stdin io.Reader) stri
 // (nil, nil) if the user cancels via Ctrl+C or an empty answer.
 //
 // The save step is unconditional once the user supplies a valid source —
-// the [Y/n] confirmation is "save / abort", not "save / skip" (per spec).
+// the [Y/n] confirmation is "save / abort", not "save / skip".
 //
 // All prompts share a single bufio.Reader so each ReadString consumes
 // exactly one line — using the package-level readLine helper per prompt

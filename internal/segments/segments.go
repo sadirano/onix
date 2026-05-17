@@ -27,10 +27,8 @@ type ContextDef struct {
 
 // SegmentsFile is the on-disk shape of ~/.onix/segments.toml.
 //
-// The top-level [subdirs] table from prior versions is silently dropped on
-// load — it has no representation here. Users who relied on it see the
-// unknown-segment prompt on first use of each segment under the new
-// resolver (segments-spec PR 4).
+// Unknown top-level keys (e.g. a hand-written [subdirs] table) are silently
+// dropped on load — they have no representation here.
 type SegmentsFile struct {
 	Version  int          `toml:"version"`
 	Contexts []ContextDef `toml:"contexts,omitempty"`
@@ -62,10 +60,8 @@ func LookupContext(sf *SegmentsFile, name string) (*ContextDef, bool) {
 
 // SaveSegments writes sf to home/segments.toml atomically.
 //
-// The file is round-tripped through go-toml/v2's marshaller, which means
-// hand-written comments in the original are not preserved. This is an
-// accepted trade-off per the segments redesign plan: segments.toml is
-// configuration, not source.
+// The file is round-tripped through go-toml/v2's marshaller; hand-written
+// comments in the original are not preserved.
 func SaveSegments(home string, sf *SegmentsFile) error {
 	p := Path(home)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -129,8 +125,9 @@ func LoadSegments(home string) (*SegmentsFile, error) {
 	return sf, nil
 }
 
-// validateSources enforces the spec's "exactly one of source-*" rule.
-// Zero is allowed: env-/exec-only contexts contribute no path fragment.
+// validateSources rejects a context that sets more than one source-* field.
+// Zero source-* fields is allowed: env-/exec-only contexts contribute no
+// path fragment.
 func validateSources(cd *ContextDef) error {
 	n := 0
 	if cd.SourceTemplate != "" {
@@ -151,8 +148,8 @@ func validateSources(cd *ContextDef) error {
 // ParsedSegment is one segment token, possibly carrying an inline value
 // supplied via the `seg:value` syntax.
 //
-// The empty inline value (`seg:`) is treated as "no inline value" per the
-// segments spec: HasValue is false, Value is "".
+// An empty inline value (`seg:`) is treated as "no inline value": HasValue
+// is false and Value is "".
 type ParsedSegment struct {
 	Name     string
 	Value    string
@@ -161,7 +158,7 @@ type ParsedSegment struct {
 
 // ParseSegmentedAlias splits "seg1[:v1]@seg2[:v2]@...@alias" into the
 // segments list and the alias name. Empty segments (from consecutive `@`s)
-// are dropped — matching the historical TrimSpace behaviour.
+// are dropped.
 //
 // Inline values: the first `:` in a segment separates the segment name from
 // its inline value. `a:b:c` parses as name="a", value="b:c". `seg:` (empty

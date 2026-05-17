@@ -30,8 +30,7 @@ func EvalTemplateSource(tmpl string, lookup LookupFunc) (string, error) {
 // Non-zero exit is an error that mentions stderr.
 //
 // cwd may be empty, in which case the child process inherits the current
-// working directory — but per the segments spec, callers pass the alias
-// base path.
+// working directory.
 func EvalExecSource(args []string, cwd string, lookup LookupFunc) (string, error) {
 	if len(args) == 0 {
 		return "", fmt.Errorf("source-exec: empty argument list")

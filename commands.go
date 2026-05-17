@@ -104,8 +104,8 @@ func (c *AddCmd) Run(ctx context.Context, e *env) error {
 // -----------------------------------------------------------------------------
 
 type RemoveCmd struct {
-	// Alias names the alias to remove (legacy form) or the directory
-	// context for Files (new form). Empty selects ~/.onix.
+	// Alias names either the alias to remove (when Files is empty) or the
+	// directory context for the listed Files. An empty Alias selects ~/.onix.
 	Alias string `arg:"" optional:"" help:"Alias name."`
 
 	// Files lists paths to delete relative to the resolved directory.
@@ -286,9 +286,8 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 // -----------------------------------------------------------------------------
 
 type EditCmd struct {
-	// Alias selects the directory the editor opens in. Empty means the
-	// system-wide form: open ~/.onix (the new dispatcher uses this; the
-	// legacy `onix edit <alias>` subcommand requires it).
+	// Alias selects the directory the editor opens in. An empty Alias is the
+	// system-wide form and opens ~/.onix.
 	Alias string `arg:"" optional:"" help:"Alias name (omit for the onix config directory)."`
 
 	// Files lists paths relative to the resolved directory. When empty the
