@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/sadirano/onix/internal/resolver"
+	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/store"
 )
 
@@ -19,6 +20,7 @@ import (
 func fastResolve(home, name string, noPrompt bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	var prompter func(string) string
 	var selector func([]string) string
+	var segPrompter resolver.SegmentPrompter
 
 	if !noPrompt {
 		prompter = func(name string) string {
@@ -27,8 +29,11 @@ func fastResolve(home, name string, noPrompt bool, stdout, stderr io.Writer, std
 		selector = func(options []string) string {
 			return promptSelection(options, stderr, stdin)
 		}
+		segPrompter = func(segmentName, inlineValue string) (*segments.ContextDef, error) {
+			return promptSegmentDefinition(home, segmentName, inlineValue, stderr, stdin)
+		}
 	}
-	p, err := resolver.Resolve(home, name, prompter, selector)
+	p, err := resolver.Resolve(home, name, prompter, selector, segPrompter)
 	if err != nil {
 		return err
 	}

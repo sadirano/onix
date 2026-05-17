@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/store"
 )
 
@@ -106,6 +107,33 @@ func BenchmarkScanForAlias(b *testing.B) {
 	}
 }
 
+// BenchmarkResolve_Segmented_Template measures the cost of a single
+// templated segment over a populated store. Establishes a baseline so
+// future segments-stack changes can be benchstat'd against it.
+func BenchmarkResolve_Segmented_Template(b *testing.B) {
+	dir := b.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("acme", store.Alias{Path: "C:/projects/acme"})
+	if err := store.SaveStore(dir, s); err != nil {
+		b.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
+
+[[contexts]]
+segment = "docs"
+source-template = "/documentation"
+`), 0o644); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := Resolve(dir, "docs@acme", nil, nil, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func seedStore(t testing.TB, dir string, count int) {
 	s := &store.Store{Aliases: map[string]store.Alias{}}
 	for i := 0; i < count; i++ {
@@ -117,28 +145,27 @@ func seedStore(t testing.TB, dir string, count int) {
 	}
 }
 
-// TestResolve_Segmented captures PR 2's segmented-alias behaviour:
-// literal-name fallback with the auto-`/` joiner. The per-alias and global
-// `Subdirs` maps are gone; segments-spec PR 4 replaces this loop with
-// [[contexts]]-driven resolution that consumes inline values, source-*
-// fields, and the unknown-segment prompt.
+// TestResolve_Segmented captures the [[contexts]]-driven resolution rules.
+// The path joiner is now verbatim: templates own their separators.
 func TestResolve_Segmented(t *testing.T) {
 	dir := t.TempDir()
 
 	s := &store.Store{Aliases: map[string]store.Alias{}}
 	s.Set("acme", store.Alias{Path: "C:/projects/acme"})
-	s.Set("vanilla", store.Alias{Path: "C:/projects/vanilla"})
+	s.Set("vanilla", store.Alias{Path: "C:/projects/vanilla/"})
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
 
-	// A v3 segments.toml with one context — present here to exercise the
-	// load path. PR 2's resolver doesn't yet consume it.
 	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
 
 [[contexts]]
 segment = "docs"
 source-template = "/documentation"
+
+[[contexts]]
+segment = "src"
+source-template = "/source"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -147,16 +174,14 @@ source-template = "/documentation"
 		in   string
 		want string
 	}{
-		{"docs@acme", "C:/projects/acme/docs"},
-		{"docs@vanilla", "C:/projects/vanilla/docs"},
-		{"random@acme", "C:/projects/acme/random"},
-		{"src@docs@vanilla", "C:/projects/vanilla/docs/src"},
-		// Inline value is parsed but ignored by the PR 2 resolver.
-		{"docs:ignored@acme", "C:/projects/acme/docs"},
+		{"docs@acme", "C:/projects/acme/documentation"},
+		// Trailing `/` on the alias path is stripped before appending.
+		{"docs@vanilla", "C:/projects/vanilla/documentation"},
+		{"src@docs@vanilla", "C:/projects/vanilla/documentation/source"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			got, err := Resolve(dir, tc.in, nil, nil)
+			got, err := Resolve(dir, tc.in, nil, nil, nil)
 			if err != nil {
 				t.Fatalf("resolve: %v", err)
 			}
@@ -168,13 +193,195 @@ source-template = "/documentation"
 	}
 }
 
+// TestResolve_Segmented_InlineValue locks the spec's `seg:value` flow: the
+// inline value is bound to ${<param>} (default: <segment>) inside the
+// template.
+func TestResolve_Segmented_InlineValue(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("proja", store.Alias{Path: "C:/proja"})
+	if err := store.SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
+
+[[contexts]]
+segment = "tasks"
+source-template = "/${tasks}"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Resolve(dir, "tasks:123@proja", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	want := filepath.FromSlash("C:/proja/123")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestResolve_Segmented_NoLeadingSlash exercises the spec's "templates own
+// their separators" rule: a template without a leading `/` appends directly,
+// so two segments can compose into a single filename.
+func TestResolve_Segmented_NoLeadingSlash(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("projb", store.Alias{Path: "C:/projectb/"})
+	if err := store.SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
+
+[[contexts]]
+segment = "client"
+source-template = "/${client}"
+
+[[contexts]]
+segment = "task"
+source-template = "_${task}.md"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Resolve(dir, "task:432@client:bob@projb", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	want := filepath.FromSlash("C:/projectb/bob_432.md")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestResolve_Segmented_TraversalRejected confirms that a template
+// expanding to a `..` component is caught by GuardFragment.
+func TestResolve_Segmented_TraversalRejected(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("home", store.Alias{Path: "C:/home"})
+	if err := store.SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
+
+[[contexts]]
+segment = "evil"
+source-template = "/${target}"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("target", "../etc/passwd")
+	_, err := Resolve(dir, "evil@home", nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected traversal guard to reject ../etc/passwd")
+	}
+	if !strings.Contains(err.Error(), "evil") {
+		t.Errorf("error should mention segment name 'evil': %v", err)
+	}
+}
+
+// TestResolve_Segmented_UnknownNoPrompt confirms that an unknown segment
+// with a nil prompter is a hard error (the --no-prompt path).
+func TestResolve_Segmented_UnknownNoPrompt(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("acme", store.Alias{Path: "C:/acme"})
+	if err := store.SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Resolve(dir, "mystery@acme", nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for undefined segment")
+	}
+	if !strings.Contains(err.Error(), "mystery") {
+		t.Errorf("error should mention segment name: %v", err)
+	}
+}
+
+// TestResolve_Segmented_UnknownWithPrompt drives the prompt callback,
+// asserts the resolver picks up the newly-defined context, and verifies
+// the context was persisted to segments.toml.
+func TestResolve_Segmented_UnknownWithPrompt(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("acme", store.Alias{Path: "C:/acme"})
+	if err := store.SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := 0
+	prompter := func(segmentName, inlineValue string) (*segments.ContextDef, error) {
+		calls++
+		if segmentName != "tasks" {
+			t.Errorf("prompt got segment=%q, want tasks", segmentName)
+		}
+		if inlineValue != "42" {
+			t.Errorf("prompt got inline=%q, want 42", inlineValue)
+		}
+		cd := segments.ContextDef{Segment: "tasks", SourceTemplate: "/tickets/${tasks}"}
+		sf, err := segments.LoadSegments(dir)
+		if err != nil {
+			return nil, err
+		}
+		sf.Contexts = append(sf.Contexts, cd)
+		if err := segments.SaveSegments(dir, sf); err != nil {
+			return nil, err
+		}
+		return &cd, nil
+	}
+
+	got, err := Resolve(dir, "tasks:42@acme", nil, nil, prompter)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("prompter called %d times, want 1", calls)
+	}
+	want := filepath.FromSlash("C:/acme/tickets/42")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+
+	// Persistence check.
+	sf, err := segments.LoadSegments(dir)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	cd, ok := segments.LookupContext(sf, "tasks")
+	if !ok {
+		t.Fatal("expected 'tasks' context after prompt, not found")
+	}
+	if cd.SourceTemplate != "/tickets/${tasks}" {
+		t.Errorf("template = %q, want /tickets/${tasks}", cd.SourceTemplate)
+	}
+}
+
+// TestResolve_Segmented_PromptCancelled returns ErrCancelled when the
+// prompter signals cancellation by returning (nil, nil).
+func TestResolve_Segmented_PromptCancelled(t *testing.T) {
+	dir := t.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("acme", store.Alias{Path: "C:/acme"})
+	if err := store.SaveStore(dir, s); err != nil {
+		t.Fatal(err)
+	}
+	prompter := func(string, string) (*segments.ContextDef, error) { return nil, nil }
+	_, err := Resolve(dir, "mystery@acme", nil, nil, prompter)
+	if err != ErrCancelled {
+		t.Fatalf("got %v, want ErrCancelled", err)
+	}
+}
+
 func TestResolve_Basic(t *testing.T) {
 	dir := t.TempDir()
 	s := &store.Store{Aliases: map[string]store.Alias{"a": {Path: "C:/a"}}}
 	_ = store.SaveStore(dir, s)
 
 	t.Run("fast path", func(t *testing.T) {
-		got, err := Resolve(dir, "a", nil, nil)
+		got, err := Resolve(dir, "a", nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -187,7 +394,7 @@ func TestResolve_Basic(t *testing.T) {
 		// Delete file to force slow path (or just use non-fast alias name if any)
 		// Wait, slow path is also triggered if Resolve reads full store.
 		// Resolve always tries fast path first.
-		got, err := Resolve(dir, "A", nil, nil) // Case insensitive
+		got, err := Resolve(dir, "A", nil, nil, nil) // Case insensitive
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -222,7 +429,7 @@ func TestResolve_FuzzyMatch_DistanceLimit(t *testing.T) {
 	// "sync" is distance 3 from "bin" but distance 4 from "onix" / "play".
 	// Under the new limit (shorter/3 = 1 for shorter=3, capped to 1) NONE
 	// of these are close enough to suggest. The selector should not fire.
-	_, err := Resolve(dir, "sync", nil, selector)
+	_, err := Resolve(dir, "sync", nil, selector, nil)
 	if err == nil {
 		t.Errorf("expected error for unknown alias 'sync', got nil")
 	}
@@ -232,7 +439,7 @@ func TestResolve_FuzzyMatch_DistanceLimit(t *testing.T) {
 
 	// Sanity: a real typo (one transposition) should still trigger the selector.
 	selected = ""
-	_, err = Resolve(dir, "onxi", nil, selector)
+	_, err = Resolve(dir, "onxi", nil, selector, nil)
 	if err == nil {
 		t.Errorf("expected error for unknown alias 'onxi' when selector returns empty")
 	}
@@ -254,7 +461,7 @@ func TestResolve_NilSelector_BypassesFuzzy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Resolve(dir, "onxi", nil, nil)
+	_, err := Resolve(dir, "onxi", nil, nil, nil)
 	if err == nil {
 		t.Errorf("expected error when selector is nil and alias is unknown")
 	}
@@ -271,7 +478,7 @@ func TestResolve_WithPrompter(t *testing.T) {
 		prompter := func(name string) string {
 			return target
 		}
-		got, err := Resolve(dir, "new", prompter, nil)
+		got, err := Resolve(dir, "new", prompter, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -289,7 +496,7 @@ func TestResolve_WithPrompter(t *testing.T) {
 		prompter := func(name string) string {
 			return ""
 		}
-		_, err := Resolve(dir, "cancelled", prompter, nil)
+		_, err := Resolve(dir, "cancelled", prompter, nil, nil)
 		if err != ErrCancelled {
 			t.Fatalf("expected ErrCancelled, got %v", err)
 		}

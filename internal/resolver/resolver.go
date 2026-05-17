@@ -17,6 +17,15 @@ import (
 // destination prompt for an unknown alias.
 var ErrCancelled = errors.New("prompt cancelled")
 
+// SegmentPrompter is invoked when a segmented invocation references a name
+// that has no matching [[contexts]] entry in segments.toml.
+//
+// The callback is expected to interact with the user, persist a new
+// [[contexts]] entry to disk, and return the new ContextDef. Returning
+// (nil, nil) is treated as "user cancelled" and is reported as
+// ErrCancelled. A non-nil error is propagated to the caller verbatim.
+type SegmentPrompter func(segmentName, inlineValue string) (*segments.ContextDef, error)
+
 // Resolve finds the absolute path for an alias.
 //
 // It first attempts a fast byte-scan of aliases.toml to bypass full TOML
@@ -28,11 +37,15 @@ var ErrCancelled = errors.New("prompt cancelled")
 //  2. If close matches exist and a selector is provided, it prompts the user.
 //  3. If no match is selected and a prompter is provided, it prompts for a new path.
 //
+// segmentPrompter is invoked for segmented inputs (e.g. `task:432@projb`)
+// when a referenced segment has no [[contexts]] entry. Passing nil makes
+// unknown segments a hard error — used by --no-prompt callers.
+//
 // Resolve does NOT create directories on disk. It returns a host-native path
 // (using filepath.FromSlash).
-func Resolve(home, name string, prompter func(string) string, selector func([]string) string) (string, error) {
+func Resolve(home, name string, prompter func(string) string, selector func([]string) string, segmentPrompter SegmentPrompter) (string, error) {
 	if strings.Contains(name, "@") {
-		return resolveSegmented(home, name)
+		return resolveSegmented(home, name, segmentPrompter)
 	}
 
 	data, err := os.ReadFile(store.AliasesPath(home))
@@ -100,7 +113,7 @@ func Resolve(home, name string, prompter func(string) string, selector func([]st
 				if selected != "" {
 					// Recursively resolve the selected alias (without prompter/selector
 					// to avoid loops, but since it's from s.Names() it must exist).
-					return Resolve(home, selected, nil, nil)
+					return Resolve(home, selected, nil, nil, nil)
 				}
 			}
 		}
@@ -132,7 +145,7 @@ func Resolve(home, name string, prompter func(string) string, selector func([]st
 	return filepath.FromSlash(a.Path), nil
 }
 
-func resolveSegmented(home, input string) (string, error) {
+func resolveSegmented(home, input string, prompter SegmentPrompter) (string, error) {
 	segs, alias := segments.ParseSegmentedAlias(input)
 	if len(segs) == 0 || alias == "" {
 		return "", fmt.Errorf("invalid segmented alias %q (usage: <seg>@[<seg>@...]<alias>)", input)
@@ -147,25 +160,97 @@ func resolveSegmented(home, input string) (string, error) {
 		return "", fmt.Errorf("unknown alias %q", alias)
 	}
 
-	// Load segments.toml to surface parse / validation errors early, even
-	// though PR 2 doesn't consume any of its fields during resolution yet.
-	// Segments-spec PR 4 wires [[contexts]] into the loop below.
-	if _, err := segments.LoadSegments(home); err != nil {
+	sf, err := segments.LoadSegments(home)
+	if err != nil {
 		return "", err
 	}
 
-	target := a.Path
+	target := strings.TrimRight(a.Path, "/")
 	for i := len(segs) - 1; i >= 0; i-- {
-		// PR 2: literal-name fallback with the auto-`/` joiner. The old
-		// per-alias / global Subdirs maps are gone; segments-spec PR 4
-		// replaces this loop with [[contexts]]-driven resolution and an
-		// unknown-segment prompt. Inline value (segs[i].Value) is parsed
-		// but ignored here.
-		part := segs[i].Name
-		target = strings.TrimRight(target, "/") + "/" + strings.Trim(part, "/")
+		ps := segs[i]
+		cd, ok := segments.LookupContext(sf, ps.Name)
+		if !ok {
+			if prompter == nil {
+				return "", fmt.Errorf("segment %q is not defined in segments.toml", ps.Name)
+			}
+			cd, err = prompter(ps.Name, ps.Value)
+			if err != nil {
+				return "", err
+			}
+			if cd == nil {
+				return "", ErrCancelled
+			}
+			// Reload after the prompt — the prompter persisted the new
+			// context to segments.toml, so re-reading is the safest way
+			// to pick up any later validation the loader performs.
+			sf, err = segments.LoadSegments(home)
+			if err != nil {
+				return "", err
+			}
+			cd, ok = segments.LookupContext(sf, ps.Name)
+			if !ok {
+				return "", fmt.Errorf("segment %q: prompter saved a context but it was not loadable", ps.Name)
+			}
+		}
+
+		fragment, err := evalSegment(cd, ps, a.Path, home)
+		if err != nil {
+			return "", err
+		}
+		if fragment == "" {
+			// Spec is silent on empty fragments. Treating "no fragment" as
+			// a no-op is the least surprising default; if a user wants a
+			// trailing slash they can put it in the template.
+			continue
+		}
+		if err := segments.GuardFragment(ps.Name, fragment); err != nil {
+			return "", err
+		}
+		target += fragment
 	}
 
 	return filepath.FromSlash(target), nil
+}
+
+// evalSegment resolves one segment's fragment by dispatching on the
+// context's source-* field. A context with no source-* is treated as
+// "contributes no path fragment" — its env/exec scripting is still
+// applied later by applyContexts.
+//
+// Variable resolution chain (per segments spec):
+//  1. Segment-bound inline value under ${<param>} (default: <segment>).
+//  2. Context's static env map.
+//  3. Process environment (os.LookupEnv).
+func evalSegment(cd *segments.ContextDef, ps segments.ParsedSegment, aliasBase, home string) (string, error) {
+	param := cd.Param
+	if param == "" {
+		param = cd.Segment
+	}
+	lookup := func(name string) (string, bool) {
+		if ps.HasValue && name == param {
+			return ps.Value, true
+		}
+		if v, ok := cd.Env[name]; ok {
+			return v, true
+		}
+		return os.LookupEnv(name)
+	}
+
+	switch {
+	case cd.SourceTemplate != "":
+		return segments.EvalTemplateSource(cd.SourceTemplate, lookup)
+	case len(cd.SourceExec) > 0:
+		return segments.EvalExecSource(cd.SourceExec, aliasBase, lookup)
+	case cd.SourceFile != "":
+		return segments.EvalFileSource(cd.SourceFile, home, aliasBase, lookup)
+	}
+	if ps.HasValue {
+		// No source-* but an inline value was supplied — there's no
+		// template to interpret it. The user almost certainly wanted a
+		// source-* field; surface that.
+		return "", fmt.Errorf("segment %q: inline value %q has no source-template / source-exec / source-file to consume it", cd.Segment, ps.Value)
+	}
+	return "", nil
 }
 
 func ScanForAlias(data []byte, target string) (string, bool) {

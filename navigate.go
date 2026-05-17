@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+
+	"github.com/sadirano/onix/internal/segments"
 )
 
 // readLine prints prompt and reads one line from stdin.
@@ -55,6 +57,87 @@ func promptDestination(aliasName string, stderr io.Writer, stdin io.Reader) stri
 		return ""
 	}
 	return line
+}
+
+// promptSegmentDefinition asks the user to define a [[contexts]] entry for
+// a segment that wasn't found in segments.toml. On success it persists the
+// new context to disk and returns the saved ContextDef. Returns
+// (nil, nil) if the user cancels via Ctrl+C or an empty answer.
+//
+// The save step is unconditional once the user supplies a valid source —
+// the [Y/n] confirmation is "save / abort", not "save / skip" (per spec).
+//
+// All prompts share a single bufio.Reader so each ReadString consumes
+// exactly one line — using the package-level readLine helper per prompt
+// creates a fresh reader each call, which would swallow buffered input.
+func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Writer, stdin io.Reader) (*segments.ContextDef, error) {
+	fmt.Fprintf(stderr, "segment %q is not defined.\n", segmentName)
+	if inlineValue != "" {
+		fmt.Fprintf(stderr, "  (inline value: %s)\n", inlineValue)
+	}
+	fmt.Fprintln(stderr, "")
+	fmt.Fprintln(stderr, "Pick a source:")
+	fmt.Fprintln(stderr, "  [1] template (e.g. /${"+segmentName+"}, /tickets/${"+segmentName+"}/notes)")
+	fmt.Fprintln(stderr, "  [2] exec     (run a command, capture stdout)")
+	fmt.Fprintln(stderr, "  [3] file     (read a file's contents)")
+
+	reader := bufio.NewReader(stdin)
+	read := func(prompt string) (string, bool) {
+		fmt.Fprint(stderr, prompt)
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
+			return "", false
+		}
+		return strings.TrimSpace(line), true
+	}
+
+	kindLine, ok := read("> ")
+	if !ok || kindLine == "" {
+		return nil, nil
+	}
+
+	cd := &segments.ContextDef{Segment: segmentName}
+	switch kindLine {
+	case "1":
+		v, ok := read("Template: ")
+		if !ok || v == "" {
+			return nil, nil
+		}
+		cd.SourceTemplate = v
+	case "2":
+		v, ok := read("Exec (command + space-separated args): ")
+		if !ok || v == "" {
+			return nil, nil
+		}
+		cd.SourceExec = strings.Fields(v)
+	case "3":
+		v, ok := read("File path: ")
+		if !ok || v == "" {
+			return nil, nil
+		}
+		cd.SourceFile = v
+	default:
+		return nil, fmt.Errorf("segment prompt: unrecognised choice %q (expected 1, 2, or 3)", kindLine)
+	}
+
+	confirm, ok := read("Save to segments.toml? [Y/n] ")
+	if !ok {
+		return nil, nil
+	}
+	if confirm != "" && !strings.EqualFold(confirm, "y") && !strings.EqualFold(confirm, "yes") {
+		return nil, nil
+	}
+
+	sf, err := segments.LoadSegments(home)
+	if err != nil {
+		return nil, fmt.Errorf("segment prompt: %w", err)
+	}
+	sf.Contexts = append(sf.Contexts, *cd)
+	if err := segments.SaveSegments(home, sf); err != nil {
+		return nil, fmt.Errorf("segment prompt: save: %w", err)
+	}
+	fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q\n", segmentName)
+	return cd, nil
 }
 
 // promptSelection presents a list of options and returns the selected one.

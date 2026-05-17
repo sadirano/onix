@@ -44,6 +44,59 @@ func Path(home string) string {
 	return filepath.Join(home, "segments.toml")
 }
 
+// LookupContext finds the [[contexts]] entry whose Segment matches name
+// case-insensitively. When multiple entries share a name, the first one
+// wins (so the TOML author controls precedence by ordering).
+func LookupContext(sf *SegmentsFile, name string) (*ContextDef, bool) {
+	if sf == nil {
+		return nil, false
+	}
+	target := strings.ToLower(name)
+	for i := range sf.Contexts {
+		if strings.ToLower(sf.Contexts[i].Segment) == target {
+			return &sf.Contexts[i], true
+		}
+	}
+	return nil, false
+}
+
+// SaveSegments writes sf to home/segments.toml atomically.
+//
+// The file is round-tripped through go-toml/v2's marshaller, which means
+// hand-written comments in the original are not preserved. This is an
+// accepted trade-off per the segments redesign plan: segments.toml is
+// configuration, not source.
+func SaveSegments(home string, sf *SegmentsFile) error {
+	p := Path(home)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(p), err)
+	}
+	if sf.Version == 0 {
+		sf.Version = CurrentVersion
+	}
+	data, err := toml.Marshal(sf)
+	if err != nil {
+		return fmt.Errorf("marshal segments: %w", err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(p), ".segments.*.toml")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, p); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
+	}
+	return nil
+}
+
 // LoadSegments reads ~/.onix/segments.toml.
 func LoadSegments(home string) (*SegmentsFile, error) {
 	p := Path(home)

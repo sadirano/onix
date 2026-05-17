@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/sadirano/onix/internal/segments"
 )
 
 // withStdin replaces os.Stdin with a pipe, writes input to it (and closes), and
@@ -153,6 +155,90 @@ func TestPromptSelection(t *testing.T) {
 		})
 		if got != "" {
 			t.Errorf("got %q, want empty on non-numeric input", got)
+		}
+	})
+}
+
+func TestPromptSegmentDefinition(t *testing.T) {
+	t.Run("template source persists", func(t *testing.T) {
+		home := t.TempDir()
+		var cd *segments.ContextDef
+		var perr error
+		// Inputs: choose template, then template body, then accept save.
+		withStdin(t, "1\n/tickets/${tasks}\ny\n", func() {
+			_, _, _ = captureStdio(func() error {
+				cd, perr = promptSegmentDefinition(home, "tasks", "42", os.Stderr, os.Stdin)
+				return nil
+			})
+		})
+		if perr != nil {
+			t.Fatalf("prompt error: %v", perr)
+		}
+		if cd == nil {
+			t.Fatal("prompt returned nil context")
+		}
+		if cd.SourceTemplate != "/tickets/${tasks}" {
+			t.Errorf("template = %q, want /tickets/${tasks}", cd.SourceTemplate)
+		}
+
+		// File must exist and contain the new context.
+		sf, err := segments.LoadSegments(home)
+		if err != nil {
+			t.Fatalf("reload: %v", err)
+		}
+		got, ok := segments.LookupContext(sf, "tasks")
+		if !ok {
+			t.Fatal("tasks context not persisted")
+		}
+		if got.SourceTemplate != "/tickets/${tasks}" {
+			t.Errorf("persisted template = %q", got.SourceTemplate)
+		}
+	})
+
+	t.Run("decline save aborts", func(t *testing.T) {
+		home := t.TempDir()
+		var cd *segments.ContextDef
+		// Template chosen, but the [Y/n] gets "n" → cancel.
+		withStdin(t, "1\n/${x}\nn\n", func() {
+			_, _, _ = captureStdio(func() error {
+				cd, _ = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin)
+				return nil
+			})
+		})
+		if cd != nil {
+			t.Errorf("got context %+v, want nil on declined save", cd)
+		}
+		// segments.toml must not have been created.
+		if _, err := os.Stat(segments.Path(home)); !os.IsNotExist(err) {
+			t.Errorf("segments.toml created despite cancel: %v", err)
+		}
+	})
+
+	t.Run("blank kind cancels", func(t *testing.T) {
+		home := t.TempDir()
+		var cd *segments.ContextDef
+		withStdin(t, "\n", func() {
+			_, _, _ = captureStdio(func() error {
+				cd, _ = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin)
+				return nil
+			})
+		})
+		if cd != nil {
+			t.Errorf("got context %+v, want nil on blank choice", cd)
+		}
+	})
+
+	t.Run("unrecognised kind errors", func(t *testing.T) {
+		home := t.TempDir()
+		var perr error
+		withStdin(t, "9\n", func() {
+			_, _, _ = captureStdio(func() error {
+				_, perr = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin)
+				return nil
+			})
+		})
+		if perr == nil {
+			t.Error("expected error for unknown choice")
 		}
 	})
 }

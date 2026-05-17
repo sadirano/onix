@@ -16,6 +16,7 @@ import (
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/plugins"
 	"github.com/sadirano/onix/internal/resolver"
+	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/snippet"
 	"github.com/sadirano/onix/internal/store"
 )
@@ -561,6 +562,7 @@ func resolveAliasPath(e *env, name string) (string, error) {
 func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 	var prompter func(string) string
 	var selector func([]string) string
+	var segPrompter resolver.SegmentPrompter
 
 	if !noPrompt {
 		prompter = func(name string) string {
@@ -569,9 +571,12 @@ func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 		selector = func(options []string) string {
 			return promptSelection(options, e.Stderr, e.Stdin)
 		}
+		segPrompter = func(segmentName, inlineValue string) (*segments.ContextDef, error) {
+			return promptSegmentDefinition(e.Home, segmentName, inlineValue, e.Stderr, e.Stdin)
+		}
 	}
 
-	p, err := resolver.Resolve(e.Home, name, prompter, selector)
+	p, err := resolver.Resolve(e.Home, name, prompter, selector, segPrompter)
 	if err != nil {
 		return "", err
 	}

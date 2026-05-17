@@ -70,24 +70,15 @@ func applyContexts(home, input, shell string, w io.Writer) error {
 		return nil
 	}
 
-	// Build a segment→ContextDef lookup. First-defined wins for duplicates
-	// so the TOML author controls precedence by ordering their [[contexts]].
-	ctxMap := make(map[string]*segments.ContextDef, len(sf.Contexts))
-	for i := range sf.Contexts {
-		cd := &sf.Contexts[i]
-		key := strings.ToLower(cd.Segment)
-		if _, exists := ctxMap[key]; !exists {
-			ctxMap[key] = cd
-		}
-	}
-
 	isBash := shell == "bash" || shell == "zsh"
 	isCmd := shell == "cmd"
 
 	// Apply in innermost-first order (right-to-left in the segments slice)
-	// to mirror the path-building direction.
+	// to mirror the path-building direction. First-defined wins for
+	// duplicates so the TOML author controls precedence by ordering their
+	// [[contexts]] — that's the semantics of segments.LookupContext.
 	for i := len(segs) - 1; i >= 0; i-- {
-		cd, ok := ctxMap[strings.ToLower(segs[i].Name)]
+		cd, ok := segments.LookupContext(sf, segs[i].Name)
 		if !ok {
 			continue
 		}
