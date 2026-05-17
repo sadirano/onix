@@ -158,12 +158,35 @@ func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	got := strings.TrimSpace(lines[len(lines)-1])
-	if !strings.EqualFold(filepath.ToSlash(got), filepath.ToSlash(demoDir)) {
-		t.Errorf("pwsh 'o demo' changed to %q, want %q\nFull Output:\n%s", got, demoDir, out)
+	// On Windows CI, t.TempDir() can return an 8.3 short-name path (e.g.
+	// C:\Users\RUNNER~1\...) while Get-Location after `cd` returns the
+	// long form (C:\Users\runneradmin\...). Canonicalise both sides so we
+	// compare the same physical directory.
+	gotCanon := canonPath(t, got)
+	wantCanon := canonPath(t, demoDir)
+	if !strings.EqualFold(gotCanon, wantCanon) {
+		t.Errorf("pwsh 'o demo' changed to %q (canon %q), want %q (canon %q)\nFull Output:\n%s",
+			got, gotCanon, demoDir, wantCanon, out)
 	}
 }
 
+func canonPath(t *testing.T, p string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return filepath.ToSlash(p)
+	}
+	return filepath.ToSlash(resolved)
+}
+
 func TestE2E_ShellIntegration_Bash(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// --init is platform-aware and writes onix.ps1 (not onix.sh) on
+		// Windows, so sourcing the bash snippet from Git Bash here would
+		// always fail. Bash snippet behaviour is covered by the
+		// ubuntu-latest test job.
+		t.Skip("bash snippet not generated on Windows; covered by Linux job")
+	}
 	bash, err := exec.LookPath("bash")
 	if err != nil {
 		t.Skip("bash not found")
