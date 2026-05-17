@@ -6,7 +6,7 @@ A 10/10 here means: a stranger could clone the repo, build it on Windows or Linu
 
 Pick from this list in order of cost/value. Items are grouped by axis and labelled `[S]` small, `[M]` medium, `[L]` large.
 
-Since the previous revision, five items shipped: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, least-privilege `GITHUB_TOKEN` on the test/lint workflows, third-party actions pinned by commit SHA, and the `actions/dependency-review` job on pull_request. `internal/store` coverage moved 78.6% → 82.1%. The remaining 80% gate is entirely a `main`-package job.
+Since the previous revision, six items shipped: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, least-privilege `GITHUB_TOKEN` on the test/lint workflows, third-party actions pinned by commit SHA, the `actions/dependency-review` job on pull_request, and `testing/quick`-based property tests for the name validators with a roundtrip invariant through `Save → Load → Lookup`. `internal/store` coverage moved 78.6% → 82.1%. The remaining 80% gate is entirely a `main`-package job.
 
 ---
 
@@ -37,9 +37,6 @@ The whole remaining gap is the `main` package — the alias-flag dispatcher and 
 
 ### `[M]` Benchmark regression gate
 CI runs `benchstat bench_current.txt` informationally today. Add a second step that fetches the baseline from `main`, runs `benchstat baseline.txt current.txt`, and fails the build on >20% slowdown for `BenchmarkHotPath_LookupOnly`.
-
-### `[S]` Property-based tests for name validators
-The table tests in `internal/store/store_test.go` cover known-bad inputs. Add `testing/quick.Check` runs against `ValidateAliasName` / `ValidateSegmentName` so an arbitrarily-generated rune string is either accepted *and* roundtrips through resolve, or rejected with a clear error — no third state.
 
 ---
 
