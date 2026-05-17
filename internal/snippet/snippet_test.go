@@ -182,5 +182,5 @@ func scrub(s, tempDir string) string {
 	if OnixExeOverride != "" {
 		s = strings.ReplaceAll(s, OnixExeOverride, "/ONIX_EXE")
 	}
-	return filepath.ToSlash(s)
+	return strings.ReplaceAll(s, `\`, "/")
 }
