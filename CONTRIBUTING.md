@@ -22,7 +22,7 @@ Onix follows a clean architecture with core logic separated from the CLI interfa
 
 ## Quality Standards
 
-We aim for a high quality bar (see `ROADMAP_TO_10.md`):
+We aim for a high quality bar (see [ROADMAP.md](./ROADMAP.md)):
 
 1. **Testing:** All new features must include unit tests and, where applicable, E2E tests in `e2e_test.go`.
 2. **Verification:** Run `go vet ./...` and `go test ./...` before submitting changes.
