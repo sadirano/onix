@@ -80,6 +80,9 @@ Optional `description`, `tags`, `owner`, `last_used` on alias entries. Surfaces 
 ### ~~`[M]` Importers from `z`, `autojump`, `direnv`~~ (WON'T DO)
 The maintainer doesn't use any of these tools, and supporting them adds shell/binary dependencies for a path that's already covered by hand-editing `aliases.toml`. Out of scope for the same reason as macOS/fish/nushell.
 
+### ~~`[L]` `@`-prefix alias dispatch~~ (RESOLVED-BY-ALTERNATIVE — alias-flag grammar)
+The underlying problem (hardcoded subcommand list, flag-first invocations breaking, alias intent ambiguous) was solved with a different design: an alias-flag grammar where the alias comes first and flags hang off it (`onix <alias> --remove`, `--edit`, `--show`, `--list`). See commits `14c584a` (dispatcher), `db3c9d3` (regenerated shell snippets), `ff1bbd4` (legacy compat dropped). No `@` prefix required.
+
 ---
 
 ## Scope & Sharing (NEW)
