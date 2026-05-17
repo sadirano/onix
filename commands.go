@@ -132,7 +132,7 @@ var loadBearingOnixFiles = map[string]bool{
 
 func (c *RemoveCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Files) == 0 {
-		// Legacy form: remove the alias.
+		// No files given: --remove acts on the alias entry itself.
 		if c.Alias == "" {
 			return fmt.Errorf("--remove requires an alias name or one or more files")
 		}
@@ -228,7 +228,8 @@ func (c *RemoveCmd) deleteFiles(e *env) error {
 // list — print aliases in a stable, scannable table.
 //
 // We use tabwriter rather than fixed-width fmt so long names/paths align
-// without truncation. JSON output comes later when we wire scripting helpers.
+// without truncation. --json switches to a machine-readable list for
+// scripting.
 // -----------------------------------------------------------------------------
 
 type ListCmd struct{}
@@ -334,8 +335,8 @@ func (c *EditCmd) targetDir(e *env) (string, error) {
 // explore — open the OS file manager at the alias directory.
 //
 // Windows uses explorer.exe directly (no cmd.exe wrapper, no /e flag — both
-// add startup overhead or hide bugs). Unix builds get this in M3; we error
-// loudly until then so a user on Linux knows we haven't shipped it.
+// add startup overhead or hide bugs). Linux uses xdg-open. macOS is not
+// supported.
 // -----------------------------------------------------------------------------
 
 type ExploreCmd struct {
@@ -384,9 +385,8 @@ func (c *YankCmd) Run(ctx context.Context, e *env) error {
 //
 // kong's `Cmd []string \`arg:"" passthrough:""\`` semantics let us capture
 // everything after the `--` literally, which keeps quoting predictable.
-// We do NOT invoke a shell here — extras are exec'd as argv directly. This
-// is a deliberate change from v1, where `r acme "go test"` round-tripped
-// through cmd.exe and re-parsed quoting unpredictably.
+// We do NOT invoke a shell here — extras are exec'd as argv directly so
+// the user's quoting reaches the child process without a re-parse.
 // -----------------------------------------------------------------------------
 
 // RunCmd uses a single positional slice (rather than separate Alias+Cmd

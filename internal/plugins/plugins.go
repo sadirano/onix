@@ -33,7 +33,7 @@ type Plugin struct {
 	Entries  []PluginEntry  `toml:"entries,omitempty"`
 }
 
-// PluginEntry mirrors v1's onix.toml shape inside a plugin repo.
+// PluginEntry is one entry block from a plugin repo's onix.toml.
 type PluginEntry struct {
 	Name string `toml:"name"`
 	Cmd  string `toml:"cmd,omitempty"`

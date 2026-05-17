@@ -144,8 +144,8 @@ func sourceFromBashLike(e *env, snippet string) error {
 
 // sourceFromProfile appends a `. "<snippet>"` line to PowerShell's $PROFILE
 // if it's not already present. We invoke powershell.exe to read $PROFILE
-// rather than editing the registry — modifying user-owned config files is
-// much less invasive than the v1 PATH-mutation flow.
+// rather than editing the registry: modifying a user-owned config file is
+// less invasive than touching PATH.
 func sourceFromProfile(e *env, snippet string) error {
 	out, err := exec.Command(pwshBin(),
 		"-NoProfile", "-NonInteractive",
