@@ -13,7 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -108,7 +108,7 @@ var systemActionFlags = map[string]string{
 // printUsage writes the alias-flag grammar reference to stdout. It's
 // hand-rolled because kong's auto-generated help reflects the legacy
 // subcommand tree — which the dispatcher no longer uses.
-func printUsage() {
+func printUsage(w io.Writer) {
 	const usage = `onix — fast directory alias resolver
 
 USAGE:
@@ -160,22 +160,22 @@ GLOBAL:
   --json, -j                 machine-readable output
   --no-prompt, -q            suppress destination prompts on unknown aliases
 `
-	fmt.Print(usage)
+	fmt.Fprint(w, usage)
 }
 
 // dispatchNewGrammar parses argv under the alias-flag grammar and runs
 // the matching handler. Bare `onix` prints usage; --help is handled here
 // so kong (which only owns `plugin`) doesn't get involved.
-func dispatchNewGrammar(ctx context.Context, e *env, args []string) error {
+func dispatchNewGrammar(ctx context.Context, e *env, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		printUsage()
+		printUsage(stdout)
 		return nil
 	}
 
 	first := args[0]
 
 	if first == "--help" || first == "-h" {
-		printUsage()
+		printUsage(stdout)
 		return nil
 	}
 
@@ -185,7 +185,7 @@ func dispatchNewGrammar(ctx context.Context, e *env, args []string) error {
 		if !ok {
 			return fmt.Errorf("unknown flag %q (run `onix --help` for usage)", first)
 		}
-		return dispatchSystem(ctx, e, verb, args[1:])
+		return dispatchSystem(ctx, e, verb, args[1:], stdout, stderr)
 	}
 
 	// Alias-flag form: first positional is the alias name.
@@ -193,14 +193,14 @@ func dispatchNewGrammar(ctx context.Context, e *env, args []string) error {
 }
 
 // dispatchSystem handles `onix --<verb> [args...]`.
-func dispatchSystem(ctx context.Context, e *env, verb string, rest []string) error {
+func dispatchSystem(ctx context.Context, e *env, verb string, rest []string, stdout, stderr io.Writer) error {
 	switch verb {
 	case "list":
 		return (&ListCmd{}).Run(ctx, e)
 	case "list-names":
 		// Hot path — go through fastListNames directly so behaviour matches
 		// the existing `onix list-names` invocation byte-for-byte.
-		return fastListNames(e.Home)
+		return fastListNames(e.Home, stdout)
 	case "edit":
 		// System-wide --edit: open ~/.onix (or specific files within).
 		return (&EditCmd{Files: rest}).Run(ctx, e)
@@ -258,7 +258,7 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string) err
 		if alias == "" {
 			return fmt.Errorf("--apply-context requires an alias name")
 		}
-		return applyContexts(e.Home, alias, shell, os.Stdout)
+		return applyContexts(e.Home, alias, shell, stdout)
 	}
 	return fmt.Errorf("unknown system action %q", verb)
 }
@@ -296,7 +296,7 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 
 	switch action {
 	case "resolve":
-		return fastResolve(e.Home, alias, false)
+		return fastResolve(e.Home, alias, false, e.Stdout, e.Stderr, e.Stdin)
 	case "remove":
 		files, force, recursive, err := parseRemoveArgs(actionArgs)
 		if err != nil {
@@ -356,7 +356,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 
 	if len(cleaned) == 0 {
 		// Bare `onix <alias>` — hot-path resolve.
-		return fastResolve(e.Home, alias, noPrompt)
+		return fastResolve(e.Home, alias, noPrompt, e.Stdout, e.Stderr, e.Stdin)
 	}
 
 	// Parse: <path> [--description X] [--owner X] [--tags X]...
@@ -400,7 +400,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 	if add.Path == "" {
 		// Only metadata flags, no path — fall back to resolve (with prompt
 		// suppression already handled above).
-		return fastResolve(e.Home, alias, noPrompt)
+		return fastResolve(e.Home, alias, noPrompt, e.Stdout, e.Stderr, e.Stdin)
 	}
 	return add.Run(ctx, e)
 }

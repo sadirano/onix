@@ -105,12 +105,12 @@ func (c *PluginAddCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	// Confirm with the user.
-	if !c.Yes && !confirmInstall(repo, name, sha, msg, entries, c.Unpinned) {
+	if !c.Yes && !confirmInstall(os.Stdin, e.Stdout, repo, name, sha, msg, entries, c.Unpinned) {
 		return fmt.Errorf("aborted by user")
 	}
 
 	// Build the binary.
-	fmt.Printf("Building %s...\n", repo)
+	fmt.Fprintf(e.Stderr, "Building %s...\n", repo)
 	if err := buildPlugin(srcDir, plugins.BinaryName(repo)); err != nil {
 		return err
 	}
@@ -124,8 +124,8 @@ func (c *PluginAddCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 
-	fmt.Printf("\nInstalled %s -> %s\n", name, plugins.BinaryPath(e.Home, repo))
-	fmt.Println("Re-source $PROFILE (or restart PowerShell) to activate.")
+	fmt.Fprintf(e.Stderr, "\nInstalled %s -> %s\n", name, plugins.BinaryPath(e.Home, repo))
+	fmt.Fprintln(e.Stderr, "Re-source $PROFILE (or restart PowerShell) to activate.")
 	return nil
 }
 
@@ -139,17 +139,17 @@ func (c *PluginListCmd) Run(ctx context.Context, e *env) error {
 	}
 	if len(pf.Plugins) == 0 {
 		if e.JSON {
-			return printJSON([]string{})
+			return printJSON(e.Stdout, []string{})
 		}
-		fmt.Println("no plugins installed (run: onix plugin add <repo> --sha <hash>)")
+		fmt.Fprintln(e.Stdout, "no plugins installed (run: onix plugin add <repo> --sha <hash>)")
 		return nil
 	}
 
 	if e.JSON {
-		return printJSON(pf.Plugins)
+		return printJSON(e.Stdout, pf.Plugins)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tREPO\tSHA\tSTATE")
 	for _, p := range pf.Plugins {
 		state := "installed"
@@ -181,7 +181,7 @@ func (c *PluginUpdateCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 	if len(pf.Plugins) == 0 {
-		fmt.Println("no plugins installed")
+		fmt.Fprintln(e.Stderr, "no plugins installed")
 		return nil
 	}
 	if c.SHA != "" && c.Name == "" {
@@ -208,7 +208,7 @@ func (c *PluginUpdateCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	for _, p := range work {
-		fmt.Printf("Updating %s (%s)...\n", p.Name, p.Repo)
+		fmt.Fprintf(e.Stderr, "Updating %s (%s)...\n", p.Name, p.Repo)
 		srcDir := plugins.SourceDir(e.Home, p.Repo)
 		if err := gitFetch(srcDir); err != nil {
 			return fmt.Errorf("fetch %s: %w", p.Repo, err)
@@ -236,7 +236,7 @@ func (c *PluginUpdateCmd) Run(ctx context.Context, e *env) error {
 			if err != nil {
 				return err
 			}
-			if !c.Yes && !confirmInstall(p.Repo, p.Name, newSHA, msg, entries, false) {
+			if !c.Yes && !confirmInstall(os.Stdin, e.Stdout, p.Repo, p.Name, newSHA, msg, entries, false) {
 				return fmt.Errorf("aborted update of %s", p.Name)
 			}
 			p.SHA = newSHA
@@ -257,7 +257,7 @@ func (c *PluginUpdateCmd) Run(ctx context.Context, e *env) error {
 	if err := snippet.RegenerateShellSnippet(e.Home); err != nil {
 		return err
 	}
-	fmt.Println("Re-source $PROFILE (or restart PowerShell) if entries changed.")
+	fmt.Fprintln(e.Stderr, "Re-source $PROFILE (or restart PowerShell) if entries changed.")
 	return nil
 }
 
@@ -287,7 +287,7 @@ func (c *PluginRemoveCmd) Run(ctx context.Context, e *env) error {
 	if err := snippet.RegenerateShellSnippet(e.Home); err != nil {
 		return err
 	}
-	fmt.Printf("Removed %s\n", c.Name)
+	fmt.Fprintf(e.Stderr, "Removed %s\n", c.Name)
 	return nil
 }
 
@@ -338,11 +338,11 @@ func (c *PluginExecCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx, bin, extras...)
+	cmd := execCommandContext(ctx, bin, extras...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = e.Stdout
+	cmd.Stderr = e.Stderr
 
 	cmd.Env = append(
 		os.Environ(),

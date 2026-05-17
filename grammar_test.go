@@ -73,14 +73,14 @@ func TestDispatchAlias_BareResolvesAlias(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "target")
 	_ = os.MkdirAll(target, 0o755)
 	if _, _, err := captureStdio(func() error {
-		return (&AddCmd{Alias: "foo", Path: target}).Run(context.Background(), &env{Home: home})
+		return (&AddCmd{Alias: "foo", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	// `onix foo` should print the resolved path on stdout.
 	stdout, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"foo"})
+		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, []string{"foo"}, os.Stdout, os.Stderr)
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -97,7 +97,7 @@ func TestDispatchAlias_AddWithMetadata(t *testing.T) {
 	// `onix foo <path> -d "desc" -o me -t a -t b` — full add form.
 	args := []string{"foo", target, "-d", "desc", "-o", "me", "-t", "a", "-t", "b"}
 	if _, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home}, args)
+		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, args, os.Stdout, os.Stderr)
 	}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -115,14 +115,14 @@ func TestDispatchAlias_AddWithMetadata(t *testing.T) {
 func TestDispatchSystem_ListNamesFastPath(t *testing.T) {
 	home := newTestHome(t)
 	_, _, _ = captureStdio(func() error {
-		return (&AddCmd{Alias: "zeta", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+		return (&AddCmd{Alias: "zeta", Path: t.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	_, _, _ = captureStdio(func() error {
-		return (&AddCmd{Alias: "alpha", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+		return (&AddCmd{Alias: "alpha", Path: t.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"--list-names"})
+		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, []string{"--list-names"}, os.Stdout, os.Stderr)
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -136,7 +136,7 @@ func TestDispatchSystem_ListNamesFastPath(t *testing.T) {
 func TestDispatchSystem_RemoveRequiresInput(t *testing.T) {
 	home := newTestHome(t)
 	_, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"--remove"})
+		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, []string{"--remove"}, os.Stdout, os.Stderr)
 	})
 	if err == nil || !strings.Contains(err.Error(), "requires an alias name or one or more files") {
 		t.Errorf("expected ambiguity error, got %v", err)
@@ -146,11 +146,11 @@ func TestDispatchSystem_RemoveRequiresInput(t *testing.T) {
 func TestDispatchAlias_RemoveAlias(t *testing.T) {
 	home := newTestHome(t)
 	_, _, _ = captureStdio(func() error {
-		return (&AddCmd{Alias: "doomed", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+		return (&AddCmd{Alias: "doomed", Path: t.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 
 	_, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"doomed", "--remove"})
+		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, []string{"doomed", "--remove"}, os.Stdout, os.Stderr)
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -168,12 +168,12 @@ func TestDispatchAlias_DeleteFilesInAlias(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(target, "junk.txt"), []byte("x"), 0o644)
 	_ = os.WriteFile(filepath.Join(target, "keep.txt"), []byte("k"), 0o644)
 	_, _, _ = captureStdio(func() error {
-		return (&AddCmd{Alias: "tidy", Path: target}).Run(context.Background(), &env{Home: home})
+		return (&AddCmd{Alias: "tidy", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 
 	_, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home},
-			[]string{"tidy", "--remove", "junk.txt", "--force"})
+		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin},
+			[]string{"tidy", "--remove", "junk.txt", "--force"}, os.Stdout, os.Stderr)
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -194,8 +194,8 @@ func TestDispatchSystem_RefusesLoadBearingFile(t *testing.T) {
 	// Without --force we should refuse — even with the user passing one
 	// other file alongside, the batch is rejected up front (atomic-feeling).
 	_, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home},
-			[]string{"--remove", "aliases.toml"})
+		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin},
+			[]string{"--remove", "aliases.toml"}, os.Stdout, os.Stderr)
 	})
 	if err == nil || !strings.Contains(err.Error(), "load-bearing") {
 		t.Errorf("expected load-bearing guard error, got %v", err)
@@ -207,7 +207,7 @@ func TestDispatchSystem_RefusesLoadBearingFile(t *testing.T) {
 
 func TestDispatcher_UnknownFlagErrors(t *testing.T) {
 	home := newTestHome(t)
-	err := dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"--bogus"})
+	err := dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, []string{"--bogus"}, os.Stdout, os.Stderr)
 	if err == nil || !strings.Contains(err.Error(), "unknown flag") {
 		t.Errorf("expected unknown-flag error, got %v", err)
 	}
@@ -246,7 +246,7 @@ func mustLoadAliasOK(t *testing.T, home, name string) (storeAliasShim, bool) {
 	// Read aliases.toml via the existing ListCmd JSON path to keep the
 	// test independent of internal/store package shape.
 	stdout, _, err := captureStdio(func() error {
-		return (&ListCmd{}).Run(context.Background(), &env{Home: home, JSON: true})
+		return (&ListCmd{}).Run(context.Background(), &env{Home: home, JSON: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -309,4 +309,138 @@ func contains(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+func TestAtoi(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    int
+		wantErr bool
+	}{
+		{"42", 42, false},
+		{" 42 ", 42, false},
+		{"-7", -7, false},
+		{"abc", 0, true},
+		{"", 0, true},
+	}
+	for _, tt := range tests {
+		got, err := atoi(tt.in)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("atoi(%q) err = %v, wantErr %v", tt.in, err, tt.wantErr)
+		}
+		if got != tt.want {
+			t.Errorf("atoi(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+		if tt.wantErr && err != nil && !strings.Contains(err.Error(), tt.in) {
+			t.Errorf("error message %q should contain input %q", err.Error(), tt.in)
+		}
+	}
+}
+
+func TestRunStatsFromArgs(t *testing.T) {
+	home := newTestHome(t)
+	e := &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{"flags", []string{"--full", "--cold"}, false},
+		{"since space", []string{"--since", "30d"}, false},
+		{"since equals", []string{"--since=30d"}, false},
+		{"since missing value", []string{"--since"}, true},
+		{"top space", []string{"--top", "5"}, false},
+		{"top equals", []string{"--top=5"}, false},
+		{"top missing value", []string{"--top"}, true},
+		{"top bad value", []string{"--top", "abc"}, true},
+		{"unknown flag", []string{"--bogus"}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := runStatsFromArgs(ctx, e, tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("runStatsFromArgs() err = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestDispatchSystem(t *testing.T) {
+	home := newTestHome(t)
+	e := &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
+	ctx := context.Background()
+
+	t.Run("list-names", func(t *testing.T) {
+		err := dispatchSystem(ctx, e, "list-names", nil, os.Stdout, os.Stderr)
+		if err != nil {
+			t.Errorf("list-names: %v", err)
+		}
+	})
+
+	t.Run("init happy", func(t *testing.T) {
+		newHome := filepath.Join(t.TempDir(), "newhome")
+		err := dispatchSystem(ctx, &env{Home: newHome, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, "init", []string{"--skip-profile"}, os.Stdout, os.Stderr)
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(newHome, "config.toml")); err != nil {
+			t.Errorf("config.toml not created: %v", err)
+		}
+	})
+
+	t.Run("init unknown flag", func(t *testing.T) {
+		err := dispatchSystem(ctx, e, "init", []string{"--bogus"}, os.Stdout, os.Stderr)
+		if err == nil || !strings.Contains(err.Error(), "unknown flag") {
+			t.Errorf("expected unknown flag error, got %v", err)
+		}
+	})
+
+	t.Run("apply-context error", func(t *testing.T) {
+		err := dispatchSystem(ctx, e, "apply-context", nil, os.Stdout, os.Stderr)
+		if err == nil || !strings.Contains(err.Error(), "requires an alias") {
+			t.Errorf("expected missing alias error, got %v", err)
+		}
+	})
+
+	t.Run("apply-context happy", func(t *testing.T) {
+		// Register an alias first
+		target := t.TempDir()
+		_ = (&AddCmd{Alias: "demo", Path: target}).Run(ctx, e)
+
+		err := dispatchSystem(ctx, e, "apply-context", []string{"--shell", "pwsh", "demo"}, os.Stdout, os.Stderr)
+		if err != nil {
+			t.Errorf("apply-context: %v", err)
+		}
+
+		err = dispatchSystem(ctx, e, "apply-context", []string{"--shell=bash", "demo"}, os.Stdout, os.Stderr)
+		if err != nil {
+			t.Errorf("apply-context --shell= form: %v", err)
+		}
+	})
+
+	t.Run("bad verb", func(t *testing.T) {
+		err := dispatchSystem(ctx, e, "bogus", nil, os.Stdout, os.Stderr)
+		if err == nil || !strings.Contains(err.Error(), "unknown system action") {
+			t.Errorf("expected unknown action error, got %v", err)
+		}
+	})
+}
+
+func TestPrintUsage(t *testing.T) {
+	stdout, _, err := captureStdio(func() error {
+		printUsage(os.Stdout)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "USAGE:") {
+		t.Error("usage output missing 'USAGE:' label")
+	}
+	if !strings.Contains(stdout, "ALIAS ACTIONS:") {
+		t.Error("usage output missing 'ALIAS ACTIONS:' label")
+	}
 }

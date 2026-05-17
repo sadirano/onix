@@ -53,7 +53,7 @@ func (c *DoctorCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	if e.JSON {
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(e.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(checks)
 	}
@@ -68,11 +68,11 @@ func (c *DoctorCmd) Run(ctx context.Context, e *env) error {
 		}
 		switch r.Status {
 		case "ok":
-			fmt.Printf("  ok   %-22s  %s\n", r.Name, r.Detail)
+			fmt.Fprintf(e.Stdout, "  ok   %-22s  %s\n", r.Name, r.Detail)
 		case "warn":
-			fmt.Printf("  warn %-22s  %s\n", r.Name, r.Detail)
+			fmt.Fprintf(e.Stdout, "  warn %-22s  %s\n", r.Name, r.Detail)
 		case "err":
-			fmt.Printf("  err  %-22s  %s\n", r.Name, r.Detail)
+			fmt.Fprintf(e.Stdout, "  err  %-22s  %s\n", r.Name, r.Detail)
 			hadErr = true
 		}
 	}

@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"os/exec"
 	"syscall"
 )
 
@@ -13,7 +12,7 @@ import (
 // invoked from a GUI context (e.g. Win+R). We do NOT shell out via
 // cmd.exe /C start — that's a 15ms wakeup tax we don't need.
 func openInExplorer(target string) error {
-	cmd := exec.Command("explorer.exe", target)
+	cmd := execCommand("explorer.exe", target)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("explorer.exe %s: %w", target, err)

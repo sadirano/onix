@@ -26,7 +26,7 @@ func TestVersionCmd_Run(t *testing.T) {
 			os.Stdout = w
 
 			cmd := &VersionCmd{}
-			e := &env{JSON: tt.json}
+			e := &env{JSON: tt.json, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
 			err := cmd.Run(context.Background(), e)
 
 			w.Close()

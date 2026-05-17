@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -32,7 +33,7 @@ func TestAddCmd_OutputContract(t *testing.T) {
 	}
 
 	stdout, stderr, err := captureStdio(func() error {
-		return (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+		return (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatalf("AddCmd.Run: %v", err)
@@ -65,7 +66,7 @@ func TestAddCmd_AutoCreatesDir(t *testing.T) {
 	}
 
 	_, _, err := captureStdio(func() error {
-		return (&AddCmd{Alias: "newdir", Path: target}).Run(context.Background(), &env{Home: home})
+		return (&AddCmd{Alias: "newdir", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatalf("AddCmd.Run: %v", err)
@@ -87,7 +88,7 @@ func TestAddCmd_RejectsInvalidName(t *testing.T) {
 	bad := []string{"foo@bar", "foo/bar", "foo bar", ""}
 	for _, name := range bad {
 		_, _, err := captureStdio(func() error {
-			return (&AddCmd{Alias: name, Path: home}).Run(context.Background(), &env{Home: home})
+			return (&AddCmd{Alias: name, Path: home}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err == nil {
 			t.Errorf("AddCmd with name %q should have errored", name)
@@ -111,7 +112,7 @@ func TestAddCmd_Metadata(t *testing.T) {
 		Owner:       "dev-team",
 		Tags:        []string{"work", "go"},
 	}
-	if err := cmd1.Run(context.Background(), &env{Home: home}); err != nil {
+	if err := cmd1.Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
 		t.Fatalf("Initial AddCmd failed: %v", err)
 	}
 
@@ -131,7 +132,7 @@ func TestAddCmd_Metadata(t *testing.T) {
 		Path:  target,
 		Owner: "ops-team",
 	}
-	if err := cmd2.Run(context.Background(), &env{Home: home}); err != nil {
+	if err := cmd2.Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
 		t.Fatalf("Update AddCmd failed: %v", err)
 	}
 
@@ -160,12 +161,12 @@ func TestListCmd(t *testing.T) {
 	// Register two aliases.
 	pathA, _ := filepath.Abs("a")
 	pathB, _ := filepath.Abs("b")
-	_ = (&AddCmd{Alias: "a", Path: pathA}).Run(context.Background(), &env{Home: home})
-	_ = (&AddCmd{Alias: "b", Path: pathB}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "a", Path: pathA}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	_ = (&AddCmd{Alias: "b", Path: pathB}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	t.Run("table output", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
-			return (&ListCmd{}).Run(context.Background(), &env{Home: home})
+			return (&ListCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -180,7 +181,7 @@ func TestListCmd(t *testing.T) {
 
 	t.Run("JSON output", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
-			return (&ListCmd{}).Run(context.Background(), &env{Home: home, JSON: true})
+			return (&ListCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, JSON: true})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -202,18 +203,18 @@ func TestRemoveCmd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_ = (&AddCmd{Alias: "acme", Path: "C:/acme"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: "C:/acme"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	t.Run("remove existing", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&RemoveCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
+			return (&RemoveCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err != nil {
 			t.Fatalf("RemoveCmd.Run: %v", err)
 		}
 		// Confirm it's gone from List.
 		stdout, _, _ := captureStdio(func() error {
-			return (&ListCmd{}).Run(context.Background(), &env{Home: home})
+			return (&ListCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if strings.Contains(stdout, "acme") {
 			t.Error("alias still present after removal")
@@ -222,7 +223,7 @@ func TestRemoveCmd(t *testing.T) {
 
 	t.Run("remove missing", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&RemoveCmd{Alias: "nope"}).Run(context.Background(), &env{Home: home})
+			return (&RemoveCmd{Alias: "nope"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err == nil {
 			t.Error("RemoveCmd on missing alias should have errored")
@@ -241,14 +242,14 @@ func noopExec() (string, []string) {
 func TestRunCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	bin, args := noopExec()
 
 	t.Run("happy path", func(t *testing.T) {
 		argv := append([]string{"acme", bin}, args...)
 		_, _, err := captureStdio(func() error {
-			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home})
+			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err != nil {
 			t.Errorf("RunCmd.Run: %v", err)
@@ -258,7 +259,7 @@ func TestRunCmd(t *testing.T) {
 	t.Run("strips leading double-dash", func(t *testing.T) {
 		argv := append([]string{"acme", "--", bin}, args...)
 		_, _, err := captureStdio(func() error {
-			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home})
+			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err != nil {
 			t.Errorf("RunCmd.Run with -- separator: %v", err)
@@ -267,7 +268,7 @@ func TestRunCmd(t *testing.T) {
 
 	t.Run("rejects too few args", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&RunCmd{Args: []string{"acme"}}).Run(context.Background(), &env{Home: home})
+			return (&RunCmd{Args: []string{"acme"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err == nil {
 			t.Error("RunCmd with only alias should error")
@@ -276,7 +277,7 @@ func TestRunCmd(t *testing.T) {
 
 	t.Run("rejects empty argv after --", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&RunCmd{Args: []string{"acme", "--"}}).Run(context.Background(), &env{Home: home})
+			return (&RunCmd{Args: []string{"acme", "--"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err == nil {
 			t.Error("RunCmd with bare -- should error")
@@ -287,7 +288,7 @@ func TestRunCmd(t *testing.T) {
 func TestExecCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	bin, args := noopExec()
 	// Write config.toml declaring a 'noop' action that runs our no-op binary.
@@ -305,7 +306,7 @@ func TestExecCmd(t *testing.T) {
 
 	t.Run("happy path", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&ExecCmd{Args: []string{"noop", "acme"}}).Run(context.Background(), &env{Home: home})
+			return (&ExecCmd{Args: []string{"noop", "acme"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err != nil {
 			t.Errorf("ExecCmd.Run: %v", err)
@@ -314,7 +315,7 @@ func TestExecCmd(t *testing.T) {
 
 	t.Run("rejects unknown action", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&ExecCmd{Args: []string{"nope", "acme"}}).Run(context.Background(), &env{Home: home})
+			return (&ExecCmd{Args: []string{"nope", "acme"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err == nil {
 			t.Error("ExecCmd with unknown action should error")
@@ -323,7 +324,7 @@ func TestExecCmd(t *testing.T) {
 
 	t.Run("rejects too few args", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
-			return (&ExecCmd{Args: []string{"noop"}}).Run(context.Background(), &env{Home: home})
+			return (&ExecCmd{Args: []string{"noop"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err == nil {
 			t.Error("ExecCmd with only action should error")
@@ -334,10 +335,10 @@ func TestExecCmd(t *testing.T) {
 func TestEditCmd_PropagatesEditorError(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	t.Setenv("EDITOR", filepath.Join(home, "does-not-exist"))
-	err := (&EditCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
+	err := (&EditCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil {
 		t.Error("EditCmd with missing editor should error")
 	}
@@ -373,10 +374,10 @@ func TestApplyContexts_SegmentedNoFile(t *testing.T) {
 func TestFastResolve_RecordsUsage(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	if _, _, err := captureStdio(func() error {
-		return fastResolve(home, "acme", false)
+		return fastResolve(home, "acme", false, os.Stdout, os.Stderr, os.Stdin)
 	}); err != nil {
 		t.Fatalf("fastResolve: %v", err)
 	}
@@ -393,21 +394,22 @@ func TestFastResolve_RecordsUsage(t *testing.T) {
 func TestSyncCmd(t *testing.T) {
 	home := t.TempDir()
 	// init sets up the directory tree and writes a base snippet.
-	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home}); err != nil {
+	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 
-	stdout, _, err := captureStdio(func() error {
-		return (&SyncCmd{}).Run(context.Background(), &env{Home: home})
+	stdout, stderr, err := captureStdio(func() error {
+		return (&SyncCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatalf("SyncCmd.Run: %v", err)
 	}
-	if !strings.Contains(stdout, "regenerated") {
-		t.Errorf("expected 'regenerated' in output: %q", stdout)
+	output := stdout + stderr
+	if !strings.Contains(output, "regenerated") {
+		t.Errorf("expected 'regenerated' in output: %q", output)
 	}
-	if !strings.Contains(stdout, "re-source") {
-		t.Errorf("expected re-source hint in output: %q", stdout)
+	if !strings.Contains(output, "re-source") {
+		t.Errorf("expected re-source hint in output: %q", output)
 	}
 }
 
@@ -445,7 +447,7 @@ func TestVersionCmd(t *testing.T) {
 	home := t.TempDir()
 	t.Run("plain", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
-			return (&VersionCmd{}).Run(context.Background(), &env{Home: home})
+			return (&VersionCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -457,7 +459,7 @@ func TestVersionCmd(t *testing.T) {
 
 	t.Run("JSON", func(t *testing.T) {
 		stdout, _, err := captureStdio(func() error {
-			return (&VersionCmd{}).Run(context.Background(), &env{Home: home, JSON: true})
+			return (&VersionCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, JSON: true})
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -474,11 +476,11 @@ func TestVersionCmd(t *testing.T) {
 func TestFastListNames(t *testing.T) {
 	home := t.TempDir()
 	// Register some aliases
-	_ = (&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home})
-	_ = (&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	_ = (&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	stdout, _, err := captureStdio(func() error {
-		return fastListNames(home)
+		return fastListNames(home, os.Stdout)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -495,10 +497,10 @@ func TestFastListNames(t *testing.T) {
 func TestFastResolve_PrintsPath(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	stdout, _, err := captureStdio(func() error {
-		return fastResolve(home, "acme", false)
+		return fastResolve(home, "acme", false, os.Stdout, os.Stderr, os.Stdin)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -511,10 +513,10 @@ func TestFastResolve_PrintsPath(t *testing.T) {
 func TestYankCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&YankCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
+		return (&YankCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -522,5 +524,69 @@ func TestYankCmd(t *testing.T) {
 	// Yank prints the path to stdout.
 	if strings.TrimSpace(stdout) != target {
 		t.Errorf("got %q, want %q", stdout, target)
+	}
+}
+
+func TestExploreCmd(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+
+	// Fake execCommand
+	origExec := execCommand
+	defer func() { execCommand = origExec }()
+
+	var lastCmd []string
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		lastCmd = append([]string{name}, args...)
+		if runtime.GOOS == "windows" {
+			return exec.Command("cmd", "/c", "exit 0")
+		}
+		return exec.Command("true")
+	}
+
+	err := (&ExploreCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		if lastCmd[0] != "explorer.exe" {
+			t.Errorf("got %q, want explorer.exe", lastCmd[0])
+		}
+	}
+}
+
+func TestRunCmd_Errors(t *testing.T) {
+	home := t.TempDir()
+	e := &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
+
+	t.Run("too few args", func(t *testing.T) {
+		err := (&RunCmd{Args: []string{"acme"}}).Run(context.Background(), e)
+		if err == nil || !strings.Contains(err.Error(), "usage") {
+			t.Errorf("expected usage error, got %v", err)
+		}
+	})
+
+	t.Run("empty argv after --", func(t *testing.T) {
+		target := t.TempDir()
+		_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), e)
+		err := (&RunCmd{Args: []string{"acme", "--"}}).Run(context.Background(), e)
+		if err == nil || !strings.Contains(err.Error(), "usage") {
+			t.Errorf("expected usage error, got %v", err)
+		}
+	})
+}
+
+func TestEditCmd_NoEditor(t *testing.T) {
+	t.Setenv("EDITOR", "")
+	t.Setenv("VISUAL", "")
+	// Also clear common fallbacks
+	t.Setenv("PATH", t.TempDir())
+
+	home := t.TempDir()
+	err := (&EditCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	if err == nil || !strings.Contains(err.Error(), "no $EDITOR") {
+		t.Errorf("expected no editor error, got %v", err)
 	}
 }

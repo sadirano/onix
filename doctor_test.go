@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sadirano/onix/internal/plugins"
 	"github.com/sadirano/onix/internal/snippet"
 )
 
@@ -245,17 +246,120 @@ func TestExtractBashSnippetPin(t *testing.T) {
 func TestDoctorCmd(t *testing.T) {
 	home := t.TempDir()
 	// Initialize the home so doctor has something to check
-	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home}); err != nil {
+	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Run doctor
-	if err := (&DoctorCmd{}).Run(context.Background(), &env{Home: home}); err != nil {
+	if err := (&DoctorCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
 		t.Errorf("DoctorCmd.Run: %v", err)
 	}
 
 	// Run doctor in JSON mode
-	if err := (&DoctorCmd{}).Run(context.Background(), &env{Home: home, JSON: true}); err != nil {
+	if err := (&DoctorCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, JSON: true}); err != nil {
 		t.Errorf("DoctorCmd.Run (JSON): %v", err)
 	}
+}
+
+func TestCheckPluginsFile(t *testing.T) {
+	home := t.TempDir()
+
+	t.Run("missing", func(t *testing.T) {
+		r := checkPluginsFile(home)
+		if r.Status != "ok" || !strings.Contains(r.Detail, "absent") {
+			t.Errorf("got %+v, want ok/absent", r)
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		if err := os.WriteFile(filepath.Join(home, "plugins.toml"), []byte("plugins = []\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkPluginsFile(home)
+		if r.Status != "ok" || !strings.Contains(r.Detail, "no plugins") {
+			t.Errorf("got %+v, want ok/no plugins", r)
+		}
+	})
+
+	t.Run("malformed", func(t *testing.T) {
+		if err := os.WriteFile(filepath.Join(home, "plugins.toml"), []byte("this is not toml\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkPluginsFile(home)
+		if r.Status != "err" {
+			t.Errorf("got status %q, want err", r.Status)
+		}
+	})
+}
+
+func TestCheckSegmentsFile(t *testing.T) {
+	home := t.TempDir()
+
+	t.Run("missing", func(t *testing.T) {
+		r := checkSegmentsFile(home)
+		if r.Status != "ok" || !strings.Contains(r.Detail, "absent") {
+			t.Errorf("got %+v, want ok/absent", r)
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		if err := os.WriteFile(filepath.Join(home, "segments.toml"), []byte("contexts = []\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkSegmentsFile(home)
+		if r.Status != "ok" || !strings.Contains(r.Detail, "no subdirs or contexts") {
+			t.Errorf("got %+v, want ok/no subdirs or contexts", r)
+		}
+	})
+}
+
+func TestCheckInstalledPlugins(t *testing.T) {
+	home := t.TempDir()
+
+	t.Run("no plugins", func(t *testing.T) {
+		results := checkInstalledPlugins(home)
+		if len(results) != 0 {
+			t.Errorf("got %d results, want 0", len(results))
+		}
+	})
+
+	t.Run("missing binary", func(t *testing.T) {
+		pf := &plugins.PluginsFile{
+			Plugins: []plugins.Plugin{
+				{Name: "tts", Repo: "user/repo", SHA: "abc"},
+			},
+		}
+		if err := plugins.SavePlugins(home, pf); err != nil {
+			t.Fatal(err)
+		}
+		results := checkInstalledPlugins(home)
+		if len(results) != 1 || results[0].Status != "err" {
+			t.Errorf("got %+v, want 1 err result", results)
+		}
+	})
+
+	t.Run("unpinned warning", func(t *testing.T) {
+		repo := "user/repo"
+		pf := &plugins.PluginsFile{
+			Plugins: []plugins.Plugin{
+				{Name: "tts", Repo: repo, Unpinned: true},
+			},
+		}
+		if err := plugins.SavePlugins(home, pf); err != nil {
+			t.Fatal(err)
+		}
+		// Stub the binary
+		binPath := plugins.BinaryPath(home, repo)
+		if err := os.MkdirAll(filepath.Dir(binPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(binPath, []byte("stub"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		results := checkInstalledPlugins(home)
+		if len(results) != 1 || results[0].Status != "warn" {
+			t.Errorf("got %+v, want 1 warn result", results)
+		}
+	})
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -73,12 +74,12 @@ func (c *StatsCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	if e.JSON {
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(e.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(report)
 	}
 
-	return renderText(os.Stdout, report, c.Cold, c.Full, now)
+	return renderText(e.Stdout, report, c.Cold, c.Full, now)
 }
 
 // usageEntry is one timestamped resolve.
@@ -262,7 +263,7 @@ func coldAliases(registered map[string]struct{}, entries []usageEntry, cutoff ti
 	return cold
 }
 
-func renderText(out *os.File, r *statsReport, coldOnly, full bool, now time.Time) error {
+func renderText(out io.Writer, r *statsReport, coldOnly, full bool, now time.Time) error {
 	if coldOnly {
 		if len(r.Cold) == 0 {
 			fmt.Fprintln(out, "no cold aliases — every registered alias was used in the window")
@@ -314,7 +315,7 @@ func renderText(out *os.File, r *statsReport, coldOnly, full bool, now time.Time
 	return nil
 }
 
-func renderHourHistogram(out *os.File, h *[24]int) {
+func renderHourHistogram(out io.Writer, h *[24]int) {
 	max := 0
 	for _, v := range h {
 		if v > max {

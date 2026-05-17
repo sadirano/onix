@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -15,16 +16,17 @@ import (
 // It uses the shared resolver which combines fast byte-scanning with
 // a slow-path fallback. Side effects like directory creation are
 // handled here at the command layer.
-func fastResolve(home, name string, noPrompt bool) error {
-	prompter := promptDestination
-	selector := promptSelection
-	if noPrompt {
-		// --no-prompt means truly no prompts: don't ask for a destination
-		// AND don't run the did-you-mean selector. Otherwise the cmd
-		// wrapper's `for /f` capture would silently auto-pick a close
-		// match and cd into the wrong directory.
-		prompter = nil
-		selector = nil
+func fastResolve(home, name string, noPrompt bool, stdout, stderr io.Writer, stdin io.Reader) error {
+	var prompter func(string) string
+	var selector func([]string) string
+
+	if !noPrompt {
+		prompter = func(name string) string {
+			return promptDestination(name, stderr, stdin)
+		}
+		selector = func(options []string) string {
+			return promptSelection(options, stderr, stdin)
+		}
 	}
 	p, err := resolver.Resolve(home, name, prompter, selector)
 	if err != nil {
@@ -37,14 +39,14 @@ func fastResolve(home, name string, noPrompt bool) error {
 	// Record usage for frecency ranking.
 	_ = store.RecordUsage(home, name)
 
-	fmt.Println(p)
+	fmt.Fprintln(stdout, p)
 	return nil
 }
 
 // fastListNames prints alias names from aliases.toml, one per line, in
 // frecency order (with alphabetical fallback). Used by the PowerShell
 // tab-completer ($onixAliasCompleter) which fires every Tab press.
-func fastListNames(home string) error {
+func fastListNames(home string, stdout io.Writer) error {
 	data, err := os.ReadFile(store.AliasesPath(home))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -76,7 +78,7 @@ func fastListNames(home string) error {
 	})
 
 	for _, n := range names {
-		fmt.Println(n)
+		fmt.Fprintln(stdout, n)
 	}
 	return nil
 }

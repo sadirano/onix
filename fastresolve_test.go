@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -12,13 +13,13 @@ func TestFastListNames_Frecency(t *testing.T) {
 	home := t.TempDir()
 
 	// Register three aliases.
-	_ = (&AddCmd{Alias: "apple", Path: "C:/apple"}).Run(context.Background(), &env{Home: home})
-	_ = (&AddCmd{Alias: "banana", Path: "C:/banana"}).Run(context.Background(), &env{Home: home})
-	_ = (&AddCmd{Alias: "cherry", Path: "C:/cherry"}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "apple", Path: "C:/apple"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	_ = (&AddCmd{Alias: "banana", Path: "C:/banana"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	_ = (&AddCmd{Alias: "cherry", Path: "C:/cherry"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	// Initial sort should be alphabetical: apple, banana, cherry.
 	stdout, _, _ := captureStdio(func() error {
-		return fastListNames(home)
+		return fastListNames(home, os.Stdout)
 	})
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	if lines[0] != "apple" || lines[1] != "banana" || lines[2] != "cherry" {
@@ -32,7 +33,7 @@ func TestFastListNames_Frecency(t *testing.T) {
 
 	// New sort should be: banana, cherry, apple.
 	stdout, _, _ = captureStdio(func() error {
-		return fastListNames(home)
+		return fastListNames(home, os.Stdout)
 	})
 	lines = strings.Split(strings.TrimSpace(stdout), "\n")
 	if lines[0] != "banana" || lines[1] != "cherry" || lines[2] != "apple" {

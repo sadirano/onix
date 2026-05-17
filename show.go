@@ -113,7 +113,7 @@ func buildShowCommand(ctx context.Context, mode string, args []string) (*exec.Cm
 		if len(args) > 0 {
 			script += " " + strings.Join(psQuoteArgs(args), " ")
 		}
-		return exec.CommandContext(
+		return execCommandContext(
 			ctx,
 			"powershell",
 			"-NoProfile", "-NonInteractive", "-Command", script,
@@ -130,7 +130,7 @@ func buildShowCommand(ctx context.Context, mode string, args []string) (*exec.Cm
 			args = append([]string{"-la"}, args...)
 		}
 	}
-	return exec.CommandContext(ctx, bin, args...), nil
+	return execCommandContext(ctx, bin, args...), nil
 }
 
 // psQuoteArgs single-quotes any arg containing whitespace or PowerShell
@@ -163,6 +163,8 @@ func hasShortFlag(args []string, ch string) bool {
 	return false
 }
 
+var exit = os.Exit
+
 // passthroughExit propagates child exit codes verbatim so failures (e.g.
 // missing file) surface with the same status the user would see from
 // running Get-Content / cat directly.
@@ -171,7 +173,7 @@ func passthroughExit(err error) error {
 		return nil
 	}
 	if ee, ok := err.(*exec.ExitError); ok {
-		os.Exit(ee.ExitCode())
+		exit(ee.ExitCode())
 	}
 	return fmt.Errorf("show: %w", err)
 }

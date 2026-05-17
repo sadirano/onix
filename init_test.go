@@ -10,7 +10,7 @@ import (
 
 func TestInitCmd(t *testing.T) {
 	home := t.TempDir()
-	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home}); err != nil {
+	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
 		t.Fatalf("InitCmd.Run: %v", err)
 	}
 
@@ -45,7 +45,8 @@ func TestSourceFromBashLike(t *testing.T) {
 
 		snippetPath := filepath.Join(home, "shell", "onix.sh")
 		_, stdout, err := captureStdio(func() error {
-			return sourceFromBashLike(snippetPath)
+			e := &env{Home: t.TempDir(), Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
+			return sourceFromBashLike(e, snippetPath)
 		})
 		_ = stdout
 		if err != nil {
@@ -74,7 +75,8 @@ func TestSourceFromBashLike(t *testing.T) {
 		}
 
 		_, _, err := captureStdio(func() error {
-			return sourceFromBashLike(snippetPath)
+			e := &env{Home: t.TempDir(), Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
+			return sourceFromBashLike(e, snippetPath)
 		})
 		if err != nil {
 			t.Fatalf("sourceFromBashLike: %v", err)
@@ -94,14 +96,16 @@ func TestSourceFromBashLike(t *testing.T) {
 		t.Setenv("USERPROFILE", home)
 
 		snippetPath := filepath.Join(home, "shell", "onix.sh")
-		stdout, _, err := captureStdio(func() error {
-			return sourceFromBashLike(snippetPath)
+		stdout, stderr, err := captureStdio(func() error {
+			e := &env{Home: t.TempDir(), Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
+			return sourceFromBashLike(e, snippetPath)
 		})
 		if err != nil {
 			t.Fatalf("sourceFromBashLike: %v", err)
 		}
-		if !strings.Contains(stdout, "no .bashrc or .zshrc") {
-			t.Errorf("expected 'no .bashrc or .zshrc' notice, got: %q", stdout)
+		output := stdout + stderr
+		if !strings.Contains(output, "no .bashrc or .zshrc") {
+			t.Errorf("expected 'no .bashrc or .zshrc' notice, got: %q", output)
 		}
 	})
 }

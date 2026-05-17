@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -23,11 +22,11 @@ func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 	if len(sf.Contexts) == 0 {
-		fmt.Println("(no contexts defined — add [[contexts]] blocks to ~/.onix/segments.toml)")
-		fmt.Println("run: onix --edit segments.toml")
+		fmt.Fprintln(e.Stdout, "(no contexts defined — add [[contexts]] blocks to ~/.onix/segments.toml)")
+		fmt.Fprintln(e.Stdout, "run: onix --edit segments.toml")
 		return nil
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "SEGMENT\tENV\tEXEC")
 	for _, cd := range sf.Contexts {
 		envKeys := make([]string, 0, len(cd.Env))

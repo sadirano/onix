@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,8 +17,8 @@ import (
 // The prompt is written to stderr so callers that capture stdout via $() in
 // bash or Tee-Object in PowerShell don't end up with the prompt text mixed
 // into their captured value.
-func readLine(prompt string) (string, bool) {
-	fmt.Fprint(os.Stderr, prompt)
+func readLine(prompt string, stderr io.Writer, stdin io.Reader) (string, bool) {
+	fmt.Fprint(stderr, prompt)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
@@ -29,13 +30,13 @@ func readLine(prompt string) (string, bool) {
 	}
 	ch := make(chan result, 1)
 	go func() {
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		line, err := bufio.NewReader(stdin).ReadString('\n')
 		ch <- result{line, err}
 	}()
 
 	select {
 	case <-sig:
-		fmt.Println()
+		fmt.Fprintln(stderr)
 		os.Exit(1)
 		return "", false
 	case r := <-ch:
@@ -48,8 +49,8 @@ func readLine(prompt string) (string, bool) {
 
 // promptDestination asks the user for a target path for an unknown alias.
 // Returns "" if the user cancels (Ctrl+C or empty input).
-func promptDestination(aliasName string) string {
-	line, ok := readLine(fmt.Sprintf("Destination for %q: ", aliasName))
+func promptDestination(aliasName string, stderr io.Writer, stdin io.Reader) string {
+	line, ok := readLine(fmt.Sprintf("Destination for %q: ", aliasName), stderr, stdin)
 	if !ok {
 		return ""
 	}
@@ -58,15 +59,15 @@ func promptDestination(aliasName string) string {
 
 // promptSelection presents a list of options and returns the selected one.
 // It auto-detects 'fzf' and falls back to a numeric list.
-func promptSelection(options []string) string {
+func promptSelection(options []string, stderr io.Writer, stdin io.Reader) string {
 	if len(options) == 0 {
 		return ""
 	}
 
 	// Try fzf first
 	if fzf, err := exec.LookPath("fzf"); err == nil {
-		cmd := exec.Command(fzf, "--header", "Did you mean:", "--reverse", "--height", "20%")
-		cmd.Stderr = os.Stderr
+		cmd := execCommand(fzf, "--header", "Did you mean:", "--reverse", "--height", "20%")
+		cmd.Stderr = stderr
 		cmd.Stdin = strings.NewReader(strings.Join(options, "\n"))
 		out, err := cmd.Output()
 		if err == nil {
@@ -78,12 +79,12 @@ func promptSelection(options []string) string {
 	}
 
 	// Fallback to numeric prompt
-	fmt.Fprintln(os.Stderr, "Did you mean:")
+	fmt.Fprintln(stderr, "Did you mean:")
 	for i, opt := range options {
-		fmt.Fprintf(os.Stderr, "  %d) %s\n", i+1, opt)
+		fmt.Fprintf(stderr, "  %d) %s\n", i+1, opt)
 	}
 
-	line, ok := readLine(fmt.Sprintf("Select [1-%d] or press Enter to cancel: ", len(options)))
+	line, ok := readLine(fmt.Sprintf("Select [1-%d] or press Enter to cancel: ", len(options)), stderr, stdin)
 	if !ok || line == "" {
 		return ""
 	}

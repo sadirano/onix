@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,8 +20,8 @@ import (
 	"github.com/sadirano/onix/internal/store"
 )
 
-func printJSON(v any) error {
-	enc := json.NewEncoder(os.Stdout)
+func printJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
@@ -91,8 +92,8 @@ func (c *AddCmd) Run(ctx context.Context, e *env) error {
 	// Human-readable confirmation goes to stderr so callers (the `o`
 	// shell wrapper, scripts) can capture the resolved path from stdout
 	// — same output contract as `onix resolve`.
-	fmt.Fprintf(os.Stderr, "registered %s -> %s\n", strings.ToLower(c.Alias), abs)
-	fmt.Println(abs)
+	fmt.Fprintf(e.Stderr, "registered %s -> %s\n", strings.ToLower(c.Alias), abs)
+	fmt.Fprintln(e.Stdout, abs)
 	return nil
 }
 
@@ -151,7 +152,7 @@ func (c *RemoveCmd) removeAlias(e *env) error {
 	if err := store.SaveStore(e.Home, s); err != nil {
 		return err
 	}
-	fmt.Printf("removed %s\n", strings.ToLower(c.Alias))
+	fmt.Fprintf(e.Stderr, "removed %s\n", strings.ToLower(c.Alias))
 	return nil
 }
 
@@ -197,9 +198,9 @@ func (c *RemoveCmd) deleteFiles(e *env) error {
 	}
 
 	if !c.Force {
-		fmt.Fprintf(os.Stderr, "Delete %d item(s) from %s? [y/N] ", len(targets), base)
+		fmt.Fprintf(e.Stderr, "Delete %d item(s) from %s? [y/N] ", len(targets), base)
 		var resp string
-		_, _ = fmt.Fscanln(os.Stdin, &resp)
+		_, _ = fmt.Fscanln(e.Stdin, &resp)
 		resp = strings.TrimSpace(strings.ToLower(resp))
 		if resp != "y" && resp != "yes" {
 			return fmt.Errorf("aborted")
@@ -216,7 +217,7 @@ func (c *RemoveCmd) deleteFiles(e *env) error {
 		if rmErr != nil {
 			return fmt.Errorf("delete %s: %w", t.display, rmErr)
 		}
-		fmt.Printf("deleted %s\n", t.display)
+		fmt.Fprintf(e.Stderr, "deleted %s\n", t.display)
 	}
 	return nil
 }
@@ -260,14 +261,14 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 				Subdirs:     a.Subdirs,
 			})
 		}
-		return printJSON(out)
+		return printJSON(e.Stdout, out)
 	}
 
 	if len(names) == 0 {
-		fmt.Println("no aliases registered (run: onix add <name> [path])")
+		fmt.Fprintln(e.Stdout, "no aliases registered (run: onix add <name> [path])")
 		return nil
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ALIAS\tPATH\tDESCRIPTION")
 	for _, n := range names {
 		a, _ := s.Lookup(n)
@@ -303,15 +304,18 @@ func (c *EditCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 	ed := resolveEditor()
+	if ed == "" {
+		return fmt.Errorf("no $EDITOR set and none of the standard editors (nvim, vim, code, nano, notepad) found on PATH")
+	}
 	args := c.Files
 	if len(args) == 0 {
 		args = []string{"."}
 	}
-	cmd := exec.CommandContext(ctx, ed, args...)
+	cmd := execCommandContext(ctx, ed, args...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = e.Stdout
+	cmd.Stderr = e.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("editor %s: %w", ed, err)
 	}
@@ -365,11 +369,11 @@ func (c *YankCmd) Run(ctx context.Context, e *env) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(target)
+	fmt.Fprintln(e.Stdout, target)
 	if err := copyToClipboard(target); err != nil {
 		// Non-fatal — we already printed the path so the user can copy it
 		// manually. Warn so they know the clipboard step didn't work.
-		fmt.Fprintf(os.Stderr, "warning: clipboard copy failed: %v\n", err)
+		fmt.Fprintf(e.Stderr, "warning: clipboard copy failed: %v\n", err)
 	}
 	return nil
 }
@@ -415,11 +419,11 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	if len(argv) == 0 {
 		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
 	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := execCommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = e.Stdout
+	cmd.Stderr = e.Stderr
 	if err := cmd.Run(); err != nil {
 		// Propagate child exit codes verbatim. Without this a `go test`
 		// failure inside `onix run` would surface as a generic exit 1.
@@ -477,11 +481,11 @@ func (c *ExecCmd) Run(ctx context.Context, e *env) error {
 		return fmt.Errorf("action %q produced empty argv", actionName)
 	}
 
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := execCommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = e.Stdout
+	cmd.Stderr = e.Stderr
 	if err := cmd.Run(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
 			os.Exit(ee.ExitCode())
@@ -518,16 +522,16 @@ func (c *SyncCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 	if runtime.GOOS == "windows" {
-		fmt.Printf("regenerated %s and wrappers in %s\n", snippet.PwshPath(e.Home), filepath.Join(e.Home, "bin"))
+		fmt.Fprintf(e.Stderr, "regenerated %s and wrappers in %s\n", snippet.PwshPath(e.Home), filepath.Join(e.Home, "bin"))
 	} else {
-		fmt.Printf("regenerated %s\n", snippet.BashPath(e.Home))
+		fmt.Fprintf(e.Stderr, "regenerated %s\n", snippet.BashPath(e.Home))
 	}
 	if len(cfg.Actions) > 0 {
 		names := make([]string, 0, len(cfg.Actions))
 		for _, a := range cfg.Actions {
 			names = append(names, a.Name)
 		}
-		fmt.Printf("custom actions: %s\n", strings.Join(names, " "))
+		fmt.Fprintf(e.Stderr, "custom actions: %s\n", strings.Join(names, " "))
 	}
 	if len(pf.Plugins) > 0 {
 		names := make([]string, 0, len(pf.Plugins))
@@ -539,9 +543,9 @@ func (c *SyncCmd) Run(ctx context.Context, e *env) error {
 				names = append(names, entry.EffectiveCmd())
 			}
 		}
-		fmt.Printf("plugin wrappers: %s\n", strings.Join(names, " "))
+		fmt.Fprintf(e.Stderr, "plugin wrappers: %s\n", strings.Join(names, " "))
 	}
-	fmt.Println("re-source $PROFILE (or restart PowerShell) to pick up changes")
+	fmt.Fprintln(e.Stderr, "re-source $PROFILE (or restart PowerShell) to pick up changes")
 	return nil
 }
 
@@ -557,14 +561,18 @@ func resolveAliasPath(e *env, name string) (string, error) {
 }
 
 func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
-	prompter := promptDestination
-	selector := promptSelection
-	if noPrompt {
-		// --no-prompt disables both the destination prompt and the
-		// did-you-mean selector. See fastResolve for the rationale.
-		prompter = nil
-		selector = nil
+	var prompter func(string) string
+	var selector func([]string) string
+
+	if !noPrompt {
+		prompter = func(name string) string {
+			return promptDestination(name, e.Stderr, e.Stdin)
+		}
+		selector = func(options []string) string {
+			return promptSelection(options, e.Stderr, e.Stdin)
+		}
 	}
+
 	p, err := resolver.Resolve(e.Home, name, prompter, selector)
 	if err != nil {
 		return "", err
@@ -580,13 +588,20 @@ func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 }
 
 // resolveEditor returns the editor to invoke for `onix edit`.
-// Lookup order: $EDITOR, then nvim. Trim so a trailing newline in the env
-// var (which happens with naive bash exports) doesn't make exec fail.
+// Lookup order: $EDITOR, $VISUAL, then common binaries.
 func resolveEditor() string {
 	if e := strings.TrimSpace(os.Getenv("EDITOR")); e != "" {
 		return e
 	}
-	return "nvim"
+	if e := strings.TrimSpace(os.Getenv("VISUAL")); e != "" {
+		return e
+	}
+	for _, e := range []string{"nvim", "vim", "code", "nano", "notepad"} {
+		if _, err := exec.LookPath(e); err == nil {
+			return e
+		}
+	}
+	return ""
 }
 
 // copyToClipboard writes s to the system clipboard. We use atotto/clipboard

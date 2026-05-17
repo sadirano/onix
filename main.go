@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"runtime"
@@ -35,13 +36,17 @@ type pluginCLI struct {
 }
 
 func main() {
+	os.Exit(run(os.Args, os.Stdin, os.Stdout, os.Stderr))
+}
+
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int) {
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Fprintf(os.Stderr, "\n[onix] CRASH: encountered an unexpected error\n")
-			fmt.Fprintf(os.Stderr, "Please report this issue at https://github.com/sadirano/issues/new\n\n")
+			fmt.Fprintf(stderr, "\n[onix] CRASH: encountered an unexpected error\n")
+			fmt.Fprintf(stderr, "Please report this issue at https://github.com/sadirano/issues/new\n\n")
 
 			stack := make([]byte, 1024)
 			for {
@@ -53,73 +58,89 @@ func main() {
 				stack = make([]byte, len(stack)*2)
 			}
 
-			fmt.Fprintf(os.Stderr, "```markdown\n")
-			fmt.Fprintf(os.Stderr, "### Environment\n")
-			fmt.Fprintf(os.Stderr, "- Version: %s\n", resolveBuildVersion())
+			fmt.Fprintf(stderr, "```markdown\n")
+			fmt.Fprintf(stderr, "### Environment\n")
+			fmt.Fprintf(stderr, "- Version: %s\n", resolveBuildVersion())
 			if commit := resolveBuildCommit(); commit != "" {
-				fmt.Fprintf(os.Stderr, "- Commit:  %s\n", commit)
+				fmt.Fprintf(stderr, "- Commit:  %s\n", commit)
 			}
-			fmt.Fprintf(os.Stderr, "- GOOS:    %s\n", runtime.GOOS)
-			fmt.Fprintf(os.Stderr, "- GOARCH:  %s\n", runtime.GOARCH)
-			fmt.Fprintf(os.Stderr, "- Runtime: %s\n\n", runtime.Version())
-			fmt.Fprintf(os.Stderr, "### Panic\n%v\n\n", r)
-			fmt.Fprintf(os.Stderr, "### Stack Trace\n%s\n", stack)
-			fmt.Fprintf(os.Stderr, "```\n")
+			fmt.Fprintf(stderr, "- GOOS:    %s\n", runtime.GOOS)
+			fmt.Fprintf(stderr, "- GOARCH:  %s\n", runtime.GOARCH)
+			fmt.Fprintf(stderr, "- Runtime: %s\n\n", runtime.Version())
+			fmt.Fprintf(stderr, "### Panic\n%v\n\n", r)
+			fmt.Fprintf(stderr, "### Stack Trace\n%s\n", stack)
+			fmt.Fprintf(stderr, "```\n")
 
-			os.Exit(1)
+			exitCode = 1
 		}
 	}()
 
 	// Argv preprocessing: rewrite multi-char short flags (-ls -> --list,
 	// -rm -> --remove) so the dispatcher only has to deal with canonical
 	// long forms. Single-rune shorts pass through.
-	os.Args = append([]string{os.Args[0]}, preprocessArgs(os.Args[1:])...)
+	processedArgs := append([]string{args[0]}, preprocessArgs(args[1:])...)
 
 	// Resolve onix home up front. Every code path needs it.
 	home, err := resolveHome(os.Getenv("ONIX_HOME"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "onix: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "onix: %v\n", err)
+		return 1
 	}
 	e := &env{
-		Home: home,
-		JSON: hasFlag(os.Args[1:], "--json", "-j"),
+		Home:   home,
+		JSON:   hasFlag(processedArgs[1:], "--json", "-j"),
+		Stdout: stdout,
+		Stderr: stderr,
+		Stdin:  stdin,
 	}
 
 	// Plugin management is the only subcommand-shaped invocation. Route it
 	// to kong; everything else flows through the alias-flag dispatcher.
-	if len(os.Args) >= 2 && os.Args[1] == "plugin" {
-		runPluginKong(sigCtx, e)
-		return
+	if len(processedArgs) >= 2 && processedArgs[1] == "plugin" {
+		return runPluginKong(sigCtx, e, processedArgs, stdout, stderr)
 	}
 
 	// Dispatch the new alias-flag grammar.
-	if err := dispatchNewGrammar(sigCtx, e, os.Args[1:]); err != nil {
+	if err := dispatchNewGrammar(sigCtx, e, processedArgs[1:], stdout, stderr); err != nil {
 		if !errors.Is(err, resolver.ErrCancelled) {
-			fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+			fmt.Fprintf(stderr, "onix: %v\n", err)
 		}
-		os.Exit(1)
+		return 1
 	}
+
+	return 0
 }
 
 // runPluginKong runs kong against the plugin subtree only. Splitting this
 // out keeps main() small and makes it obvious that kong's scope is now
 // limited to plugin management.
-func runPluginKong(sigCtx context.Context, e *env) {
+func runPluginKong(sigCtx context.Context, e *env, args []string, stdout, stderr io.Writer) int {
 	var cli pluginCLI
-	ctx := kong.Parse(
+	parser, err := kong.New(
 		&cli,
 		kong.Name("onix"),
 		kong.Description("Install and manage onix plugins."),
 		kong.UsageOnError(),
 		kong.ConfigureHelp(kong.HelpOptions{Compact: true}),
+		kong.Writers(stdout, stderr),
 	)
+	if err != nil {
+		fmt.Fprintf(stderr, "onix: %v\n", err)
+		return 1
+	}
+
+	ctx, err := parser.Parse(args[1:])
+	if err != nil {
+		// kong.UsageOnError() already printed the error to stderr
+		return 1
+	}
+
 	// Allow --config-dir to override the resolved home for this run.
 	if cli.ConfigDir != "" {
 		home, err := resolveHome(cli.ConfigDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "onix: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(stderr, "onix: %v\n", err)
+			return 1
 		}
 		e.Home = home
 	}
@@ -131,10 +152,11 @@ func runPluginKong(sigCtx context.Context, e *env) {
 
 	if err := ctx.Run(); err != nil {
 		if !errors.Is(err, resolver.ErrCancelled) {
-			fmt.Fprintf(os.Stderr, "onix: %v\n", err)
+			fmt.Fprintf(stderr, "onix: %v\n", err)
 		}
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // startsWithDash is the cheap flag-vs-positional check used by the
@@ -161,6 +183,9 @@ func hasFlag(args []string, names ...string) bool {
 // Keep it small — anything that's really per-command belongs on that
 // command's struct as a flag.
 type env struct {
-	Home string // absolute path to the onix config directory (~/.onix by default)
-	JSON bool   // whether to output JSON
+	Home   string    // absolute path to the onix config directory (~/.onix by default)
+	JSON   bool      // whether to output JSON
+	Stdout io.Writer // captured for testing
+	Stderr io.Writer // captured for testing
+	Stdin  io.Reader // captured for testing
 }

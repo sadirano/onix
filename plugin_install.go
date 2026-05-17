@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -29,7 +29,7 @@ func gitClone(repo, dir string) error {
 		return fmt.Errorf("create %s: %w", filepath.Dir(dir), err)
 	}
 	url := resolveRepoURL(repo)
-	cmd := exec.Command("git", "clone", "--depth=50", "--no-single-branch", url, dir)
+	cmd := execCommand("git", "clone", "--depth=50", "--no-single-branch", url, dir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -71,7 +71,7 @@ func gitCheckout(dir, ref string) error {
 	if ref == "" {
 		// Default branch follow. Resolve HEAD's symbolic ref and fast-forward
 		// to whatever origin has. Avoids hard-coding "main" vs "master".
-		out, err := exec.Command("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
+		out, err := execCommand("git", "-C", dir, "symbolic-ref", "--short", "HEAD").Output()
 		if err != nil {
 			return fmt.Errorf("resolve default branch: %w", err)
 		}
@@ -92,7 +92,7 @@ func gitCheckout(dir, ref string) error {
 // (in that case we record the SHA we *built* even though we won't enforce
 // it on subsequent updates).
 func gitHeadSHA(dir string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	out, err := execCommand("git", "-C", dir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("rev-parse HEAD: %w", err)
 	}
@@ -102,7 +102,7 @@ func gitHeadSHA(dir string) (string, error) {
 // gitHeadMessage returns the first line of HEAD's commit message. Short
 // enough to fit in the confirmation block without overwhelming.
 func gitHeadMessage(dir string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "log", "-1", "--pretty=%s").Output()
+	out, err := execCommand("git", "-C", dir, "log", "-1", "--pretty=%s").Output()
 	if err != nil {
 		return "", fmt.Errorf("read commit message: %w", err)
 	}
@@ -114,7 +114,7 @@ func gitHeadMessage(dir string) (string, error) {
 // strictly an admin path, so we don't worry about buffering.
 func runGit(dir string, args ...string) error {
 	full := append([]string{"-C", dir}, args...)
-	cmd := exec.Command("git", full...)
+	cmd := execCommand("git", full...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -130,7 +130,7 @@ func buildPlugin(srcDir, binaryName string) error {
 	if _, err := os.Stat(filepath.Join(srcDir, "go.mod")); err != nil {
 		return fmt.Errorf("no go.mod in %s — only Go plugins are supported", srcDir)
 	}
-	cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", binaryName, ".")
+	cmd := execCommand("go", "build", "-trimpath", "-ldflags=-s -w", "-o", binaryName, ".")
 	cmd.Dir = srcDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -173,36 +173,36 @@ func readPluginManifest(srcDir string) ([]plugins.PluginEntry, error) {
 // true when the user confirms; false when they decline or hit Ctrl+C.
 // We accept `--yes` from the caller to skip this entirely — that's the
 // path automation should take.
-func confirmInstall(repo, name, sha, message string, entries []plugins.PluginEntry, unpinned bool) bool {
-	fmt.Println()
-	fmt.Printf("  repo:    https://github.com/%s\n", repo)
-	fmt.Printf("  wrapper: %s\n", name)
+func confirmInstall(stdin io.Reader, stdout io.Writer, repo, name, sha, message string, entries []plugins.PluginEntry, unpinned bool) bool {
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "  repo:    https://github.com/%s\n", repo)
+	fmt.Fprintf(stdout, "  wrapper: %s\n", name)
 	if unpinned {
 		// Go 1.21+'s builtin min(int, int) gives us the SHA prefix without
 		// importing a helper or risking an out-of-range slice on a short
 		// `git rev-parse` output.
-		fmt.Printf("  pin:     UNPINNED (tracks default branch — %s)\n", sha[:min(12, len(sha))])
+		fmt.Fprintf(stdout, "  pin:     UNPINNED (tracks default branch — %s)\n", sha[:min(12, len(sha))])
 	} else {
-		fmt.Printf("  sha:     %s\n", sha)
+		fmt.Fprintf(stdout, "  sha:     %s\n", sha)
 	}
 	if message != "" {
-		fmt.Printf("  commit:  %s\n", message)
+		fmt.Fprintf(stdout, "  commit:  %s\n", message)
 	}
 	if len(entries) > 0 {
 		cmds := make([]string, len(entries))
 		for i, e := range entries {
 			cmds[i] = e.EffectiveCmd()
 		}
-		fmt.Printf("  entries: %s\n", strings.Join(cmds, ", "))
+		fmt.Fprintf(stdout, "  entries: %s\n", strings.Join(cmds, ", "))
 	}
-	fmt.Println()
+	fmt.Fprintln(stdout)
 	if unpinned {
-		fmt.Println("  Warning: unpinned plugins rebuild from the default branch on every `onix plugin update`")
-		fmt.Println("  without re-prompting. Pin to a SHA for security-sensitive use.")
-		fmt.Println()
+		fmt.Fprintln(stdout, "  Warning: unpinned plugins rebuild from the default branch on every `onix plugin update`")
+		fmt.Fprintln(stdout, "  without re-prompting. Pin to a SHA for security-sensitive use.")
+		fmt.Fprintln(stdout)
 	}
-	fmt.Print("  Build and install? [y/N]: ")
-	reader := bufio.NewReader(os.Stdin)
+	fmt.Fprint(stdout, "  Build and install? [y/N]: ")
+	reader := bufio.NewReader(stdin)
 	ans, err := reader.ReadString('\n')
 	if err != nil {
 		return false

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"runtime"
 	rdebug "runtime/debug"
 )
@@ -30,17 +29,17 @@ func (c *VersionCmd) Run(ctx context.Context, e *env) error {
 			Go     string `json:"go"`
 			OSArch string `json:"os_arch"`
 		}{v, commit, runtime.Version(), fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)}
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(e.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(res)
 	}
 
-	fmt.Printf("onix:    %s\n", v)
+	fmt.Fprintf(e.Stdout, "onix:    %s\n", v)
 	if commit != "" {
-		fmt.Printf("commit:  %s\n", commit)
+		fmt.Fprintf(e.Stdout, "commit:  %s\n", commit)
 	}
-	fmt.Printf("go:      %s\n", runtime.Version())
-	fmt.Printf("os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+	fmt.Fprintf(e.Stdout, "go:      %s\n", runtime.Version())
+	fmt.Fprintf(e.Stdout, "os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	return nil
 }
 

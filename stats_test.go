@@ -35,7 +35,7 @@ func writeUsageLog(t *testing.T, home string, entries []struct {
 func TestStatsCmd_Empty(t *testing.T) {
 	home := t.TempDir()
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Top: 10}).Run(context.Background(), &env{Home: home})
+		return (&StatsCmd{Top: 10}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatalf("StatsCmd.Run: %v", err)
@@ -59,7 +59,7 @@ func TestStatsCmd_Default(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Top: 10}).Run(context.Background(), &env{Home: home})
+		return (&StatsCmd{Top: 10}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatalf("StatsCmd.Run: %v", err)
@@ -87,7 +87,7 @@ func TestStatsCmd_TopOrdering(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Top: 10}).Run(context.Background(), &env{Home: home})
+		return (&StatsCmd{Top: 10}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func TestStatsCmd_JSON(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Top: 10}).Run(context.Background(), &env{Home: home, JSON: true})
+		return (&StatsCmd{Top: 10}).Run(context.Background(), &env{Home: home, JSON: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestStatsCmd_SinceFilter(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Top: 10, Since: "24h"}).Run(context.Background(), &env{Home: home})
+		return (&StatsCmd{Top: 10, Since: "24h"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ func TestStatsCmd_ColdView(t *testing.T) {
 	home := t.TempDir()
 	// Register three aliases.
 	for _, name := range []string{"used", "neglected", "verydead"} {
-		_ = (&AddCmd{Alias: name, Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+		_ = (&AddCmd{Alias: name, Path: t.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	}
 	// Only one of them shows recent usage.
 	writeUsageLog(t, home, []struct {
@@ -171,7 +171,7 @@ func TestStatsCmd_ColdView(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Cold: true}).Run(context.Background(), &env{Home: home})
+		return (&StatsCmd{Cold: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +186,7 @@ func TestStatsCmd_ColdView(t *testing.T) {
 
 func TestStatsCmd_ColdView_AllUsed(t *testing.T) {
 	home := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	writeUsageLog(t, home, []struct {
 		ago   time.Duration
 		alias string
@@ -195,7 +195,7 @@ func TestStatsCmd_ColdView_AllUsed(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Cold: true}).Run(context.Background(), &env{Home: home})
+		return (&StatsCmd{Cold: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +207,7 @@ func TestStatsCmd_ColdView_AllUsed(t *testing.T) {
 
 func TestStatsCmd_ColdView_SegmentWarmsBase(t *testing.T) {
 	home := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	// Only segmented use: `docs@acme`. Should still warm `acme`.
 	writeUsageLog(t, home, []struct {
 		ago   time.Duration
@@ -217,7 +217,7 @@ func TestStatsCmd_ColdView_SegmentWarmsBase(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Cold: true}).Run(context.Background(), &env{Home: home})
+		return (&StatsCmd{Cold: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -229,8 +229,8 @@ func TestStatsCmd_ColdView_SegmentWarmsBase(t *testing.T) {
 
 func TestStatsCmd_Full(t *testing.T) {
 	home := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
-	_ = (&AddCmd{Alias: "cold", Path: t.TempDir()}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: t.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	_ = (&AddCmd{Alias: "cold", Path: t.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	writeUsageLog(t, home, []struct {
 		ago   time.Duration
 		alias string
@@ -240,7 +240,7 @@ func TestStatsCmd_Full(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&StatsCmd{Top: 10, Full: true}).Run(context.Background(), &env{Home: home})
+		return (&StatsCmd{Top: 10, Full: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)

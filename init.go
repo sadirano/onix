@@ -74,23 +74,23 @@ func (c *InitCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 
-	fmt.Printf("onix home: %s\n", e.Home)
-	fmt.Printf("shell snippet: %s\n", snippet.PwshPath(e.Home))
+	fmt.Fprintf(e.Stderr, "onix home: %s\n", e.Home)
+	fmt.Fprintf(e.Stderr, "shell snippet: %s\n", snippet.PwshPath(e.Home))
 
 	// 4. $PROFILE wiring.
 	if c.SkipProfile {
-		fmt.Println("skipped $PROFILE update (re-run without --skip-profile to enable)")
+		fmt.Fprintln(e.Stderr, "skipped $PROFILE update (re-run without --skip-profile to enable)")
 		return nil
 	}
 	if runtime.GOOS != "windows" {
-		return sourceFromBashLike(snippet.BashPath(e.Home))
+		return sourceFromBashLike(e, snippet.BashPath(e.Home))
 	}
 
-	return sourceFromProfile(snippet.PwshPath(e.Home))
+	return sourceFromProfile(e, snippet.PwshPath(e.Home))
 }
 
 // sourceFromBashLike appends a source line to .bashrc and/or .zshrc.
-func sourceFromBashLike(snippet string) error {
+func sourceFromBashLike(e *env, snippet string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -116,13 +116,13 @@ func sourceFromBashLike(snippet string) error {
 
 		existing, _ := os.ReadFile(p)
 		if strings.Contains(string(existing), snippet) {
-			fmt.Printf("%s already sources %s\n", f, snippet)
+			fmt.Fprintf(e.Stderr, "%s already sources %s\n", f, snippet)
 			continue
 		}
 
 		file, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0o644)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not open %s: %v\n", p, err)
+			fmt.Fprintf(e.Stderr, "warning: could not open %s: %v\n", p, err)
 			continue
 		}
 		if _, err := fmt.Fprintf(file, "\n# Added by 'onix init'\n%s\n", sourceLine); err != nil {
@@ -134,10 +134,10 @@ func sourceFromBashLike(snippet string) error {
 	}
 
 	if len(updated) > 0 {
-		fmt.Printf("updated: %s\n", strings.Join(updated, ", "))
-		fmt.Println("restart your shell (or source the updated file) to activate o/n/s/r/y")
+		fmt.Fprintf(e.Stderr, "updated: %s\n", strings.Join(updated, ", "))
+		fmt.Fprintln(e.Stderr, "restart your shell (or source the updated file) to activate o/n/s/r/y")
 	} else if !found {
-		fmt.Printf("no .bashrc or .zshrc found — add this to your shell rc manually:\n  %s\n", sourceLine)
+		fmt.Fprintf(e.Stderr, "no .bashrc or .zshrc found — add this to your shell rc manually:\n  %s\n", sourceLine)
 	}
 	return nil
 }
@@ -146,7 +146,7 @@ func sourceFromBashLike(snippet string) error {
 // if it's not already present. We invoke powershell.exe to read $PROFILE
 // rather than editing the registry — modifying user-owned config files is
 // much less invasive than the v1 PATH-mutation flow.
-func sourceFromProfile(snippet string) error {
+func sourceFromProfile(e *env, snippet string) error {
 	out, err := exec.Command(pwshBin(),
 		"-NoProfile", "-NonInteractive",
 		"-Command", "$PROFILE.CurrentUserAllHosts").Output()
@@ -170,7 +170,7 @@ func sourceFromProfile(snippet string) error {
 	// branch instead of getting a duplicate line.
 	existing, _ := os.ReadFile(profilePath)
 	if strings.Contains(string(existing), snippet) {
-		fmt.Printf("$PROFILE already sources %s\n", snippet)
+		fmt.Fprintf(e.Stderr, "$PROFILE already sources %s\n", snippet)
 		return nil
 	}
 
@@ -188,7 +188,7 @@ func sourceFromProfile(snippet string) error {
 	if _, err := fmt.Fprintf(f, "\n# Added by 'onix init'\n%s\n", sourceLine); err != nil {
 		return fmt.Errorf("append to $PROFILE: %w", err)
 	}
-	fmt.Printf("updated $PROFILE: %s\n", profilePath)
-	fmt.Println("restart PowerShell (or run: . $PROFILE) to activate o/n/s/r/y and custom actions")
+	fmt.Fprintf(e.Stderr, "updated $PROFILE: %s\n", profilePath)
+	fmt.Fprintln(e.Stderr, "restart PowerShell (or run: . $PROFILE) to activate o/n/s/r/y and custom actions")
 	return nil
 }

@@ -74,7 +74,7 @@ func TestPluginListCmd(t *testing.T) {
 	}
 
 	stdout, _, err := captureStdio(func() error {
-		return (&PluginListCmd{}).Run(context.Background(), &env{Home: home})
+		return (&PluginListCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +86,7 @@ func TestPluginListCmd(t *testing.T) {
 
 	// JSON mode
 	stdout, _, err = captureStdio(func() error {
-		return (&PluginListCmd{}).Run(context.Background(), &env{Home: home, JSON: true})
+		return (&PluginListCmd{}).Run(context.Background(), &env{Home: home, JSON: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -109,13 +109,13 @@ func TestPluginRemoveCmd(t *testing.T) {
 	}
 
 	// Remove missing plugin
-	err := (&PluginRemoveCmd{Name: "nope"}).Run(context.Background(), &env{Home: home})
+	err := (&PluginRemoveCmd{Name: "nope"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil {
 		t.Error("expected error removing missing plugin, got nil")
 	}
 
 	// Remove existing plugin
-	err = (&PluginRemoveCmd{Name: "tts"}).Run(context.Background(), &env{Home: home})
+	err = (&PluginRemoveCmd{Name: "tts"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err != nil {
 		t.Fatalf("PluginRemoveCmd.Run: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestPluginAddCmd_Local(t *testing.T) {
 		SHA:  sha,
 		Yes:  true,
 	}
-	if err := cmd.Run(context.Background(), &env{Home: home}); err != nil {
+	if err := cmd.Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
 		t.Fatalf("PluginAddCmd.Run: %v", err)
 	}
 

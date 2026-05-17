@@ -60,12 +60,13 @@ func TestE2E_BasicFlow(t *testing.T) {
 
 	// 1. Init
 	t.Run("init", func(t *testing.T) {
-		out, _, err := r.run("--init", "--skip-profile")
+		stdout, stderr, err := r.run("--init", "--skip-profile")
 		if err != nil {
 			t.Fatalf("init failed: %v", err)
 		}
-		if !strings.Contains(out, "onix home") {
-			t.Errorf("unexpected init output: %q", out)
+		output := stdout + stderr
+		if !strings.Contains(output, "onix home") {
+			t.Errorf("unexpected init output: %q", output)
 		}
 	})
 

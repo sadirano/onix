@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
@@ -10,9 +11,9 @@ func TestGrepCmd_NotFound(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	home := t.TempDir()
 	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
-	err := (&GrepCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home})
+	err := (&GrepCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil {
 		t.Fatal("expected error when rg/fzf missing, got nil")
 	}
@@ -25,9 +26,9 @@ func TestFindCmd_NotFound(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	home := t.TempDir()
 	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
-	err := (&FindCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home})
+	err := (&FindCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil {
 		t.Fatal("expected error when fd/fzf missing, got nil")
 	}
@@ -37,14 +38,14 @@ func TestFindCmd_NotFound(t *testing.T) {
 }
 
 func TestGrepCmd_TooFewArgs(t *testing.T) {
-	err := (&GrepCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir()})
+	err := (&GrepCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir(), Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil || !strings.Contains(err.Error(), "usage") {
 		t.Errorf("expected usage error, got: %v", err)
 	}
 }
 
 func TestFindCmd_TooFewArgs(t *testing.T) {
-	err := (&FindCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir()})
+	err := (&FindCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir(), Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil || !strings.Contains(err.Error(), "usage") {
 		t.Errorf("expected usage error, got: %v", err)
 	}

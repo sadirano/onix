@@ -24,7 +24,7 @@ exec    = ["make", "dev"]
 	}
 
 	stdout, _, err := captureStdio(func() error {
-		return (&ContextListCmd{}).Run(context.Background(), &env{Home: home})
+		return (&ContextListCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatal(err)

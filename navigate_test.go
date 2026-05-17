@@ -37,7 +37,7 @@ func TestReadLine(t *testing.T) {
 		var ok bool
 		withStdin(t, "hello world\n", func() {
 			_, stderr, _ := captureStdio(func() error {
-				got, ok = readLine("prompt> ")
+				got, ok = readLine("prompt> ", os.Stderr, os.Stdin)
 				return nil
 			})
 			if !strings.Contains(stderr, "prompt>") {
@@ -56,7 +56,7 @@ func TestReadLine(t *testing.T) {
 		var ok bool
 		withStdin(t, "", func() {
 			_, _, _ = captureStdio(func() error {
-				_, ok = readLine("> ")
+				_, ok = readLine("> ", os.Stderr, os.Stdin)
 				return nil
 			})
 		})
@@ -71,7 +71,7 @@ func TestPromptDestination(t *testing.T) {
 		var got string
 		withStdin(t, "/some/path\n", func() {
 			_, _, _ = captureStdio(func() error {
-				got = promptDestination("foo")
+				got = promptDestination("foo", os.Stderr, os.Stdin)
 				return nil
 			})
 		})
@@ -84,7 +84,7 @@ func TestPromptDestination(t *testing.T) {
 		var got string
 		withStdin(t, "", func() {
 			_, _, _ = captureStdio(func() error {
-				got = promptDestination("foo")
+				got = promptDestination("foo", os.Stderr, os.Stdin)
 				return nil
 			})
 		})
@@ -99,7 +99,7 @@ func TestPromptSelection(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
 	t.Run("empty options returns empty", func(t *testing.T) {
-		if got := promptSelection(nil); got != "" {
+		if got := promptSelection(nil, os.Stderr, os.Stdin); got != "" {
 			t.Errorf("got %q, want empty for nil options", got)
 		}
 	})
@@ -108,7 +108,7 @@ func TestPromptSelection(t *testing.T) {
 		var got string
 		withStdin(t, "2\n", func() {
 			_, _, _ = captureStdio(func() error {
-				got = promptSelection([]string{"first", "second", "third"})
+				got = promptSelection([]string{"first", "second", "third"}, os.Stderr, os.Stdin)
 				return nil
 			})
 		})
@@ -121,7 +121,7 @@ func TestPromptSelection(t *testing.T) {
 		var got string
 		withStdin(t, "\n", func() {
 			_, _, _ = captureStdio(func() error {
-				got = promptSelection([]string{"a", "b"})
+				got = promptSelection([]string{"a", "b"}, os.Stderr, os.Stdin)
 				return nil
 			})
 		})
@@ -134,7 +134,7 @@ func TestPromptSelection(t *testing.T) {
 		var got string
 		withStdin(t, "99\n", func() {
 			_, _, _ = captureStdio(func() error {
-				got = promptSelection([]string{"a", "b"})
+				got = promptSelection([]string{"a", "b"}, os.Stderr, os.Stdin)
 				return nil
 			})
 		})
@@ -147,7 +147,7 @@ func TestPromptSelection(t *testing.T) {
 		var got string
 		withStdin(t, "notanumber\n", func() {
 			_, _, _ = captureStdio(func() error {
-				got = promptSelection([]string{"a", "b"})
+				got = promptSelection([]string{"a", "b"}, os.Stderr, os.Stdin)
 				return nil
 			})
 		})
