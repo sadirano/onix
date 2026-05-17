@@ -160,7 +160,7 @@ const bashFF = `%s() {
 
 const pwshCompleter = `$onixAliasCompleter = {
     param($wordToComplete, $commandAst, $cursorPosition)
-    @(& $global:onixExe list-names 2>$null) |
+    @(& $global:onixExe --list-names 2>$null) |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object {
             [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
@@ -172,7 +172,7 @@ const bashCompleter = `if [ -n "$BASH_VERSION" ]; then
     _onix_completer() {
         local cur=${COMP_WORDS[COMP_CWORD]}
         local names
-        mapfile -t names < <("$ONIX_EXE" list-names 2>/dev/null)
+        mapfile -t names < <("$ONIX_EXE" --list-names 2>/dev/null)
         COMPREPLY=( $(compgen -W "${names[*]}" -- "$cur") )
     }
 elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
@@ -180,7 +180,7 @@ elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
         local line names=()
         while IFS= read -r line; do
             names+=("$line")
-        done < <("$ONIX_EXE" list-names 2>/dev/null)
+        done < <("$ONIX_EXE" --list-names 2>/dev/null)
         compadd -- "${names[@]}"
     }
 fi
@@ -237,25 +237,25 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	_ = os.MkdirAll(binDir, 0o755)
 
 	writeOCmdWrapper(binDir, exe, s["o"])
-	writeCmdWrapper(binDir, exe, s["n"], "edit")
-	writeCmdWrapper(binDir, exe, s["s"], "explore")
-	writeCmdWrapper(binDir, exe, s["y"], "yank")
-	writeCmdWrapper(binDir, exe, s["r"], "run")
-	writeCmdWrapper(binDir, exe, s["sg"], "grep")
-	writeCmdWrapper(binDir, exe, s["ff"], "find")
+	writeAliasFlagWrapper(binDir, exe, s["n"], "--edit")
+	writeAliasFlagWrapper(binDir, exe, s["s"], "--explore")
+	writeAliasFlagWrapper(binDir, exe, s["y"], "--yank")
+	writeAliasFlagWrapper(binDir, exe, s["r"], "--run")
+	writeAliasFlagWrapper(binDir, exe, s["sg"], "--grep")
+	writeAliasFlagWrapper(binDir, exe, s["ff"], "--find")
 
 	for _, a := range actions {
 		writeActionFunction(&b, a)
-		writeCmdWrapper(binDir, exe, a.Name, "exec", a.Name)
+		writeAliasFlagWrapper(binDir, exe, a.Name, "--exec", a.Name)
 	}
 
 	for _, p := range plgs {
 		writePluginFunction(&b, p.Name, p.Name, "")
-		writeCmdWrapper(binDir, exe, p.Name, "plugin-exec", p.Name, "")
+		writeAliasFlagWrapper(binDir, exe, p.Name, "--plugin", p.Name)
 
 		for _, e := range p.Entries {
 			writePluginFunction(&b, e.EffectiveCmd(), p.Name, e.Name)
-			writeCmdWrapper(binDir, exe, e.EffectiveCmd(), "plugin-exec", p.Name, e.Name)
+			writeAliasFlagWrapper(binDir, exe, e.EffectiveCmd(), "--plugin", p.Name+":"+e.Name)
 		}
 	}
 
@@ -304,17 +304,28 @@ if %%0 == "%%~f0" cmd /k
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
-func writeCmdWrapper(binDir, exe, name string, args ...string) {
+// writeAliasFlagWrapper emits a .cmd shim that translates
+//
+//	<wrapperName> <alias> [args...]
+//
+// into the alias-flag invocation
+//
+//	<onixExe> <alias> <flag> [extras...] [args...]
+//
+// where `extras` is whatever fixed positionals the flag needs (e.g. an
+// action name for --exec, or a plugin spec for --plugin). The shim caps
+// passthrough at 8 trailing args (%2..%9), which fits every real-world
+// use of the wrappers — multi-arg invocations should call onix directly.
+func writeAliasFlagWrapper(binDir, exe, name, flag string, extras ...string) {
 	path := filepath.Join(binDir, name+".cmd")
-	var cmdArgs []string
-	for _, a := range args {
-		if a == "" {
-			cmdArgs = append(cmdArgs, `""`)
-		} else {
-			cmdArgs = append(cmdArgs, a)
-		}
+	extraStr := ""
+	if len(extras) > 0 {
+		extraStr = " " + strings.Join(extras, " ")
 	}
-	content := fmt.Sprintf("@echo off\r\n\"%s\" %s %%*\r\n", exe, strings.Join(cmdArgs, " "))
+	content := fmt.Sprintf(
+		"@echo off\r\n\"%s\" %%1 %s%s %%2 %%3 %%4 %%5 %%6 %%7 %%8 %%9\r\n",
+		exe, flag, extraStr,
+	)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 

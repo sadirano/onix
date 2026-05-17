@@ -62,7 +62,7 @@ func TestE2E_BasicFlow(t *testing.T) {
 
 	// 1. Init
 	t.Run("init", func(t *testing.T) {
-		out, _, err := r.run("init", "--skip-profile")
+		out, _, err := r.run("--init", "--skip-profile")
 		if err != nil {
 			t.Fatalf("init failed: %v", err)
 		}
@@ -74,7 +74,7 @@ func TestE2E_BasicFlow(t *testing.T) {
 	// 2. Add
 	demoDir := t.TempDir()
 	t.Run("add", func(t *testing.T) {
-		out, _, err := r.run("add", "demo", demoDir)
+		out, _, err := r.run("demo", demoDir)
 		if err != nil {
 			t.Fatalf("add failed: %v", err)
 		}
@@ -85,7 +85,7 @@ func TestE2E_BasicFlow(t *testing.T) {
 
 	// 3. Resolve
 	t.Run("resolve", func(t *testing.T) {
-		out, _, err := r.run("resolve", "demo")
+		out, _, err := r.run("demo")
 		if err != nil {
 			t.Fatalf("resolve failed: %v", err)
 		}
@@ -98,7 +98,7 @@ func TestE2E_BasicFlow(t *testing.T) {
 
 	// 4. List
 	t.Run("list", func(t *testing.T) {
-		out, _, err := r.run("list")
+		out, _, err := r.run("--list")
 		if err != nil {
 			t.Fatalf("list failed: %v", err)
 		}
@@ -109,7 +109,7 @@ func TestE2E_BasicFlow(t *testing.T) {
 
 	// 5. Doctor
 	t.Run("doctor", func(t *testing.T) {
-		out, _, _ := r.run("doctor")
+		out, _, _ := r.run("--doctor")
 		if !strings.Contains(out, home) {
 			t.Errorf("doctor output missing home %q: %q", home, out)
 		}
@@ -132,13 +132,13 @@ func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
 	r := &onixRunner{t: t, home: home, exe: onixExe}
 
 	// 1. Init to generate snippet
-	if out, _, err := r.run("init", "--skip-profile"); err != nil {
+	if out, _, err := r.run("--init", "--skip-profile"); err != nil {
 		t.Fatalf("init failed: %v\n%s", err, out)
 	}
 
 	// 2. Add an alias
 	demoDir := t.TempDir()
-	if out, _, err := r.run("add", "demo", demoDir); err != nil {
+	if out, _, err := r.run("demo", demoDir); err != nil {
 		t.Fatalf("add failed: %v\n%s", err, out)
 	}
 
@@ -148,7 +148,7 @@ func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
 		t.Fatalf("snippet missing at %s: %v", snip, err)
 	}
 
-	script := fmt.Sprintf(`. '%s'; Write-Host "ONIX_HOME: $env:ONIX_HOME"; & $global:onixExe version; $r = & $global:onixExe resolve demo; Write-Host "onix resolve demo -> [$r]"; o demo; Get-Location | Select-Object -ExpandProperty Path`, snip)
+	script := fmt.Sprintf(`. '%s'; Write-Host "ONIX_HOME: $env:ONIX_HOME"; & $global:onixExe --version; $r = & $global:onixExe demo; Write-Host "onix demo -> [$r]"; o demo; Get-Location | Select-Object -ExpandProperty Path`, snip)
 
 	cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-Command", script)
 	cmd.Env = append(os.Environ(), "ONIX_HOME="+home)
@@ -178,10 +178,10 @@ func TestE2E_ShellIntegration_Bash(t *testing.T) {
 		t.Skipf("bash is not usable (maybe WSL not configured): %v\n%s", err, out)
 	}
 
-	r.run("init", "--skip-profile")
+	r.run("--init", "--skip-profile")
 
 	demoDir := t.TempDir()
-	r.run("add", "demo", demoDir)
+	r.run("demo", demoDir)
 
 	snip := filepath.Join(home, "shell", "onix.sh")
 	script := fmt.Sprintf(`source '%s'; o demo && pwd`, filepath.ToSlash(snip))

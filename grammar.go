@@ -6,13 +6,9 @@ package main
 //
 // The alias is the subject (first positional); the verb is a flag. Commands
 // with no alias operate on the alias system as a whole; with an alias, the
-// flag acts on that alias.
-//
-// This dispatcher runs BEFORE kong. If the argv matches the new grammar we
-// route directly to the existing command structs. If not (i.e. the user
-// typed an old subcommand like `onix resolve foo` or `onix plugin add ...`)
-// we return handled=false and main.go falls through to the kong path. This
-// keeps installed shell snippets working until they re-sync.
+// flag acts on that alias. The `onix plugin ...` subcommand is the only
+// invocation that doesn't fit this shape — main.go routes it to kong
+// before calling the dispatcher.
 
 import (
 	"context"
@@ -109,75 +105,91 @@ var systemActionFlags = map[string]string{
 	"--apply-context": "apply-context",
 }
 
-// legacySubcommands lists every kong subcommand name the binary still
-// understands. When the user types one of these as the first positional we
-// hand the whole invocation to kong (backwards compat). Anything else is
-// treated as an alias.
-var legacySubcommands = map[string]bool{
-	"resolve":     true,
-	"add":         true,
-	"remove":      true,
-	"rm":          true,
-	"list":        true,
-	"ls":          true,
-	"aliases":     true,
-	"edit":        true,
-	"grep":        true,
-	"find":        true,
-	"explore":     true,
-	"yank":        true,
-	"run":         true,
-	"exec":        true,
-	"plugin":      true,
-	"plugin-exec": true,
-	"context":     true,
-	"init":        true,
-	"sync":        true,
-	"list-names":  true,
-	"doctor":      true,
-	"stats":       true,
-	"version":     true,
+// printUsage writes the alias-flag grammar reference to stdout. It's
+// hand-rolled because kong's auto-generated help reflects the legacy
+// subcommand tree — which the dispatcher no longer uses.
+func printUsage() {
+	const usage = `onix — fast directory alias resolver
+
+USAGE:
+  onix <alias>                       resolve to absolute path (hot path)
+  onix <alias> <path> [--description X] [--owner X] [--tags X]
+                                     register or update an alias
+  onix <alias> --<action> [args...]  run an action against an alias
+  onix --<verb> [args...]            system-wide command
+  onix plugin <verb> ...             manage external plugins
+
+ALIAS ACTIONS:
+  --resolve              print path (default for bare alias)
+  --remove, -rm          remove the alias (or, with files, delete them)
+  --edit, -e [files]     open dir or files in $EDITOR
+  --show, -s [files]     display dir/file contents (Get-Content / cat)
+  --explore, -x          open in OS file manager
+  --yank, -y             print path and copy to clipboard
+  --grep, -g <query>     ripgrep + fzf in alias dir
+  --find, -f <query>     fd / Everything + fzf in alias dir
+  --run, -r <cmd...>     exec command in alias dir
+  --exec, -X <name>      run a config.toml action
+  --plugin, -p <name>    run a plugin (use name:entry for entry-aware plugins)
+
+SYSTEM VERBS:
+  --list, -ls, -l        list aliases
+  --list-names           one alias name per line (for tab completion)
+  --edit, -e [files]     open ~/.onix or files within
+  --show, -s [files]     display ~/.onix or files within
+  --remove, --rm [files] delete files in ~/.onix (use --force on load-bearing)
+  --contexts, -c         list segment contexts
+  --init, -I             create ~/.onix and install shell integration
+  --sync, -S             regenerate shell snippets
+  --doctor, -D           health checks
+  --stats, -T [...]      navigation report
+  --version, -v          print version
+  --apply-context <alias>   internal (called by the o shell function)
+
+ADD FLAGS:
+  --description, -d <text>
+  --owner, -o <name>
+  --tags, -t <tag>           (repeatable)
+
+REMOVE FLAGS:
+  --force, -F                skip confirm; bypass load-bearing file guard
+  --recursive, -R            delete directories recursively
+
+GLOBAL:
+  --config-dir   ($ONIX_HOME) override ~/.onix path
+  --json, -j                 machine-readable output
+  --no-prompt, -q            suppress destination prompts on unknown aliases
+`
+	fmt.Print(usage)
 }
 
-// tryDispatchNewGrammar attempts to handle argv under the new alias-flag
-// grammar. Returns (true, err) if the dispatcher took ownership of the call.
-// Returns (false, nil) when the call should fall through to kong (legacy
-// subcommand form or --help).
-func tryDispatchNewGrammar(ctx context.Context, e *env, args []string) (bool, error) {
+// dispatchNewGrammar parses argv under the alias-flag grammar and runs
+// the matching handler. Bare `onix` prints usage; --help is handled here
+// so kong (which only owns `plugin`) doesn't get involved.
+func dispatchNewGrammar(ctx context.Context, e *env, args []string) error {
 	if len(args) == 0 {
-		// Bare `onix` — let kong print its usage. Fall through.
-		return false, nil
+		printUsage()
+		return nil
 	}
 
 	first := args[0]
 
-	// --help / -h: let kong handle it so the user sees consistent help.
 	if first == "--help" || first == "-h" {
-		return false, nil
-	}
-
-	// Plugin management is the one real subcommand that survives the
-	// rework. Hand the whole invocation to kong.
-	if first == "plugin" {
-		return false, nil
+		printUsage()
+		return nil
 	}
 
 	// System-wide flag form: `onix --<verb> [args...]`.
 	if startsWithDash(first) {
-		if verb, ok := systemActionFlags[first]; ok {
-			return true, dispatchSystem(ctx, e, verb, args[1:])
+		verb, ok := systemActionFlags[first]
+		if !ok {
+			return fmt.Errorf("unknown flag %q (run `onix --help` for usage)", first)
 		}
-		// Unknown flag at top level — let kong report it.
-		return false, nil
-	}
-
-	// First positional is a legacy subcommand: hand to kong for backwards compat.
-	if legacySubcommands[first] {
-		return false, nil
+		return dispatchSystem(ctx, e, verb, args[1:])
 	}
 
 	// Alias-flag form: first positional is the alias name.
-	return true, dispatchAlias(ctx, e, first, args[1:])
+	return dispatchAlias(ctx, e, first, args[1:])
 }
 
 // dispatchSystem handles `onix --<verb> [args...]`.
@@ -203,7 +215,16 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string) err
 	case "contexts":
 		return (&ContextListCmd{}).Run(ctx, e)
 	case "init":
-		return (&InitCmd{}).Run(ctx, e)
+		cmd := &InitCmd{}
+		for _, a := range rest {
+			switch a {
+			case "--skip-profile":
+				cmd.SkipProfile = true
+			default:
+				return fmt.Errorf("unknown flag for --init: %q", a)
+			}
+		}
+		return cmd.Run(ctx, e)
 	case "sync":
 		return (&SyncCmd{}).Run(ctx, e)
 	case "doctor":

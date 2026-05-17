@@ -80,11 +80,7 @@ func TestDispatchAlias_BareResolvesAlias(t *testing.T) {
 
 	// `onix foo` should print the resolved path on stdout.
 	stdout, _, err := captureStdio(func() error {
-		handled, e := tryDispatchNewGrammar(context.Background(), &env{Home: home}, []string{"foo"})
-		if !handled {
-			t.Fatal("dispatcher should have handled bare alias")
-		}
-		return e
+		return dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"foo"})
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -101,11 +97,7 @@ func TestDispatchAlias_AddWithMetadata(t *testing.T) {
 	// `onix foo <path> -d "desc" -o me -t a -t b` — full add form.
 	args := []string{"foo", target, "-d", "desc", "-o", "me", "-t", "a", "-t", "b"}
 	if _, _, err := captureStdio(func() error {
-		handled, e := tryDispatchNewGrammar(context.Background(), &env{Home: home}, args)
-		if !handled {
-			t.Fatal("dispatcher should have handled add form")
-		}
-		return e
+		return dispatchNewGrammar(context.Background(), &env{Home: home}, args)
 	}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -130,11 +122,7 @@ func TestDispatchSystem_ListNamesFastPath(t *testing.T) {
 	})
 
 	stdout, _, err := captureStdio(func() error {
-		handled, e := tryDispatchNewGrammar(context.Background(), &env{Home: home}, []string{"--list-names"})
-		if !handled {
-			t.Fatal("dispatcher should have handled --list-names")
-		}
-		return e
+		return dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"--list-names"})
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -148,11 +136,7 @@ func TestDispatchSystem_ListNamesFastPath(t *testing.T) {
 func TestDispatchSystem_RemoveRequiresInput(t *testing.T) {
 	home := newTestHome(t)
 	_, _, err := captureStdio(func() error {
-		handled, e := tryDispatchNewGrammar(context.Background(), &env{Home: home}, []string{"--remove"})
-		if !handled {
-			t.Fatal("dispatcher should have handled --remove")
-		}
-		return e
+		return dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"--remove"})
 	})
 	if err == nil || !strings.Contains(err.Error(), "requires an alias name or one or more files") {
 		t.Errorf("expected ambiguity error, got %v", err)
@@ -166,11 +150,7 @@ func TestDispatchAlias_RemoveAlias(t *testing.T) {
 	})
 
 	_, _, err := captureStdio(func() error {
-		handled, e := tryDispatchNewGrammar(context.Background(), &env{Home: home}, []string{"doomed", "--remove"})
-		if !handled {
-			t.Fatal("dispatcher should have handled --remove on alias")
-		}
-		return e
+		return dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"doomed", "--remove"})
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -192,12 +172,8 @@ func TestDispatchAlias_DeleteFilesInAlias(t *testing.T) {
 	})
 
 	_, _, err := captureStdio(func() error {
-		handled, e := tryDispatchNewGrammar(context.Background(), &env{Home: home},
+		return dispatchNewGrammar(context.Background(), &env{Home: home},
 			[]string{"tidy", "--remove", "junk.txt", "--force"})
-		if !handled {
-			t.Fatal("dispatcher should have handled alias file delete")
-		}
-		return e
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -218,12 +194,8 @@ func TestDispatchSystem_RefusesLoadBearingFile(t *testing.T) {
 	// Without --force we should refuse — even with the user passing one
 	// other file alongside, the batch is rejected up front (atomic-feeling).
 	_, _, err := captureStdio(func() error {
-		handled, e := tryDispatchNewGrammar(context.Background(), &env{Home: home},
+		return dispatchNewGrammar(context.Background(), &env{Home: home},
 			[]string{"--remove", "aliases.toml"})
-		if !handled {
-			t.Fatal("dispatcher should have handled system --remove")
-		}
-		return e
 	})
 	if err == nil || !strings.Contains(err.Error(), "load-bearing") {
 		t.Errorf("expected load-bearing guard error, got %v", err)
@@ -233,19 +205,11 @@ func TestDispatchSystem_RefusesLoadBearingFile(t *testing.T) {
 	}
 }
 
-func TestDispatcher_LegacySubcommandFallsThrough(t *testing.T) {
-	// `onix resolve foo` is the legacy invocation. The new dispatcher
-	// must not claim it — kong owns the hot path.
+func TestDispatcher_UnknownFlagErrors(t *testing.T) {
 	home := newTestHome(t)
-	handled, _ := tryDispatchNewGrammar(context.Background(), &env{Home: home},
-		[]string{"resolve", "foo"})
-	if handled {
-		t.Errorf("legacy `resolve` subcommand should fall through to kong, but was handled")
-	}
-	handled, _ = tryDispatchNewGrammar(context.Background(), &env{Home: home},
-		[]string{"plugin", "list"})
-	if handled {
-		t.Errorf("`plugin` subcommand should fall through to kong, but was handled")
+	err := dispatchNewGrammar(context.Background(), &env{Home: home}, []string{"--bogus"})
+	if err == nil || !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("expected unknown-flag error, got %v", err)
 	}
 }
 

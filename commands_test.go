@@ -331,16 +331,6 @@ func TestExecCmd(t *testing.T) {
 	})
 }
 
-func TestAliasesCmd_PropagatesEditorError(t *testing.T) {
-	home := t.TempDir()
-	// Editor that does not exist — exercises the failure branch of Run.
-	t.Setenv("EDITOR", filepath.Join(home, "does-not-exist"))
-	err := (&AliasesCmd{}).Run(context.Background(), &env{Home: home})
-	if err == nil {
-		t.Error("AliasesCmd with missing editor should error")
-	}
-}
-
 func TestEditCmd_PropagatesEditorError(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
@@ -353,64 +343,47 @@ func TestEditCmd_PropagatesEditorError(t *testing.T) {
 	}
 }
 
-func TestContextEditCmd_PropagatesEditorError(t *testing.T) {
+func TestApplyContexts_PlainAliasSilent(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("EDITOR", filepath.Join(home, "does-not-exist"))
-
-	err := (&ContextEditCmd{}).Run(context.Background(), &env{Home: home})
-	if err == nil {
-		t.Error("ContextEditCmd with missing editor should error")
+	stdout, _, err := captureStdio(func() error {
+		return applyContexts(home, "plain", "pwsh", os.Stdout)
+	})
+	if err != nil {
+		t.Fatalf("applyContexts: %v", err)
 	}
-	// The starter segments.toml should have been written before the editor invocation.
-	if _, statErr := os.Stat(filepath.Join(home, "segments.toml")); statErr != nil {
-		t.Errorf("starter segments.toml not written: %v", statErr)
+	if stdout != "" {
+		t.Errorf("expected no output for plain alias, got: %q", stdout)
 	}
 }
 
-func TestContextApplyCmd_Run(t *testing.T) {
+func TestApplyContexts_SegmentedNoFile(t *testing.T) {
 	home := t.TempDir()
-
-	t.Run("plain alias produces no output", func(t *testing.T) {
-		stdout, _, err := captureStdio(func() error {
-			return (&ContextApplyCmd{Alias: "plain", Shell: "pwsh"}).Run(context.Background(), &env{Home: home})
-		})
-		if err != nil {
-			t.Fatalf("ContextApplyCmd.Run: %v", err)
-		}
-		if stdout != "" {
-			t.Errorf("expected no output for plain alias, got: %q", stdout)
-		}
+	// No segments.toml file; applyContexts should still succeed silently.
+	_, _, err := captureStdio(func() error {
+		return applyContexts(home, "src@acme", "pwsh", os.Stdout)
 	})
-
-	t.Run("segmented alias with no segments file is silent", func(t *testing.T) {
-		// No segments.toml file; applyContexts should still succeed silently.
-		_, _, err := captureStdio(func() error {
-			return (&ContextApplyCmd{Alias: "src@acme", Shell: "pwsh"}).Run(context.Background(), &env{Home: home})
-		})
-		if err != nil {
-			t.Errorf("ContextApplyCmd.Run on missing segments: %v", err)
-		}
-	})
+	if err != nil {
+		t.Errorf("applyContexts on missing segments: %v", err)
+	}
 }
 
-// TestResolveCmd_RecordsUsage guards the slow-path resolve against silently
-// regressing on frecency: every successful resolve (including the kong path,
-// not just the hot-path bypass) must append to usage.log so `onix stats` and
-// tab-completion ranking reflect reality.
-func TestResolveCmd_RecordsUsage(t *testing.T) {
+// TestFastResolve_RecordsUsage guards the resolve path against silently
+// regressing on frecency: every successful resolve must append to
+// usage.log so `onix --stats` and tab-completion ranking reflect reality.
+func TestFastResolve_RecordsUsage(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
 	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	if _, _, err := captureStdio(func() error {
-		return (&ResolveCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
+		return fastResolve(home, "acme", false)
 	}); err != nil {
-		t.Fatalf("ResolveCmd.Run: %v", err)
+		t.Fatalf("fastResolve: %v", err)
 	}
 
 	usage, err := os.ReadFile(filepath.Join(home, "usage.log"))
 	if err != nil {
-		t.Fatalf("usage.log not created by slow-path resolve: %v", err)
+		t.Fatalf("usage.log not created by resolve: %v", err)
 	}
 	if !strings.Contains(string(usage), "acme") {
 		t.Errorf("usage.log does not contain the resolved alias: %q", usage)
@@ -498,14 +471,14 @@ func TestVersionCmd(t *testing.T) {
 	})
 }
 
-func TestListNamesCmd(t *testing.T) {
+func TestFastListNames(t *testing.T) {
 	home := t.TempDir()
 	// Register some aliases
 	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home})
 	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&ListNamesCmd{}).Run(context.Background(), &env{Home: home})
+		return fastListNames(home)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -519,18 +492,18 @@ func TestListNamesCmd(t *testing.T) {
 	}
 }
 
-func TestResolveCmd(t *testing.T) {
+func TestFastResolve_PrintsPath(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
 	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
 
 	stdout, _, err := captureStdio(func() error {
-		return (&ResolveCmd{Alias: "acme"}).Run(context.Background(), &env{Home: home})
+		return fastResolve(home, "acme", false)
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(stdout) != target {
+	if !samePath(strings.TrimSpace(stdout), target) {
 		t.Errorf("got %q, want %q", stdout, target)
 	}
 }
@@ -552,35 +525,3 @@ func TestYankCmd(t *testing.T) {
 	}
 }
 
-func TestFastResolve(t *testing.T) {
-	home := t.TempDir()
-	target := t.TempDir()
-	(&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home})
-
-	stdout, _, err := captureStdio(func() error {
-		return fastResolve(home, "acme", false)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.TrimSpace(stdout) != target {
-		t.Errorf("got %q, want %q", stdout, target)
-	}
-}
-
-func TestFastListNames(t *testing.T) {
-	home := t.TempDir()
-	(&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home})
-	(&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home})
-
-	stdout, _, err := captureStdio(func() error {
-		return fastListNames(home)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	lines := strings.Split(strings.TrimSpace(stdout), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 lines, got %d: %q", len(lines), stdout)
-	}
-}

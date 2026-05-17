@@ -19,36 +19,6 @@ import (
 	"github.com/sadirano/onix/internal/store"
 )
 
-// -----------------------------------------------------------------------------
-// resolve — the hot path.
-//
-// `onix resolve <alias>` reads aliases.toml, looks up <alias>, prints its
-// absolute path to stdout, exits. The PowerShell `o` function wraps this in
-// Set-Location, which is why this command must stay extremely lean: no
-// directory creation, no chdir, no env mutation. Anything heavier than a
-// file read + map lookup belongs in a different command.
-// -----------------------------------------------------------------------------
-
-type ResolveCmd struct {
-	Alias    string `arg:"" help:"Alias name (case-insensitive). Supports <seg>@<alias> segmented lookups."`
-	NoPrompt bool   `name:"no-prompt" help:"Fail silently if the alias is unknown instead of prompting for a destination."`
-}
-
-func (c *ResolveCmd) Run(ctx context.Context, e *env) error {
-	path, err := resolveAliasPathOpt(e, c.Alias, c.NoPrompt)
-	if err != nil {
-		return err
-	}
-	if e.JSON {
-		return printJSON(struct {
-			Alias string `json:"alias"`
-			Path  string `json:"path"`
-		}{c.Alias, path})
-	}
-	fmt.Println(path)
-	return nil
-}
-
 func printJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
@@ -304,25 +274,6 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", n, a.Path, a.Description)
 	}
 	return w.Flush()
-}
-
-// -----------------------------------------------------------------------------
-// aliases — open the aliases.toml file in your editor.
-// -----------------------------------------------------------------------------
-
-type AliasesCmd struct{}
-
-func (c *AliasesCmd) Run(ctx context.Context, e *env) error {
-	path := store.AliasesPath(e.Home)
-	ed := resolveEditor()
-	cmd := exec.CommandContext(ctx,ed, path)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("editor %s: %w", ed, err)
-	}
-	return nil
 }
 
 // -----------------------------------------------------------------------------
@@ -591,27 +542,6 @@ func (c *SyncCmd) Run(ctx context.Context, e *env) error {
 		fmt.Printf("plugin wrappers: %s\n", strings.Join(names, " "))
 	}
 	fmt.Println("re-source $PROFILE (or restart PowerShell) to pick up changes")
-	return nil
-}
-
-// -----------------------------------------------------------------------------
-// list-names — print alias names, one per line.
-//
-// This is what tab-completion calls under the hood. The fast path in
-// main.go bypasses kong for the most common shape (`onix list-names`),
-// but the subcommand registration here keeps `onix --help` accurate.
-// -----------------------------------------------------------------------------
-
-type ListNamesCmd struct{}
-
-func (c *ListNamesCmd) Run(ctx context.Context, e *env) error {
-	s, err := store.LoadStore(e.Home)
-	if err != nil {
-		return err
-	}
-	for _, n := range s.Names() {
-		fmt.Println(n)
-	}
 	return nil
 }
 

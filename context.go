@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -13,37 +12,9 @@ import (
 	"github.com/sadirano/onix/internal/segments"
 )
 
-// ContextCmd is the legacy `onix context` surface, kept for backwards
-// compatibility with installed shell snippets only. The new grammar
-// exposes the same functionality as top-level flags:
-//
-//	apply  -> onix --apply-context <alias>   (hot-path, called by `o`)
-//	list   -> onix --contexts
-//	edit   -> onix --edit segments.toml
-//
-// After users run `onix --sync` their shell wrappers stop calling these
-// subcommands. The structs themselves stay in case stale wrappers linger.
-type ContextCmd struct {
-	Apply ContextApplyCmd `cmd:"" name:"apply" hidden:"" help:"(legacy) Print context statements; use --apply-context."`
-	List  ContextListCmd  `cmd:"" name:"list" hidden:"" help:"(legacy) List contexts; use --contexts."`
-	Edit  ContextEditCmd  `cmd:"" name:"edit" hidden:"" help:"(legacy) Edit segments.toml; use --edit segments.toml."`
-}
-
-// ContextApplyCmd is the hot-path command invoked by the `o` shell function
-// after every cd. For plain aliases (no '@') it prints nothing. For segmented
-// aliases it prints PowerShell statements that the caller evaluates via
-// Invoke-Expression — setting env vars and running any post-cd exec command.
-type ContextApplyCmd struct {
-	Alias string `arg:"" help:"Alias (plain or segmented). Plain aliases produce no output."`
-	Shell string `help:"Output shell format (pwsh, bash, zsh). Defaults to 'pwsh'." default:"pwsh"`
-}
-
-func (c *ContextApplyCmd) Run(ctx context.Context, e *env) error {
-	return applyContexts(e.Home, c.Alias, c.Shell, os.Stdout)
-}
-
 // ContextListCmd prints every context defined in segments.toml in a
 // scannable table: segment name, env keys (sorted), exec command.
+// Invoked via `onix --contexts`.
 type ContextListCmd struct{}
 
 func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
@@ -77,43 +48,8 @@ func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
 	return w.Flush()
 }
 
-// ContextEditCmd opens segments.toml in the user's $EDITOR, creating the
-// file with a commented starter template if it doesn't exist yet.
-type ContextEditCmd struct{}
-
-func (c *ContextEditCmd) Run(ctx context.Context, e *env) error {
-	p := segments.Path(e.Home)
-	if _, err := os.Stat(p); os.IsNotExist(err) {
-		const starter = `# onix segment registry — @-segment subdirs and shell contexts.
-# After editing, changes are picked up immediately (no reload needed).
-#
-# [subdirs]
-# docs = "documentation"
-# src  = "source"
-#
-# [[contexts]]
-# segment = "src"
-# env     = { GO111MODULE = "on", GOFLAGS = "-tags=integration" }
-# exec    = ["make", "dev-env"]
-`
-		if err := os.WriteFile(p, []byte(starter), 0o644); err != nil {
-			return fmt.Errorf("create %s: %w", p, err)
-		}
-	}
-	ed := resolveEditor()
-	cmd := exec.CommandContext(ctx, ed, p)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("editor %s: %w", ed, err)
-	}
-	return nil
-}
-
-// applyContexts is the core of `onix context apply`. It is kept as a
-// standalone function (rather than inlined in Run) so the hot-path bypass
-// in main.go can call it directly without going through kong.
+// applyContexts is the core of `onix --apply-context`. It is called by
+// both the dispatcher and the `o` shell function after every Set-Location.
 //
 // For plain aliases (no '@') it returns immediately — no file I/O, no
 // allocations. For segmented aliases it loads segments.toml, finds any

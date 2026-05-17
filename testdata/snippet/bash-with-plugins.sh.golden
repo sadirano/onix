@@ -5,7 +5,7 @@ if [ -n "$BASH_VERSION" ]; then
     _onix_completer() {
         local cur=${COMP_WORDS[COMP_CWORD]}
         local names
-        mapfile -t names < <("$ONIX_EXE" list-names 2>/dev/null)
+        mapfile -t names < <("$ONIX_EXE" --list-names 2>/dev/null)
         COMPREPLY=( $(compgen -W "${names[*]}" -- "$cur") )
     }
 elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
@@ -13,7 +13,7 @@ elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
         local line names=()
         while IFS= read -r line; do
             names+=("$line")
-        done < <("$ONIX_EXE" list-names 2>/dev/null)
+        done < <("$ONIX_EXE" --list-names 2>/dev/null)
         compadd -- "${names[@]}"
     }
 fi
