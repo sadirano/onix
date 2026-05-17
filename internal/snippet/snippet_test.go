@@ -124,14 +124,17 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "aliases") {
-		t.Errorf("o.cmd missing 'aliases' handling:\n%s", content)
+	if !strings.Contains(content, "--edit") {
+		t.Errorf("o.cmd missing '--edit' for no-arg invocation:\n%s", content)
 	}
-	if !strings.Contains(content, "resolve --no-prompt") {
-		t.Errorf("o.cmd missing 'resolve --no-prompt' lookup:\n%s", content)
+	if !strings.Contains(content, "--no-prompt") {
+		t.Errorf("o.cmd missing '--no-prompt' lookup:\n%s", content)
 	}
 	if !strings.Contains(content, "if not defined _onix_target") {
 		t.Errorf("o.cmd missing subcommand passthrough fallback:\n%s", content)
+	}
+	if !strings.Contains(content, "--apply-context") {
+		t.Errorf("o.cmd missing '--apply-context' invocation:\n%s", content)
 	}
 	// Regression guard: setlocal + cd reverts the working directory when
 	// the script exits, which would silently break `o`. The wrapper must

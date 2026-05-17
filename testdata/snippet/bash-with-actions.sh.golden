@@ -20,59 +20,57 @@ fi
 
 o() {
     if [ -z "$1" ]; then
-        "$ONIX_EXE" aliases
+        "$ONIX_EXE" --edit
         return
     fi
-    case "$1" in
-        add|rm|remove|ls|list|aliases|edit|grep|find|explore|yank|run|exec|plugin|import|context|init|sync|doctor|version)
-            "$ONIX_EXE" "$@"
-            return
-            ;;
-    esac
     local path
     if [ -n "$2" ]; then
         # 'o foo /some/path' — register (or update) the alias and cd into
-        # it. The directory is auto-created by 'onix add' if missing.
-        path=$("$ONIX_EXE" add "$1" "$2")
+        # it. The directory is auto-created by onix if missing.
+        path=$("$ONIX_EXE" "$1" "$2")
     else
-        path=$("$ONIX_EXE" resolve "$1")
+        path=$("$ONIX_EXE" "$1")
     fi
     if [ $? -eq 0 ]; then
         cd "$path"
         local shell="bash"
         if [ -n "$ZSH_VERSION" ]; then shell="zsh"; fi
-        eval "$("$ONIX_EXE" context apply "$1" --shell "$shell")"
+        eval "$("$ONIX_EXE" --apply-context "$1" --shell "$shell")"
     fi
 }
-n() { "$ONIX_EXE" edit "$1"; }
-s() { "$ONIX_EXE" explore "$1"; }
-y() { "$ONIX_EXE" yank "$1"; }
+n() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" "$alias" --edit "$@"
+}
+s() { "$ONIX_EXE" "$1" --explore; }
+y() { "$ONIX_EXE" "$1" --yank; }
 r() {
     local alias=$1
     shift
-    "$ONIX_EXE" run "$alias" -- "$@"
+    "$ONIX_EXE" "$alias" --run "$@"
 }
 sg() {
     local alias=$1
     shift
-    "$ONIX_EXE" grep "$alias" "$@"
+    "$ONIX_EXE" "$alias" --grep "$@"
 }
 ff() {
     local alias=$1
     shift
-    "$ONIX_EXE" find "$alias" "$@"
+    "$ONIX_EXE" "$alias" --find "$@"
 }
 
 test() {
     local alias=$1
     shift
-    "$ONIX_EXE" exec test "$alias" -- "$@"
+    "$ONIX_EXE" "$alias" --exec test "$@"
 }
 
 pr() {
     local alias=$1
     shift
-    "$ONIX_EXE" exec pr "$alias" -- "$@"
+    "$ONIX_EXE" "$alias" --exec pr "$@"
 }
 
 if [ -n "$BASH_VERSION" ]; then

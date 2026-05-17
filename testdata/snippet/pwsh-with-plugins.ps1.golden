@@ -19,43 +19,40 @@ function global:o {
         [Parameter(Position=1, Mandatory=$false)][string]$Path
     )
     if (-not $Alias) {
-        & $global:onixExe aliases
-        return
-    }
-
-    # Passthrough to onix for subcommands.
-    if ($Alias -in @('add','rm','remove','ls','list','aliases','edit','grep','find','explore','yank','run','exec','plugin','import','context','init','sync','doctor','version')) {
-        & $global:onixExe $Alias @args
+        & $global:onixExe --edit
         return
     }
 
     if ($Path) {
         # 'o foo C:/some/path' — register (or update) the alias and cd
-        # into it. The directory is auto-created by 'onix add' if it
-        # doesn't exist.
-        $resolved = & $global:onixExe add $Alias $Path
+        # into it. The directory is auto-created by onix if it doesn't
+        # exist yet.
+        $resolved = & $global:onixExe $Alias $Path
     } else {
-        $resolved = & $global:onixExe resolve $Alias
+        $resolved = & $global:onixExe $Alias
     }
     if ($LASTEXITCODE -eq 0) {
         Set-Location -LiteralPath $resolved
-        & $global:onixExe context apply $Alias | Invoke-Expression
+        & $global:onixExe --apply-context $Alias | Invoke-Expression
     }
 }
 function global:n {
     [CmdletBinding()]
-    param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe edit $Alias
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe $Alias --edit @Rest
 }
 function global:s {
     [CmdletBinding()]
     param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe explore $Alias
+    & $global:onixExe $Alias --explore
 }
 function global:y {
     [CmdletBinding()]
     param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe yank $Alias
+    & $global:onixExe $Alias --yank
 }
 function global:r {
     [CmdletBinding()]
@@ -63,7 +60,7 @@ function global:r {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, Mandatory=$true, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe run $Alias -- @Rest
+    & $global:onixExe $Alias --run @Rest
 }
 function global:sg {
     [CmdletBinding()]
@@ -71,7 +68,7 @@ function global:sg {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe grep $Alias @Rest
+    & $global:onixExe $Alias --grep @Rest
 }
 function global:ff {
     [CmdletBinding()]
@@ -79,7 +76,7 @@ function global:ff {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe find $Alias @Rest
+    & $global:onixExe $Alias --find @Rest
 }
 
 function global:tts {
@@ -88,7 +85,7 @@ function global:tts {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe plugin-exec tts "" $Alias -- @Rest
+    & $global:onixExe $Alias --plugin tts @Rest
 }
 
 function global:timer {
@@ -97,7 +94,7 @@ function global:timer {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe plugin-exec timer "" $Alias -- @Rest
+    & $global:onixExe $Alias --plugin timer @Rest
 }
 
 function global:t-start {
@@ -106,7 +103,7 @@ function global:t-start {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe plugin-exec timer "start" $Alias -- @Rest
+    & $global:onixExe $Alias --plugin timer:start @Rest
 }
 
 function global:stop {
@@ -115,7 +112,7 @@ function global:stop {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe plugin-exec timer "stop" $Alias -- @Rest
+    & $global:onixExe $Alias --plugin timer:stop @Rest
 }
 
 Register-ArgumentCompleter -CommandName ff,n,o,r,s,sg,stop,t-start,timer,tts,y -ParameterName Alias -ScriptBlock $onixAliasCompleter

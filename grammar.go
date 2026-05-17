@@ -307,8 +307,15 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 			return fmt.Errorf("--plugin requires a plugin name")
 		}
 		// PluginExecCmd's argv shape is [pluginName, entryName, alias, extras...].
-		// The new grammar doesn't expose entry selection yet; pass "" as entry.
-		return (&PluginExecCmd{Args: append([]string{actionArgs[0], "", alias}, actionArgs[1:]...)}).Run(ctx, e)
+		// We accept "<plugin>:<entry>" so generated wrappers can select an
+		// entry without a separate flag. Plain "<plugin>" means no entry.
+		spec := actionArgs[0]
+		name, entry := spec, ""
+		if i := strings.Index(spec, ":"); i >= 0 {
+			name = spec[:i]
+			entry = spec[i+1:]
+		}
+		return (&PluginExecCmd{Args: append([]string{name, entry, alias}, actionArgs[1:]...)}).Run(ctx, e)
 	}
 	return fmt.Errorf("unknown action %q", action)
 }

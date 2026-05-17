@@ -29,49 +29,46 @@ const pwshO = `function global:%s {
         [Parameter(Position=1, Mandatory=$false)][string]$Path
     )
     if (-not $Alias) {
-        & $global:onixExe aliases
-        return
-    }
-
-    # Passthrough to onix for subcommands.
-    if ($Alias -in @('add','rm','remove','ls','list','aliases','edit','grep','find','explore','yank','run','exec','plugin','import','context','init','sync','doctor','version')) {
-        & $global:onixExe $Alias @args
+        & $global:onixExe --edit
         return
     }
 
     if ($Path) {
         # '%s foo C:\some\path' — register (or update) the alias and cd
-        # into it. The directory is auto-created by 'onix add' if it
-        # doesn't exist.
-        $resolved = & $global:onixExe add $Alias $Path
+        # into it. The directory is auto-created by onix if it doesn't
+        # exist yet.
+        $resolved = & $global:onixExe $Alias $Path
     } else {
-        $resolved = & $global:onixExe resolve $Alias
+        $resolved = & $global:onixExe $Alias
     }
     if ($LASTEXITCODE -eq 0) {
         Set-Location -LiteralPath $resolved
-        & $global:onixExe context apply $Alias | Invoke-Expression
+        & $global:onixExe --apply-context $Alias | Invoke-Expression
     }
 }
 `
 
 const pwshN = `function global:%s {
     [CmdletBinding()]
-    param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe edit $Alias
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe $Alias --edit @Rest
 }
 `
 
 const pwshS = `function global:%s {
     [CmdletBinding()]
     param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe explore $Alias
+    & $global:onixExe $Alias --explore
 }
 `
 
 const pwshY = `function global:%s {
     [CmdletBinding()]
     param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe yank $Alias
+    & $global:onixExe $Alias --yank
 }
 `
 
@@ -81,7 +78,7 @@ const pwshR = `function global:%s {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, Mandatory=$true, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe run $Alias -- @Rest
+    & $global:onixExe $Alias --run @Rest
 }
 `
 
@@ -91,7 +88,7 @@ const pwshSG = `function global:%s {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe grep $Alias @Rest
+    & $global:onixExe $Alias --grep @Rest
 }
 `
 
@@ -101,65 +98,63 @@ const pwshFF = `function global:%s {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe find $Alias @Rest
+    & $global:onixExe $Alias --find @Rest
 }
 `
 
 const bashO = `%s() {
     if [ -z "$1" ]; then
-        "$ONIX_EXE" aliases
+        "$ONIX_EXE" --edit
         return
     fi
-    case "$1" in
-        add|rm|remove|ls|list|aliases|edit|grep|find|explore|yank|run|exec|plugin|import|context|init|sync|doctor|version)
-            "$ONIX_EXE" "$@"
-            return
-            ;;
-    esac
     local path
     if [ -n "$2" ]; then
         # '%s foo /some/path' — register (or update) the alias and cd into
-        # it. The directory is auto-created by 'onix add' if missing.
-        path=$("$ONIX_EXE" add "$1" "$2")
+        # it. The directory is auto-created by onix if missing.
+        path=$("$ONIX_EXE" "$1" "$2")
     else
-        path=$("$ONIX_EXE" resolve "$1")
+        path=$("$ONIX_EXE" "$1")
     fi
     if [ $? -eq 0 ]; then
         cd "$path"
         local shell="bash"
         if [ -n "$ZSH_VERSION" ]; then shell="zsh"; fi
-        eval "$("$ONIX_EXE" context apply "$1" --shell "$shell")"
+        eval "$("$ONIX_EXE" --apply-context "$1" --shell "$shell")"
     fi
 }
 `
 
-const bashN = `%s() { "$ONIX_EXE" edit "$1"; }
+const bashN = `%s() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" "$alias" --edit "$@"
+}
 `
 
-const bashS = `%s() { "$ONIX_EXE" explore "$1"; }
+const bashS = `%s() { "$ONIX_EXE" "$1" --explore; }
 `
 
-const bashY = `%s() { "$ONIX_EXE" yank "$1"; }
+const bashY = `%s() { "$ONIX_EXE" "$1" --yank; }
 `
 
 const bashR = `%s() {
     local alias=$1
     shift
-    "$ONIX_EXE" run "$alias" -- "$@"
+    "$ONIX_EXE" "$alias" --run "$@"
 }
 `
 
 const bashSG = `%s() {
     local alias=$1
     shift
-    "$ONIX_EXE" grep "$alias" "$@"
+    "$ONIX_EXE" "$alias" --grep "$@"
 }
 `
 
 const bashFF = `%s() {
     local alias=$1
     shift
-    "$ONIX_EXE" find "$alias" "$@"
+    "$ONIX_EXE" "$alias" --find "$@"
 }
 `
 
@@ -290,12 +285,12 @@ func writeOCmdWrapper(binDir, exe, name string) {
 	// contain no spaces or shell metachars, so quoting is unnecessary.
 	content := fmt.Sprintf(`@echo off
 if "%%~1"=="" (
-  "%s" aliases
+  "%s" --edit
   exit /b
 )
 
 set "_onix_target="
-for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" resolve --no-prompt %%~1 2^>nul`+"`"+`) do set "_onix_target=%%%%i"
+for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" %%~1 --no-prompt 2^>nul`+"`"+`) do set "_onix_target=%%%%i"
 if not defined _onix_target (
   "%s" %%*
   exit /b
@@ -303,7 +298,7 @@ if not defined _onix_target (
 
 cd /d "%%_onix_target%%"
 set "_onix_target="
-for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" context apply %%~1 --shell cmd`+"`"+`) do %%%%i
+for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" --apply-context %%~1 --shell cmd`+"`"+`) do %%%%i
 if %%0 == "%%~f0" cmd /k
 `, exe, exe, exe, exe)
 	_ = os.WriteFile(path, []byte(content), 0o644)
@@ -412,23 +407,29 @@ func writeActionFunction(b *strings.Builder, a config.Action) {
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe exec %s $Alias -- @Rest
+    & $global:onixExe $Alias --exec %s @Rest
 }
 
 `, a.Name, a.Name)
 }
 
 func writePluginFunction(b *strings.Builder, wrapperName, pluginName, entryName string) {
+	// Encode entry in the --plugin spec as "<name>:<entry>" so generated
+	// wrappers stay one-liners. Plain "<name>" means no entry.
+	spec := pluginName
+	if entryName != "" {
+		spec = pluginName + ":" + entryName
+	}
 	fmt.Fprintf(b, `function global:%s {
     [CmdletBinding()]
     param(
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
         [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
     )
-    & $global:onixExe plugin-exec %s %q $Alias -- @Rest
+    & $global:onixExe $Alias --plugin %s @Rest
 }
 
-`, wrapperName, pluginName, entryName)
+`, wrapperName, spec)
 }
 
 func writeCompleterRegistration(b *strings.Builder, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) {
@@ -454,20 +455,24 @@ func writeActionFunctionBash(b *strings.Builder, a config.Action) {
 	fmt.Fprintf(b, `%s() {
     local alias=$1
     shift
-    "$ONIX_EXE" exec %s "$alias" -- "$@"
+    "$ONIX_EXE" "$alias" --exec %s "$@"
 }
 
 `, a.Name, a.Name)
 }
 
 func writePluginFunctionBash(b *strings.Builder, wrapperName, pluginName, entryName string) {
+	spec := pluginName
+	if entryName != "" {
+		spec = pluginName + ":" + entryName
+	}
 	fmt.Fprintf(b, `%s() {
     local alias=$1
     shift
-    "$ONIX_EXE" plugin-exec %s %q "$alias" -- "$@"
+    "$ONIX_EXE" "$alias" --plugin %s "$@"
 }
 
-`, wrapperName, pluginName, entryName)
+`, wrapperName, spec)
 }
 
 func writeCompleterRegistrationBash(b *strings.Builder, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) {
