@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"testing/quick"
 )
 
 // TestStore_RoundTrip writes a few aliases, reads them back, and confirms
@@ -141,6 +142,72 @@ func runValidatorTable(t *testing.T, fn func(string) error, kind string) {
 			t.Errorf("%s %q: error %q should name the kind", kind, name, err)
 		}
 	}
+}
+
+// TestValidateNames_Property asserts the roadmap invariant for the name
+// validators: every input is either rejected with a kind-named error, or
+// accepted *and* round-trips through Save → Load → Lookup. There is no third
+// state where the validator accepts a name the store can't actually serve.
+// Random rune strings catch the "we forgot a rune" gaps that the table tests
+// can't reach by construction.
+func TestValidateNames_Property(t *testing.T) {
+	t.Run("alias_roundtrips_or_rejected", func(t *testing.T) {
+		f := func(name string) bool {
+			if err := ValidateAliasName(name); err != nil {
+				return strings.Contains(err.Error(), "alias")
+			}
+			dir := t.TempDir()
+			s := &Store{Aliases: map[string]Alias{}}
+			s.Set(name, Alias{Path: "C:/x"})
+			if err := SaveStore(dir, s); err != nil {
+				return false
+			}
+			loaded, err := LoadStore(dir)
+			if err != nil {
+				return false
+			}
+			got, ok := loaded.Lookup(name)
+			return ok && got.Path == "C:/x"
+		}
+		if err := quick.Check(f, &quick.Config{MaxCount: 500}); err != nil {
+			t.Error(err)
+		}
+	})
+
+	t.Run("segment_validator_matches_spec", func(t *testing.T) {
+		// Segments are map keys inside Alias.Subdirs; an independently-derived
+		// spec is the cheapest way to surface a "validator-forgot-a-rune" gap.
+		f := func(name string) bool {
+			err := ValidateSegmentName(name)
+			legal := isLegalName(name)
+			switch {
+			case legal && err != nil:
+				return false
+			case !legal && err == nil:
+				return false
+			case err != nil && !strings.Contains(err.Error(), "segment"):
+				return false
+			}
+			return true
+		}
+		if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
+// isLegalName mirrors validateName's rule set independently so the property
+// test compares the validator against a separately-derived spec.
+func isLegalName(name string) bool {
+	if strings.TrimSpace(name) == "" {
+		return false
+	}
+	for _, r := range name {
+		if r == '/' || r == '\\' || r == '@' || r <= ' ' || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 // TestStore_AtomicWrite confirms that the saved file ends up readable and
