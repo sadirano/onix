@@ -39,14 +39,14 @@ We aim for a high quality bar (see [ROADMAP.md](./ROADMAP.md)):
 
 ### "The term 'onix' is not recognized"
 This usually means the shell integration hasn't been sourced or the pinned binary has moved.
-- Run `onix init` to regenerate the snippet and update your profile.
-- Run `onix doctor` to check the status of your installation.
+- Run `onix --init` to regenerate the snippet and update your profile.
+- Run `onix --doctor` to check the status of your installation.
 
 ### "unknown alias"
-- Run `onix list` to see your registered aliases.
+- Run `onix --list` to see your registered aliases.
 - Ensure you are using the correct case (though lookup is generally case-insensitive).
 
 ### Plugin build failures
 - Ensure you have a working Go toolchain.
-- Check `onix doctor` for missing plugin binaries.
+- Check `onix --doctor` for missing plugin binaries.
 - Run `onix plugin update <name>` to re-clone and rebuild.

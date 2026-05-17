@@ -141,7 +141,7 @@ func SaveStore(home string, s *Store) error {
 	}
 
 	var b strings.Builder
-	b.WriteString("# onix aliases — edit with care, prefer `onix add` / `onix rm`\n\n")
+	b.WriteString("# onix aliases — edit with care, prefer `onix <name> <path>` / `onix <name> --remove`\n\n")
 	b.Write(data)
 
 	tmp, err := os.CreateTemp(filepath.Dir(p), ".aliases.*.toml")

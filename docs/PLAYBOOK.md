@@ -72,23 +72,27 @@ ff api migration
 
 `sg` / `ff` are visual and controlled by `onix.visual.toml`.
 
-## 6) Module Lifecycle
+## 6) Onboarding / Plugin Lifecycle
 
 ```powershell
-onix init
-onix add user/repo
-onix install
-onix install <name>
-onix list
-onix update
-onix update <name>
-onix remove <name>
+onix --init                                  # set up ~/.onix and shell integration
+onix --doctor                                # health check
+onix --version                               # build info
+
+# Plugin management (kong subtree — unchanged).
+onix plugin add user/repo --sha <hash>       # pin to commit
+onix plugin add user/repo --unpinned         # track default branch
+onix plugin list
+onix plugin update <name>
+onix plugin remove <name>
 ```
 
 ## 7) Shortcut / PATH Utilities
 
 ```powershell
-onix shortcuts
+# After moving the onix binary, regenerate wrappers + snippet so the pin
+# points at the new location.
+onix --sync
 ```
 
 ## 8) Debug / Timing

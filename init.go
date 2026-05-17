@@ -18,7 +18,7 @@ import (
 // We keep an explicit file (with just a comment) so `onix list` and the
 // hot path read the same "empty" state instead of falling through to the
 // not-found branch on every invocation until the first `onix add`.
-const starterAliases = `# onix aliases — edit with care, prefer 'onix add' / 'onix rm'
+const starterAliases = `# onix aliases — edit with care, prefer 'onix <name> <path>' / 'onix <name> --remove'
 version = 2
 `
 
@@ -29,7 +29,7 @@ version = 2
 const starterConfig = `# onix configuration — declare custom actions here.
 version = 2
 
-# After editing, run: onix install-actions
+# After editing, run: onix --sync
 #
 # Example:
 #
@@ -125,7 +125,7 @@ func sourceFromBashLike(e *env, snippet string) error {
 			fmt.Fprintf(e.Stderr, "warning: could not open %s: %v\n", p, err)
 			continue
 		}
-		if _, err := fmt.Fprintf(file, "\n# Added by 'onix init'\n%s\n", sourceLine); err != nil {
+		if _, err := fmt.Fprintf(file, "\n# Added by 'onix --init'\n%s\n", sourceLine); err != nil {
 			file.Close()
 			return fmt.Errorf("append to %s: %w", f, err)
 		}
@@ -185,7 +185,7 @@ func sourceFromProfile(e *env, snippet string) error {
 		return fmt.Errorf("open $PROFILE %s: %w", profilePath, err)
 	}
 	defer f.Close()
-	if _, err := fmt.Fprintf(f, "\n# Added by 'onix init'\n%s\n", sourceLine); err != nil {
+	if _, err := fmt.Fprintf(f, "\n# Added by 'onix --init'\n%s\n", sourceLine); err != nil {
 		return fmt.Errorf("append to $PROFILE: %w", err)
 	}
 	fmt.Fprintf(e.Stderr, "updated $PROFILE: %s\n", profilePath)

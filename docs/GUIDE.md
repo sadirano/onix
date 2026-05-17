@@ -9,13 +9,16 @@ You type `o acme` instead.
 ## First-time Setup
 
 ```
-onix init
-onix shortcuts
+onix --init
 ```
 
-`init` creates `~/.onix/` and writes a starter `config.toml`.
-`shortcuts` drops `.cmd` wrappers (`o`, `n`, `s`, `f`, `r`, `y`, `sg`, `ff`) into `~/.onix/bin/`.
-Add `~/.onix/bin/` to your `PATH` once and every shortcut becomes a first-class command.
+`--init` creates `~/.onix/`, writes a starter `config.toml`, drops `.cmd`
+wrappers (`o`, `n`, `s`, `f`, `r`, `y`, `sg`, `ff`) into `~/.onix/bin/`,
+and sources the shell snippet from your profile.
+
+Add `~/.onix/bin/` to your `PATH` once and every shortcut becomes a
+first-class command. If you later move the onix binary, run
+`onix --sync` from the new location to update the pin.
 
 ---
 
@@ -400,22 +403,22 @@ Aliases live in `~/.onix/aliases` as plain `KEY=VALUE` pairs.
 
 ---
 
-## Extending with Modules
+## Extending with Plugins
 
-onix separates concerns: the core binary handles alias resolution and dispatch, and capabilities are added as independent Go modules installed from GitHub.
+onix separates concerns: the core binary handles alias resolution and dispatch, and capabilities are added as independent Go plugins installed from GitHub.
 
-For a detailed guide and template for creating your own modules, see [MODULE_PATTERN.md](./MODULE_PATTERN.md).
+For a detailed guide and template for creating your own plugins, see [MODULE_PATTERN.md](./MODULE_PATTERN.md).
 
-**Install a module:**
+**Install a plugin:**
 ```
-onix add sadirano/onix-img
-onix install
+onix plugin add sadirano/onix-img --sha <commit>      # pin to a commit
+onix plugin add sadirano/onix-img --unpinned          # track default branch
 ```
 
 That clones the repo, builds it, and drops a `.cmd` wrapper in `~/.onix/bin/`. Add that
-directory to your PATH once and every installed module becomes a first-class command.
+directory to your PATH once and every installed plugin becomes a first-class command.
 
-**What every module receives automatically** — no argument parsing needed in the module itself:
+**What every plugin receives automatically** — no argument parsing needed in the plugin itself:
 ```
 ONIX_TARGET         = C:\Users\dev\projects\client-work\acme\backend\api\v2
 ONIX_ALIAS          = acme
@@ -423,19 +426,18 @@ ONIX_MODULE         = img
 ONIX_MODULE_CONFIG  = {"default_subdir":"assets/screenshots/{today}"}
 ```
 
-A module is just a Go binary that reads `ONIX_TARGET` and acts on it. The directory
-resolution is already done before your module runs.
+A plugin is just a Go binary that reads `ONIX_TARGET` and acts on it. The directory
+resolution is already done before your plugin runs.
 
-**Declaring modules is declarative**, lazy.nvim-style, in `~/.onix/config.toml`:
+**Plugin registry** lives in `~/.onix/plugins.toml`:
 ```toml
-[[module]]
-name    = "img"
-repo    = "sadirano/onix-img"
-ref     = "main"
-enabled = true
+[[plugins]]
+name = "img"
+repo = "sadirano/onix-img"
+sha  = "abc123def456"             # required unless `unpinned = true`
 
-[module.config]
-default_subdir = "assets/screenshots/{today}"
+  [plugins.config]
+  default_subdir = "assets/screenshots/{today}"
 ```
 
 ### Example: `img` — clipboard image saver
@@ -448,16 +450,16 @@ img acme ui-auth-flow
 
 What happens:
 1. onix resolves `acme` → `C:\Users\dev\projects\client-work\acme\backend\api\v2`
-2. The `img` module reads its own `img.env` to check if `acme` has a registered default
+2. The `img` plugin reads its own `img.env` to check if `acme` has a registered default
    image subdirectory (e.g. `assets\screenshots`).
 3. The `ONIX_MODULE_CONFIG` JSON provides a `default_subdir` template as a fallback.
 4. Variables in the path are expanded at runtime:
    - `{today}` → `2026-04-06`
    - `{time}`  → `14-30-25`
 5. The clipboard image is written to the resolved path as `ui-auth-flow.png`
-   (or `ui-auth-flow-{time}.png` if the module is configured to de-duplicate by time).
+   (or `ui-auth-flow-{time}.png` if the plugin is configured to de-duplicate by time).
 
-`img.env` lives next to the module binary and stores per-alias overrides:
+`img.env` lives next to the plugin binary and stores per-alias overrides:
 ```
 # img.env
 acme=assets\screenshots\{today}
@@ -474,12 +476,12 @@ img acme ui-flow -s reviews        # -s overrides the subdir for this one call
 img mysite hero-banner             # → mysite\docs\images\hero-banner.png
 ```
 
-**Module lifecycle:**
+**Plugin lifecycle:**
 ```
-onix list              # see all declared modules and their install status
-onix update            # pull latest and rebuild all
-onix update img        # update one module
-onix remove img        # uninstall and remove from config
+onix plugin list           # see installed plugins, their pinned SHA, and binary status
+onix plugin update         # refetch + rebuild every plugin
+onix plugin update img     # update one plugin
+onix plugin remove img     # uninstall and remove from plugins.toml
 ```
 
 ---

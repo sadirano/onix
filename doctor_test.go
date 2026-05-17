@@ -169,8 +169,8 @@ func TestCheckBashLikeProfile(t *testing.T) {
 		if r.Status != "warn" {
 			t.Errorf("status = %q, want warn (not sourced)", r.Status)
 		}
-		if !strings.Contains(r.Detail, "onix init") {
-			t.Errorf("detail = %q, want it to suggest 'onix init'", r.Detail)
+		if !strings.Contains(r.Detail, "onix --init") {
+			t.Errorf("detail = %q, want it to suggest 'onix --init'", r.Detail)
 		}
 	})
 

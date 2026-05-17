@@ -85,7 +85,7 @@ func (c *DoctorCmd) Run(ctx context.Context, e *env) error {
 func checkHome(home string) checkResult {
 	fi, err := os.Stat(home)
 	if err != nil {
-		return checkResult{"home dir", "err", fmt.Sprintf("%s missing — run: onix init", home)}
+		return checkResult{"home dir", "err", fmt.Sprintf("%s missing — run: onix --init", home)}
 	}
 	if !fi.IsDir() {
 		return checkResult{"home dir", "err", fmt.Sprintf("%s exists but is not a directory", home)}
@@ -96,7 +96,7 @@ func checkHome(home string) checkResult {
 func checkAliasesFile(home string) checkResult {
 	p := store.AliasesPath(home)
 	if _, err := os.Stat(p); err != nil {
-		return checkResult{"aliases.toml", "warn", fmt.Sprintf("%s missing — run: onix init", p)}
+		return checkResult{"aliases.toml", "warn", fmt.Sprintf("%s missing — run: onix --init", p)}
 	}
 	if _, err := store.LoadStore(home); err != nil {
 		return checkResult{"aliases.toml", "err", err.Error()}
@@ -226,7 +226,7 @@ func checkShellSnippet(home string) checkResult {
 		p = snippet.BashPath(home)
 	}
 	if _, err := os.Stat(p); err != nil {
-		return checkResult{"shell snippet", "warn", fmt.Sprintf("%s missing — run: onix init", p)}
+		return checkResult{"shell snippet", "warn", fmt.Sprintf("%s missing — run: onix --init", p)}
 	}
 	return checkResult{"shell snippet", "ok", p}
 }
@@ -234,8 +234,8 @@ func checkShellSnippet(home string) checkResult {
 // checkSnippetPin verifies the absolute path embedded in the snippet
 // ($global:onixExe = '...') still points at a real file. If you move the
 // onix binary after install, the pin goes stale and every shell function
-// fails with "term not recognised" — the right fix is `onix install-actions`
-// from the binary's new location.
+// fails with "term not recognised" — the right fix is `onix --sync` from
+// the binary's new location.
 func checkSnippetPin(home string) checkResult {
 	p := snippet.PwshPath(home)
 	if runtime.GOOS != "windows" {
@@ -249,13 +249,13 @@ func checkSnippetPin(home string) checkResult {
 	if pin == "" {
 		return checkResult{
 			"snippet pin", "warn",
-			"no binary pin in snippet — run: onix install-actions",
+			"no binary pin in snippet — run: onix --sync",
 		}
 	}
 	if _, err := os.Stat(pin); err != nil {
 		return checkResult{
 			"snippet pin", "warn",
-			fmt.Sprintf("%s missing — run install-actions from the new location", pin),
+			fmt.Sprintf("%s missing — run `onix --sync` from the new location", pin),
 		}
 	}
 	return checkResult{"snippet pin", "ok", pin}
@@ -289,7 +289,7 @@ func checkOnExePath(home string) checkResult {
 	}
 	return checkResult{
 		"onix on PATH", "warn",
-		fmt.Sprintf("PATH=%s differs from pinned=%s — type `onix` invokes the PATH binary; shortcuts invoke the pinned one. Run install-actions from the binary you want pinned.",
+		fmt.Sprintf("PATH=%s differs from pinned=%s — type `onix` invokes the PATH binary; shortcuts invoke the pinned one. Run `onix --sync` from the binary you want pinned.",
 			pathExe, pin),
 	}
 }
@@ -320,13 +320,13 @@ func checkPowerShellProfile(home string) checkResult {
 		// (permissions / locked file). The fix is the same but the
 		// diagnosis is different.
 		if os.IsNotExist(err) {
-			return checkResult{"PowerShell $PROFILE", "warn", fmt.Sprintf("%s does not exist — run: onix init", profile)}
+			return checkResult{"PowerShell $PROFILE", "warn", fmt.Sprintf("%s does not exist — run: onix --init", profile)}
 		}
 		return checkResult{"PowerShell $PROFILE", "warn", fmt.Sprintf("%s unreadable: %v", profile, err)}
 	}
 	if !strings.Contains(string(content), filepath.ToSlash(snippet.PwshPath(home))) &&
 		!strings.Contains(string(content), snippet.PwshPath(home)) {
-		return checkResult{"PowerShell $PROFILE", "warn", fmt.Sprintf("does not source %s — run: onix init", snippet.PwshPath(home))}
+		return checkResult{"PowerShell $PROFILE", "warn", fmt.Sprintf("does not source %s — run: onix --init", snippet.PwshPath(home))}
 	}
 	return checkResult{"PowerShell $PROFILE", "ok", profile}
 }
@@ -355,7 +355,7 @@ func checkBashLikeProfile(home string) checkResult {
 		return checkResult{"Bash/Zsh profile", "warn", "neither .bashrc nor .zshrc found"}
 	}
 	if !sourced {
-		return checkResult{"Bash/Zsh profile", "warn", fmt.Sprintf("no .bashrc/.zshrc sources %s — run: onix init", snip)}
+		return checkResult{"Bash/Zsh profile", "warn", fmt.Sprintf("no .bashrc/.zshrc sources %s — run: onix --init", snip)}
 	}
 	return checkResult{"Bash/Zsh profile", "ok", "sourced in .bashrc or .zshrc"}
 }

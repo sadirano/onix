@@ -57,7 +57,7 @@ func TestSourceFromBashLike(t *testing.T) {
 		if !strings.Contains(string(updated), snippetPath) {
 			t.Errorf("rc was not updated to source snippet:\n%s", updated)
 		}
-		if !strings.Contains(string(updated), "Added by 'onix init'") {
+		if !strings.Contains(string(updated), "Added by 'onix --init'") {
 			t.Errorf("rc missing onix marker:\n%s", updated)
 		}
 	})

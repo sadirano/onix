@@ -7,19 +7,19 @@ Fast directory alias resolver for Windows PowerShell and Linux (Bash/Zsh). Type 
 ```bash
 # On Windows (PowerShell)
 go install github.com/sadirano/onix@latest
-onix init
+onix --init
 
 # On Linux (Bash/Zsh)
 go install github.com/sadirano/onix@latest
-onix init
+onix --init
 ```
 
-`onix init` creates `~/.onix/`, writes a shell snippet to `~/.onix/shell/`, and sources it from your shell profile (`$PROFILE` on Windows, `.bashrc`, `.zshrc`, or `.profile` on Unix-likes). Restart your shell (or source your profile) once and the short commands below are live.
+`onix --init` creates `~/.onix/`, writes a shell snippet to `~/.onix/shell/`, and sources it from your shell profile (`$PROFILE` on Windows, `.bashrc`, `.zshrc`, or `.profile` on Unix-likes). Restart your shell (or source your profile) once and the short commands below are live.
 
 ## Use
 
 ```powershell
-onix add acme C:\Users\dev\projects\acme   # register an alias (auto-creates the dir if missing)
+onix acme C:\Users\dev\projects\acme       # register an alias (auto-creates the dir if missing)
 o acme                                     # cd into it (in your current shell)
 o acme C:\Users\dev\projects\acme          # register + cd in one step (dir auto-created)
 o                                          # no args: open aliases.toml in your editor
@@ -27,16 +27,16 @@ n acme                                     # open it in your editor
 s acme                                     # open it in Explorer
 y acme                                     # print the path and copy to clipboard
 r acme go test ./...                       # run a command at that path
-onix list                                  # show every alias
-onix aliases                               # open aliases.toml in your editor
-onix remove acme                           # forget it
+onix --list                                # show every alias
+onix --edit                                # open ~/.onix in your editor
+onix acme --remove                         # forget the alias
 ```
 
 The `o` command changes the **current** shell's working directory — it does not spawn a new shell. Three forms:
 
 - `o <alias>` — resolve and cd. If the alias is unknown, `o` prompts for a destination, registers, and cds.
 - `o <alias> <path>` — register (or update) the alias to point at `<path>` and cd there. The directory is auto-created if it doesn't exist.
-- `o` (no args) — open `aliases.toml` in `$EDITOR`. Use `onix list` if you want a tabular dump to stdout instead.
+- `o` (no args) — open `aliases.toml` in `$EDITOR`. Use `onix --list` if you want a tabular dump to stdout instead.
 
 Everything else (`n`, `s`, `y`, `r`) invokes `onix` directly, so those don't need shell integration to work.
 
@@ -49,7 +49,7 @@ Aliases live in `~/.onix/aliases.toml`. The format is one TOML table per alias:
 path = "C:/Users/dev/projects/acme"
 ```
 
-You can hand-edit the file (`onix list` and resolve will pick up changes immediately) or use `onix add` / `onix remove`. Alias lookups are case-insensitive.
+You can hand-edit the file (`onix --list` and resolve will pick up changes immediately) or use `onix <name> <path>` to register and `onix <name> --remove` to forget. Alias lookups are case-insensitive.
 
 Editor is taken from `$EDITOR` (falls back to `nvim`). Override the onix home location with `$ONIX_HOME`.
 
@@ -69,7 +69,7 @@ exec = "gh"
 args = ["pr", "view", "{extras}", "--web"]
 ```
 
-After editing, run `onix install-actions` and `. $PROFILE` (or restart PowerShell). Then `test acme` runs `go test ./...` at the resolved acme path, and `pr acme 42` runs `gh pr view 42 --web`.
+After editing, run `onix --sync` and `. $PROFILE` (or restart PowerShell). Then `test acme` runs `go test ./...` at the resolved acme path, and `pr acme 42` runs `gh pr view 42 --web`.
 
 Template variables: `{target}` is the resolved path, `{alias}` is the alias name, `{extras}` is the rest of the args (variadic when used as a whole arg). Extras are appended automatically when `{extras}` isn't present in `args`.
 
@@ -134,15 +134,15 @@ Plugin wrappers participate in tab completion just like built-ins and custom act
 
 ## Tab completion
 
-Every command that takes an alias (`o`, `n`, `s`, `y`, `r`, plus your custom actions and plugins) supports tab-completion of alias names. The completer calls `onix list-names` under the hood — a dedicated hot path that bypasses kong and go-toml for sub-millisecond Tab response.
+Every command that takes an alias (`o`, `n`, `s`, `y`, `r`, plus your custom actions and plugins) supports tab-completion of alias names. The completer calls `onix --list-names` under the hood — a dedicated hot path that bypasses kong and go-toml for sub-millisecond Tab response.
 
 ## Commands
 
-`onix init` initialises `~/.onix` and installs the PowerShell snippet (re-run any time; it's idempotent). `onix doctor` reports any installation issues. `onix version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.
+`onix --init` initialises `~/.onix` and installs the PowerShell snippet (re-run any time; it's idempotent). `onix --doctor` reports any installation issues. `onix --version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.
 
 ## Diagnostics
 
-If `onix doctor` warns that your shell profile does not source the snippet, run `onix init` again without `--skip-profile`. On Windows this updates `$PROFILE`; on Linux it appends a `[ -f ... ] && . ...` line to `.bashrc` and/or `.zshrc`.
+If `onix --doctor` warns that your shell profile does not source the snippet, run `onix --init` again without `--skip-profile`. On Windows this updates `$PROFILE`; on Linux it appends a `[ -f ... ] && . ...` line to `.bashrc` and/or `.zshrc`.
 
 If `doctor` warns that `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin` (Linux) to PATH and restart your shell. Shortcuts (`o`, `n`, `s`, `y`, `r`) work without `onix` on PATH because the snippet pins the binary location at install time; `PATH` only matters when you type `onix` directly. Zsh tab completion additionally requires `compinit` to be loaded in `.zshrc` before sourcing the snippet — without it, completion silently skips registration rather than erroring.
 

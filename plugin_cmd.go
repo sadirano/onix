@@ -298,7 +298,7 @@ type PluginExecCmd struct {
 
 func (c *PluginExecCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) < 2 {
-		return fmt.Errorf("usage: onix plugin-exec <plugin> [entry] <alias> [args...]")
+		return fmt.Errorf("usage: onix <alias> -p <plugin>[:<entry>] [-- args...]")
 	}
 	pluginName := c.Args[0]
 	entryName := c.Args[1]
@@ -306,11 +306,11 @@ func (c *PluginExecCmd) Run(ctx context.Context, e *env) error {
 
 	if entryName == "" {
 		if len(rest) < 1 {
-			return fmt.Errorf("usage: onix plugin-exec %s <alias> [args...]", pluginName)
+			return fmt.Errorf("usage: onix <alias> -p %s [-- args...]", pluginName)
 		}
 	} else {
 		if len(rest) < 1 {
-			return fmt.Errorf("usage: onix plugin-exec %s %s <alias> [args...]", pluginName, entryName)
+			return fmt.Errorf("usage: onix <alias> -p %s:%s [-- args...]", pluginName, entryName)
 		}
 	}
 	aliasName := rest[0]
