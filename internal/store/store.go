@@ -28,7 +28,6 @@ type Alias struct {
 	Description string   `toml:"description,omitempty"`
 	Tags        []string `toml:"tags,omitempty"`
 	Owner       string   `toml:"owner,omitempty"`
-	LastUsed    int64    `toml:"last_used,omitempty"`
 }
 
 // AliasesPath returns home/aliases.toml.

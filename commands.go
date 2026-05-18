@@ -248,7 +248,6 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 			Description string   `json:"description,omitempty"`
 			Tags        []string `json:"tags,omitempty"`
 			Owner       string   `json:"owner,omitempty"`
-			LastUsed    int64    `json:"last_used,omitempty"`
 		}
 		out := make([]aliasInfo, 0, len(names))
 		for _, n := range names {
@@ -259,7 +258,6 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 				Description: a.Description,
 				Tags:        a.Tags,
 				Owner:       a.Owner,
-				LastUsed:    a.LastUsed,
 			})
 		}
 		return printJSON(e.Stdout, out)
