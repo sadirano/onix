@@ -39,9 +39,9 @@ type Grep struct {
 // Defaults for the [grep] section. The preview-window value scrolls
 // the preview to the match line ({2} = rg's line number, +3 keeps it
 // off the top edge, /3 reserves a third of the pane below it) and
-// freezes the first three header lines.
+// freezes one header line — the "File:" banner from bat.
 const (
-	GrepPreviewWindowDefault  = "up:60%:border-bottom:+{2}+3/3:~3"
+	GrepPreviewWindowDefault  = "up:60%:border-bottom:+{2}+3/3:~1"
 	GrepPreviewCommandDefault = "bat --style=numbers,header --color=always {1} --highlight-line {2}"
 )
 
