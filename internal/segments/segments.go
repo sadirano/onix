@@ -26,16 +26,9 @@ type ContextDef struct {
 }
 
 // SegmentsFile is the on-disk shape of ~/.onix/segments.toml.
-//
-// Unknown top-level keys (e.g. a hand-written [subdirs] table) are silently
-// dropped on load — they have no representation here.
 type SegmentsFile struct {
-	Version  int          `toml:"version"`
 	Contexts []ContextDef `toml:"contexts,omitempty"`
 }
-
-// CurrentVersion is the latest schema version for segments.toml.
-const CurrentVersion = 3
 
 // Path returns home/segments.toml.
 func Path(home string) string {
@@ -67,9 +60,6 @@ func SaveSegments(home string, sf *SegmentsFile) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(p), err)
 	}
-	if sf.Version == 0 {
-		sf.Version = CurrentVersion
-	}
 	data, err := toml.Marshal(sf)
 	if err != nil {
 		return fmt.Errorf("marshal segments: %w", err)
@@ -98,7 +88,7 @@ func LoadSegments(home string) (*SegmentsFile, error) {
 	p := Path(home)
 	data, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
-		return &SegmentsFile{Version: CurrentVersion}, nil
+		return &SegmentsFile{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", p, err)
@@ -106,10 +96,6 @@ func LoadSegments(home string) (*SegmentsFile, error) {
 	sf := &SegmentsFile{}
 	if err := toml.Unmarshal(data, sf); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
-	}
-
-	if sf.Version == 0 {
-		sf.Version = CurrentVersion
 	}
 
 	for i := range sf.Contexts {

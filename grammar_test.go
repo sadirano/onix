@@ -189,7 +189,7 @@ func TestDispatchAlias_DeleteFilesInAlias(t *testing.T) {
 
 func TestDispatchSystem_RefusesLoadBearingFile(t *testing.T) {
 	home := newTestHome(t)
-	_ = os.WriteFile(filepath.Join(home, "aliases.toml"), []byte("version = 2\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(home, "aliases.toml"), []byte("# onix aliases\n"), 0o644)
 
 	// Without --force we should refuse — even with the user passing one
 	// other file alongside, the batch is rejected up front (atomic-feeling).

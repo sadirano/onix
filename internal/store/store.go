@@ -13,16 +13,10 @@ import (
 
 // Store is the on-disk alias database. One TOML file, all aliases.
 type Store struct {
-	Version int
 	Aliases map[string]Alias
 }
 
-// CurrentVersion is the latest schema version for aliases.toml.
-const CurrentVersion = 2
-
-// Alias is one alias entry. The decoder ignores unknown keys, so files
-// produced by older onix versions load cleanly even when they carry fields
-// not represented here.
+// Alias is one alias entry.
 type Alias struct {
 	Path        string   `toml:"path"`
 	Description string   `toml:"description,omitempty"`
@@ -40,7 +34,7 @@ func LoadStore(home string) (*Store, error) {
 	p := AliasesPath(home)
 	data, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
-		return &Store{Version: CurrentVersion, Aliases: map[string]Alias{}}, nil
+		return &Store{Aliases: map[string]Alias{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", p, err)
@@ -52,11 +46,6 @@ func LoadStore(home string) (*Store, error) {
 	}
 
 	s := &Store{Aliases: map[string]Alias{}}
-	if v, ok := raw["version"].(int64); ok {
-		s.Version = int(v)
-		delete(raw, "version")
-	}
-
 	for name, v := range raw {
 		// Round-trip through marshal to unmarshal into the Alias struct.
 		// This is robust to schema changes and avoids manual map-to-struct mapping.
@@ -88,9 +77,6 @@ func (s *Store) Set(name string, a Alias) {
 	if s.Aliases == nil {
 		s.Aliases = map[string]Alias{}
 	}
-	if s.Version == 0 {
-		s.Version = CurrentVersion
-	}
 	s.Aliases[strings.ToLower(strings.TrimSpace(name))] = a
 }
 
@@ -121,12 +107,7 @@ func SaveStore(home string, s *Store) error {
 		return fmt.Errorf("create %s: %w", filepath.Dir(p), err)
 	}
 
-	// Combine version and aliases into a flat map for marshaling.
-	if s.Version == 0 {
-		s.Version = CurrentVersion
-	}
-	out := make(map[string]any, len(s.Aliases)+1)
-	out["version"] = s.Version
+	out := make(map[string]any, len(s.Aliases))
 	for k, v := range s.Aliases {
 		out[k] = v
 	}

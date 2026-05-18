@@ -228,8 +228,7 @@ func TestShowCmd_TargetDir(t *testing.T) {
 	}
 
 	// Create aliases.toml
-	aliasesContent := `version = 2
-[demo]
+	aliasesContent := `[demo]
 path = "` + filepath.ToSlash(aliasDir) + `"`
 	if err := os.WriteFile(filepath.Join(tempHome, "aliases.toml"), []byte(aliasesContent), 0o644); err != nil {
 		t.Fatalf("failed to write aliases.toml: %v", err)

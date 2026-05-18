@@ -83,7 +83,7 @@ func TestRun(t *testing.T) {
 	t.Run("plugin ls empty", func(t *testing.T) {
 		// Create an empty config.toml so plugin ls doesn't fail on "no home"
 		_ = os.MkdirAll(tempHome, 0o755)
-		_ = os.WriteFile(filepath.Join(tempHome, "config.toml"), []byte("version = 2\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(tempHome, "config.toml"), []byte("# onix config\n"), 0o644)
 
 		code, out, errOut := runOnix("onix", "plugin", "ls")
 		if code != 0 {
@@ -97,7 +97,7 @@ func TestRun(t *testing.T) {
 
 	t.Run("plugin ls override home", func(t *testing.T) {
 		otherHome := t.TempDir()
-		_ = os.WriteFile(filepath.Join(otherHome, "config.toml"), []byte("version = 2\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(otherHome, "config.toml"), []byte("# onix config\n"), 0o644)
 
 		code, out, errOut := runOnix("onix", "plugin", "ls", "--config-dir", otherHome)
 		if code != 0 {

@@ -12,7 +12,6 @@ import (
 
 // Config is the on-disk representation of ~/.onix/config.toml.
 type Config struct {
-	Version   int               `toml:"version"`
 	Shortcuts map[string]string `toml:"shortcuts,omitempty"`
 	Actions   []Action          `toml:"actions"`
 }
@@ -24,9 +23,6 @@ type Action struct {
 	Args []string `toml:"args"`
 }
 
-// CurrentVersion is the latest schema version for config.toml.
-const CurrentVersion = 2
-
 // Path returns home/config.toml.
 func Path(home string) string {
 	return filepath.Join(home, "config.toml")
@@ -37,7 +33,7 @@ func LoadConfig(home string) (*Config, error) {
 	p := Path(home)
 	data, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
-		return &Config{Version: CurrentVersion}, nil
+		return &Config{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", p, err)
@@ -45,9 +41,6 @@ func LoadConfig(home string) (*Config, error) {
 	cfg := &Config{}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
-	}
-	if cfg.Version == 0 {
-		cfg.Version = 2
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", p, err)

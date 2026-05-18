@@ -236,36 +236,6 @@ func TestStore_AtomicWrite(t *testing.T) {
 	}
 }
 
-// TestLoadStore_IgnoresLegacyAliasSubdirs confirms an aliases.toml that
-// carries unknown keys (here a per-alias `subdirs` table) loads cleanly —
-// the path field survives, the unknown table is dropped.
-func TestLoadStore_IgnoresLegacyAliasSubdirs(t *testing.T) {
-	dir := t.TempDir()
-	legacy := `version = 2
-
-[acme]
-path = "C:/projects/acme"
-
-[acme.subdirs]
-docs = "doc-internal"
-src  = "source-acme"
-`
-	if err := os.WriteFile(AliasesPath(dir), []byte(legacy), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s, err := LoadStore(dir)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	a, ok := s.Lookup("acme")
-	if !ok {
-		t.Fatal("acme missing after load")
-	}
-	if a.Path != "C:/projects/acme" {
-		t.Errorf("path = %q, want C:/projects/acme", a.Path)
-	}
-}
-
 func TestExpandTilde(t *testing.T) {
 	tests := []struct {
 		in   string

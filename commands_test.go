@@ -292,7 +292,7 @@ func TestExecCmd(t *testing.T) {
 
 	bin, args := noopExec()
 	// Write config.toml declaring a 'noop' action that runs our no-op binary.
-	cfgBody := "version = 2\n[[actions]]\nname = \"noop\"\nexec = \"" + bin + "\"\nargs = ["
+	cfgBody := "[[actions]]\nname = \"noop\"\nexec = \"" + bin + "\"\nargs = ["
 	for i, a := range args {
 		if i > 0 {
 			cfgBody += ", "

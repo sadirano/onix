@@ -19,7 +19,6 @@ import (
 // hot path read the same "empty" state instead of falling through to the
 // not-found branch on every invocation until the first `onix add`.
 const starterAliases = `# onix aliases — edit with care, prefer 'onix <name> <path>' / 'onix <name> --remove'
-version = 2
 `
 
 // starterConfig is the placeholder config.toml written on first init.
@@ -27,7 +26,6 @@ version = 2
 // user to extend, but no actions are declared yet — so the snippet has
 // only the built-in functions.
 const starterConfig = `# onix configuration — declare custom actions here.
-version = 2
 
 # After editing, run: onix --sync
 #

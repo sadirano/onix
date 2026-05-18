@@ -56,9 +56,7 @@ func TestParseSegmentedAlias(t *testing.T) {
 // source kind loads cleanly.
 func TestLoadSegments_AllSourceTypes(t *testing.T) {
 	dir := t.TempDir()
-	body := `version = 3
-
-[[contexts]]
+	body := `[[contexts]]
 segment = "tasks"
 source-template = "/${tasks}"
 
@@ -95,9 +93,7 @@ source-file = "@home/state/current"
 // more than one source-* field. Error mentions the segment name.
 func TestLoadSegments_MultipleSourcesError(t *testing.T) {
 	dir := t.TempDir()
-	body := `version = 3
-
-[[contexts]]
+	body := `[[contexts]]
 segment = "ambiguous"
 source-template = "/${ambiguous}"
 source-file = "@home/state/x"
@@ -114,37 +110,12 @@ source-file = "@home/state/x"
 	}
 }
 
-// TestLoadSegments_IgnoresLegacySubdirs confirms that an unknown top-level
-// table (here a `[subdirs]` block) is silently dropped on load and produces
-// zero contexts.
-func TestLoadSegments_IgnoresLegacySubdirs(t *testing.T) {
-	dir := t.TempDir()
-	body := `version = 2
-
-[subdirs]
-docs = "documentation"
-src  = "source"
-`
-	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	sf, err := LoadSegments(dir)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if len(sf.Contexts) != 0 {
-		t.Errorf("contexts = %d, want 0", len(sf.Contexts))
-	}
-}
-
 // TestLoadSegments_ContextWithoutSourceIsAllowed confirms a context with no
 // source-* field loads cleanly. Such a context contributes no path fragment;
 // its env/exec map still drives apply-context's shell-side emission.
 func TestLoadSegments_ContextWithoutSourceIsAllowed(t *testing.T) {
 	dir := t.TempDir()
-	body := `version = 3
-
-[[contexts]]
+	body := `[[contexts]]
 segment = "prod"
 env = { DEPLOY_ENV = "production" }
 exec = ["kubectl", "config", "use-context", "prod"]
@@ -177,9 +148,6 @@ func TestSegments_LoadMissingReturnsEmpty(t *testing.T) {
 	if sf == nil || len(sf.Contexts) != 0 {
 		t.Fatalf("expected empty segments, got %+v", sf)
 	}
-	if sf.Version != CurrentVersion {
-		t.Errorf("version = %d, want %d", sf.Version, CurrentVersion)
-	}
 }
 
 func TestLoadSegments_BadTOML(t *testing.T) {
@@ -197,9 +165,7 @@ func TestLoadSegments_BadTOML(t *testing.T) {
 // leaking into a [[contexts]] entry.
 func TestLoadSegments_InvalidSegmentName(t *testing.T) {
 	dir := t.TempDir()
-	body := `version = 3
-
-[[contexts]]
+	body := `[[contexts]]
 segment = "bad@name"
 source-template = "/x"
 `

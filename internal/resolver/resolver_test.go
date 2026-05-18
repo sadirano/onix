@@ -117,9 +117,7 @@ func BenchmarkResolve_Segmented_Template(b *testing.B) {
 	if err := store.SaveStore(dir, s); err != nil {
 		b.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
-
-[[contexts]]
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "docs"
 source-template = "/documentation"
 `), 0o644); err != nil {
@@ -157,9 +155,7 @@ func TestResolve_Segmented(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
-
-[[contexts]]
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "docs"
 source-template = "/documentation"
 
@@ -202,9 +198,7 @@ func TestResolve_Segmented_InlineValue(t *testing.T) {
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
-
-[[contexts]]
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "tasks"
 source-template = "/${tasks}"
 `), 0o644); err != nil {
@@ -231,9 +225,7 @@ func TestResolve_Segmented_NoLeadingSlash(t *testing.T) {
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
-
-[[contexts]]
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "client"
 source-template = "/${client}"
 
@@ -263,9 +255,7 @@ func TestResolve_Segmented_TraversalRejected(t *testing.T) {
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`version = 3
-
-[[contexts]]
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "evil"
 source-template = "/${target}"
 `), 0o644); err != nil {

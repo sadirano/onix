@@ -16,12 +16,8 @@ import (
 
 // PluginsFile is the on-disk shape of ~/.onix/plugins.toml.
 type PluginsFile struct {
-	Version int      `toml:"version"`
 	Plugins []Plugin `toml:"plugins"`
 }
-
-// CurrentVersion is the latest schema version for plugins.toml.
-const CurrentVersion = 2
 
 // Plugin is one user-declared external plugin.
 type Plugin struct {
@@ -57,7 +53,7 @@ func LoadPlugins(home string) (*PluginsFile, error) {
 	p := ConfigPath(home)
 	data, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
-		return &PluginsFile{Version: CurrentVersion}, nil
+		return &PluginsFile{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", p, err)
@@ -65,9 +61,6 @@ func LoadPlugins(home string) (*PluginsFile, error) {
 	pf := &PluginsFile{}
 	if err := toml.Unmarshal(data, pf); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
-	}
-	if pf.Version == 0 {
-		pf.Version = 2
 	}
 	return pf, nil
 }
