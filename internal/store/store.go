@@ -48,10 +48,9 @@ func LoadStore(home string) (*Store, error) {
 		if err := ValidateAliasName(name); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-	}
-
-	if needs, lowered := lowerKeys(s.Aliases); needs {
-		s.Aliases = lowered
+		if name != strings.ToLower(name) {
+			return nil, fmt.Errorf("%s: alias key %q must be lowercase", p, name)
+		}
 	}
 	return s, nil
 }
@@ -129,24 +128,6 @@ func SaveStore(home string, s *Store) error {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	return nil
-}
-
-func lowerKeys(in map[string]Alias) (bool, map[string]Alias) {
-	dirty := false
-	for k := range in {
-		if k != strings.ToLower(k) {
-			dirty = true
-			break
-		}
-	}
-	if !dirty {
-		return false, nil
-	}
-	out := make(map[string]Alias, len(in))
-	for k, v := range in {
-		out[strings.ToLower(k)] = v
-	}
-	return true, out
 }
 
 // ValidateAliasName returns an error if name is not a legal alias name.

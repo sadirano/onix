@@ -236,6 +236,26 @@ func TestStore_AtomicWrite(t *testing.T) {
 	}
 }
 
+// TestLoadStore_RejectsMixedCaseKey confirms a hand-edited aliases.toml
+// containing a non-lowercase section name fails the load with a clear error.
+// Onix itself only ever writes lowercased keys (Set lowercases on insert),
+// so the offender is always a hand-edit, and the silent collision risk of
+// auto-lowering on load is worse than telling the user to fix the file.
+func TestLoadStore_RejectsMixedCaseKey(t *testing.T) {
+	dir := t.TempDir()
+	body := "[Acme]\npath = \"C:/projects/acme\"\n"
+	if err := os.WriteFile(AliasesPath(dir), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadStore(dir)
+	if err == nil {
+		t.Fatal("expected error for mixed-case alias key, got nil")
+	}
+	if !strings.Contains(err.Error(), "lowercase") {
+		t.Errorf("error should mention lowercase requirement, got: %v", err)
+	}
+}
+
 func TestExpandTilde(t *testing.T) {
 	tests := []struct {
 		in   string
