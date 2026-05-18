@@ -42,7 +42,7 @@ type Grep struct {
 // freezes the first three header lines.
 const (
 	GrepPreviewWindowDefault  = "up:60%:border-bottom:+{2}+3/3:~3"
-	GrepPreviewCommandDefault = "bat --style=numbers --color=always --highlight-line {2} {1}"
+	GrepPreviewCommandDefault = "bat --style=numbers --color=always {1} --highlight-line {2}"
 )
 
 // GrepRgColorsDefault returns a fresh copy of the default --colors
