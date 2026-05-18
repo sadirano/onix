@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/sadirano/onix/internal/config"
 	"github.com/sadirano/onix/internal/opener"
@@ -16,9 +15,7 @@ import (
 func executeAction(action, target string, extras []string, cfg *config.Config, t *timer) {
 	switch action {
 	case "e":
-		cmd := exec.Command("cmd.exe", "/C", "start", "explorer.exe", target)
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		if err := cmd.Start(); err != nil {
+		if err := opener.OpenInExplorer(target); err != nil {
 			fatal("open explorer: %v", err)
 		}
 

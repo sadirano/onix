@@ -12,10 +12,13 @@ import (
 
 // homeSetup redirects the onix home to an isolated temp directory for the
 // duration of the test, preventing any writes to the real ~/.onix.
-// On Windows, os.UserHomeDir reads USERPROFILE, so overriding it is sufficient.
+// Sets both HOME (Unix) and USERPROFILE (Windows) so os.UserHomeDir returns
+// the temp dir on all platforms.
 func homeSetup(t *testing.T) {
 	t.Helper()
-	t.Setenv("USERPROFILE", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 }
 
 // ---------------------------------------------------------------------------
