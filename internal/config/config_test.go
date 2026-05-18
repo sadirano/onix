@@ -120,6 +120,58 @@ exec = "x"`,
 	}
 }
 
+// TestGrep_PreviewWindowOrDefault covers the override-or-default knob:
+// empty (and whitespace-only) falls through to the default, anything
+// else passes through verbatim.
+func TestGrep_PreviewWindowOrDefault(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty falls back", "", GrepPreviewWindowDefault},
+		{"whitespace falls back", "   ", GrepPreviewWindowDefault},
+		{"override passes through", "right:50%", "right:50%"},
+		{"top-with-freeze", "up:60%:~1", "up:60%:~1"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := Grep{PreviewWindow: tc.in}
+			if got := g.PreviewWindowOrDefault(); got != tc.want {
+				t.Errorf("PreviewWindowOrDefault() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestConfig_GrepRoundTrip checks the [grep] section parses cleanly
+// alongside [[actions]] and that the override survives a load.
+func TestConfig_GrepRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	body := `
+[grep]
+preview_window = "right:50%"
+
+[[actions]]
+name = "t"
+exec = "go"
+args = ["test"]
+`
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Grep.PreviewWindow != "right:50%" {
+		t.Errorf("Grep.PreviewWindow = %q, want %q", cfg.Grep.PreviewWindow, "right:50%")
+	}
+	if got := cfg.Grep.PreviewWindowOrDefault(); got != "right:50%" {
+		t.Errorf("PreviewWindowOrDefault() = %q, want override", got)
+	}
+}
+
 // TestExpandAction covers the substitution rules. We pick cases that hit
 // each branch: target/alias substring, {extras} as a whole arg (variadic),
 // {extras} as substring (joined), and no-extras append.

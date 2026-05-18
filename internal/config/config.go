@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Shortcuts map[string]string `toml:"shortcuts,omitempty"`
 	Actions   []Action          `toml:"actions"`
+	Grep      Grep              `toml:"grep"`
 }
 
 // Action declares one custom command wrapper.
@@ -21,6 +22,25 @@ type Action struct {
 	Name string   `toml:"name"`
 	Exec string   `toml:"exec"`
 	Args []string `toml:"args"`
+}
+
+// Grep tunes the `sg` (grep) command. PreviewWindow is passed through
+// to fzf's --preview-window; empty means "use the built-in default".
+type Grep struct {
+	PreviewWindow string `toml:"preview_window"`
+}
+
+// GrepPreviewWindowDefault is the fzf --preview-window value used when
+// the user hasn't overridden it in config. Top split, bat above, results
+// below, with the first preview line frozen so file:line stays visible.
+const GrepPreviewWindowDefault = "up:60%:~1"
+
+// PreviewWindow returns the configured value or GrepPreviewWindowDefault.
+func (g Grep) PreviewWindowOrDefault() string {
+	if strings.TrimSpace(g.PreviewWindow) != "" {
+		return g.PreviewWindow
+	}
+	return GrepPreviewWindowDefault
 }
 
 // Path returns home/config.toml.

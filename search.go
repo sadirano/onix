@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/sadirano/onix/internal/config"
 )
 
 // -----------------------------------------------------------------------------
@@ -54,12 +56,17 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 		previewCmd = "bat --style=numbers --color=always --highlight-line {2} {1} 2>$null || type {1}"
 	}
 
+	cfg, err := config.LoadConfig(e.Home)
+	if err != nil {
+		return err
+	}
+
 	fzfArgs := []string{
 		"--ansi",
 		"--multi",
 		"--delimiter", ":",
 		"--preview", previewCmd,
-		"--preview-window", "right:60%:~1",
+		"--preview-window", cfg.Grep.PreviewWindowOrDefault(),
 	}
 
 	rgCmd := execCommandContext(ctx, "rg", rgArgs...)

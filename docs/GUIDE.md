@@ -329,6 +329,13 @@ You land in your editor at that exact line. Nothing to copy, nothing to type.
 
 Multi-select is supported: select several matches with Tab, press Enter, they all open.
 
+The default layout is a top split (`up:60%:~1`) — bat above, results below.
+Override it via `~/.onix/config.toml`:
+```toml
+[grep]
+preview_window = "right:50%:~1"   # any fzf --preview-window value
+```
+
 ---
 
 ## Search Filenames
