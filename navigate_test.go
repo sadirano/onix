@@ -160,6 +160,10 @@ func TestPromptSelection(t *testing.T) {
 }
 
 func TestPromptSegmentDefinition(t *testing.T) {
+	// Hide fzf so the numeric fallback is exercised. The fzf path needs a TTY
+	// to be useful and would consume stdin out from under the test's pipe.
+	t.Setenv("PATH", t.TempDir())
+
 	t.Run("template source persists", func(t *testing.T) {
 		home := t.TempDir()
 		var cd *segments.ContextDef

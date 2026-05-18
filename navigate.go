@@ -76,10 +76,6 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 		fmt.Fprintf(stderr, "  (inline value: %s)\n", inlineValue)
 	}
 	fmt.Fprintln(stderr, "")
-	fmt.Fprintln(stderr, "Pick a source:")
-	fmt.Fprintln(stderr, "  [1] template (e.g. /${"+segmentName+"}, /tickets/${"+segmentName+"}/notes)")
-	fmt.Fprintln(stderr, "  [2] exec     (run a command, capture stdout)")
-	fmt.Fprintln(stderr, "  [3] file     (read a file's contents)")
 
 	reader := bufio.NewReader(stdin)
 	read := func(prompt string) (string, bool) {
@@ -91,33 +87,33 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 		return strings.TrimSpace(line), true
 	}
 
-	kindLine, ok := read("> ")
-	if !ok || kindLine == "" {
+	kind, ok := pickSegmentSource(segmentName, stderr, reader)
+	if !ok || kind == "" {
 		return nil, nil
 	}
 
 	cd := &segments.ContextDef{Segment: segmentName}
-	switch kindLine {
-	case "1":
+	switch kind {
+	case "template":
 		v, ok := read("Template: ")
 		if !ok || v == "" {
 			return nil, nil
 		}
 		cd.SourceTemplate = v
-	case "2":
+	case "exec":
 		v, ok := read("Exec (command + space-separated args): ")
 		if !ok || v == "" {
 			return nil, nil
 		}
 		cd.SourceExec = strings.Fields(v)
-	case "3":
+	case "file":
 		v, ok := read("File path: ")
 		if !ok || v == "" {
 			return nil, nil
 		}
 		cd.SourceFile = v
 	default:
-		return nil, fmt.Errorf("segment prompt: unrecognised choice %q (expected 1, 2, or 3)", kindLine)
+		return nil, fmt.Errorf("segment prompt: unrecognised choice %q (expected template, exec, or file)", kind)
 	}
 
 	confirm, ok := read("Save to segments.toml? [Y/n] ")
@@ -138,6 +134,65 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 	}
 	fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q\n", segmentName)
 	return cd, nil
+}
+
+// pickSegmentSource asks the user to choose the source kind for a new
+// segment context. Returns one of "template", "exec", "file", or "" on
+// cancel. ok=false means the input stream failed (treat as cancel).
+//
+// When fzf is on PATH it is used as the picker; otherwise a numbered prompt
+// reads from reader. The two paths produce the same set of return values so
+// promptSegmentDefinition can switch on the result either way.
+func pickSegmentSource(segmentName string, stderr io.Writer, reader *bufio.Reader) (string, bool) {
+	options := []struct {
+		kind  string
+		label string
+	}{
+		{"template", "template  formatted path, e.g. /${" + segmentName + "}, /tickets/${" + segmentName + "}/notes"},
+		{"exec", "exec      run a command, capture stdout"},
+		{"file", "file      read a file's contents"},
+	}
+
+	if fzf, err := exec.LookPath("fzf"); err == nil {
+		lines := make([]string, len(options))
+		for i, o := range options {
+			lines[i] = o.label
+		}
+		cmd := execCommand(fzf, "--header", "Pick a source for segment "+segmentName, "--reverse", "--height", "20%", "--no-sort")
+		cmd.Stderr = stderr
+		cmd.Stdin = strings.NewReader(strings.Join(lines, "\n"))
+		out, err := cmd.Output()
+		if err != nil {
+			return "", true
+		}
+		selected := strings.TrimSpace(string(out))
+		for _, o := range options {
+			if o.label == selected {
+				return o.kind, true
+			}
+		}
+		return "", true
+	}
+
+	fmt.Fprintln(stderr, "Pick a source:")
+	for i, o := range options {
+		fmt.Fprintf(stderr, "  [%d] %s\n", i+1, o.label)
+	}
+	fmt.Fprint(stderr, "> ")
+	line, err := reader.ReadString('\n')
+	if err != nil && line == "" {
+		return "", false
+	}
+	choice := strings.TrimSpace(line)
+	if choice == "" {
+		return "", true
+	}
+	for i, o := range options {
+		if choice == fmt.Sprintf("%d", i+1) {
+			return o.kind, true
+		}
+	}
+	return choice, true
 }
 
 // promptSelection presents a list of options and returns the selected one.
