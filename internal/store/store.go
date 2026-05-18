@@ -40,24 +40,14 @@ func LoadStore(home string) (*Store, error) {
 		return nil, fmt.Errorf("read %s: %w", p, err)
 	}
 
-	var raw map[string]any
-	if err := toml.Unmarshal(data, &raw); err != nil {
+	s := &Store{Aliases: map[string]Alias{}}
+	if err := toml.Unmarshal(data, &s.Aliases); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", p, err)
 	}
-
-	s := &Store{Aliases: map[string]Alias{}}
-	for name, v := range raw {
-		// Round-trip through marshal to unmarshal into the Alias struct.
-		// This is robust to schema changes and avoids manual map-to-struct mapping.
-		b, _ := toml.Marshal(v)
-		var a Alias
-		if err := toml.Unmarshal(b, &a); err != nil {
-			return nil, fmt.Errorf("parse %s alias %q: %w", p, name, err)
-		}
+	for name := range s.Aliases {
 		if err := ValidateAliasName(name); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
-		s.Aliases[name] = a
 	}
 
 	if needs, lowered := lowerKeys(s.Aliases); needs {
