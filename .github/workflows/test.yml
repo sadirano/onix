@@ -32,6 +32,19 @@ jobs:
       - name: Test
         run: go test ./...
 
+      # Coverage gate — main package must stay at >=80%.
+      # Runs once per matrix combo since the main package is platform-sensitive
+      # (different exec paths on Windows vs Unix). bash is available on
+      # windows-latest runners under the default shell wiring.
+      - name: Coverage gate (main package >= 80%)
+        shell: bash
+        run: |
+          go test -coverprofile=cover.out .
+          total=$(go tool cover -func=cover.out | tail -1 | awk '{print $3}' | tr -d '%')
+          threshold=80
+          echo "main package coverage: ${total}%"
+          awk -v p="$total" -v t="$threshold" 'BEGIN { if (p+0 < t+0) { printf "main package below %s%% threshold (got %s%%)\n", t, p; exit 1 } }'
+
       # Hot-path benchmark — informational only, not gated.
       - name: Bench
         run: |
