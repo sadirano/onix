@@ -17,6 +17,15 @@ var onixExe string
 func TestMain(m *testing.M) {
 	flag.Parse()
 
+	// Plugin-install tests fake exec by re-running the test binary as a
+	// scripted helper (see plugin_install_test.go). Skip the per-process
+	// onix build below for those subprocess invocations — the helper
+	// doesn't need a built binary and the build would fail anyway because
+	// the parent strips env vars before launching the child.
+	if os.Getenv("GO_WANT_HELPER_PROCESS") == "1" {
+		os.Exit(m.Run())
+	}
+
 	tmp, err := os.MkdirTemp("", "onix-e2e-build-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
