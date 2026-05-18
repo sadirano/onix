@@ -8,6 +8,8 @@ Pointers to the documentation kept in this directory.
   using onix day-to-day.
 - **[PLAYBOOK.md](./PLAYBOOK.md)** — quick command matrix. A copy/paste
   cheatsheet for the core flows.
+- **[SEGMENTS.md](./SEGMENTS.md)** — authoritative spec for the
+  `seg@seg@alias` syntax and `segments.toml` schema.
 
 ## For contributors
 
@@ -23,8 +25,3 @@ Pointers to the documentation kept in this directory.
 In-flight specs and working plans live under [`design/`](./design/).
 They're transient: once the work lands, the doc is deleted, archived, or
 merged into one of the permanent docs above.
-
-- **[design/SEGMENTS_SPEC.md](./design/SEGMENTS_SPEC.md)** — authoritative
-  spec for the `seg@seg@alias` syntax and `segments.toml` schema (implemented).
-- **[design/TODO.md](./design/TODO.md)** — main-package coverage push
-  (working plan).

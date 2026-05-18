@@ -111,7 +111,7 @@ Three ways to resolve a segment — pick one per `[[contexts]]` entry:
 
 Templates own their separators — `"/foo"` appends as a directory, `"_${task}.md"` appends as a filename suffix. Encountering an unknown segment triggers an interactive prompt that walks you through defining it and saves the new `[[contexts]]` entry to disk.
 
-Lookups are case-insensitive. See [docs/design/SEGMENTS_SPEC.md](docs/design/SEGMENTS_SPEC.md) for the full grammar and traversal-guard rules.
+Lookups are case-insensitive. See [docs/SEGMENTS.md](docs/SEGMENTS.md) for the full grammar and traversal-guard rules.
 
 ## Plugins
 

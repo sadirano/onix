@@ -1,13 +1,8 @@
-# Segments redesign — spec
+# Segments — spec
 
-**Status:** implemented (PRs 1–4 of the SEGMENTS_PLAN sequence; PR 5 is this doc-refresh commit).
 **Scope:** the `seg@seg@...@alias` syntax and `segments.toml` schema.
-**Breaking changes:** yes — the `[subdirs]` table and per-alias `subdirs` map are dropped; the literal-name fallback for unknown segments is removed; the path joiner no longer auto-inserts `/`.
 
-This document is the authoritative description of how segments resolve under
-the new model. It is the design output of a deliberate discussion that took
-place on 2026-05-17. Implementation will follow in incremental PRs; this spec
-is the contract those PRs must meet.
+This document is the authoritative description of how segments resolve.
 
 ---
 

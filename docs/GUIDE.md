@@ -198,7 +198,7 @@ source-template = "/documentation"
 ```
 
 On first use of an undefined segment, the interactive prompt picks the right form
-for you. See [SEGMENTS_SPEC.md](design/SEGMENTS_SPEC.md) for the full grammar and
+for you. See [SEGMENTS.md](SEGMENTS.md) for the full grammar and
 traversal-guard rules.
 
 ### Legacy `onix ctx` reference (pre-3.0)
