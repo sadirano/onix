@@ -26,7 +26,5 @@ merged into one of the permanent docs above.
 
 - **[design/SEGMENTS_SPEC.md](./design/SEGMENTS_SPEC.md)** — authoritative
   spec for the `seg@seg@alias` syntax and `segments.toml` schema (implemented).
-- **[design/SEGMENTS_PLAN.md](./design/SEGMENTS_PLAN.md)** — PR-by-PR
-  implementation plan that landed the spec (implemented).
 - **[design/TODO.md](./design/TODO.md)** — main-package coverage push
   (working plan).
