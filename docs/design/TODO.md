@@ -316,6 +316,14 @@ Open a follow-up PR for the gate once the threshold is consistently met locally 
 
 ---
 
+## Backlog (unrelated to the coverage push)
+
+- **Use fzf when prompting for a segment source.** `promptSegmentDefinition` in `navigate.go` currently prints a numbered list (`[1] template / [2] exec / [3] file`) and reads a digit from stdin. Replace the picker with an fzf invocation (mirror the auto-detect-and-fall-back pattern already in `promptSelection`) so the choice feels consistent with other onix pickers. Numeric prompt stays as the fallback when fzf isn't on PATH.
+
+- **Segments should be per-alias by default, with global as opt-in.** Today every `[[contexts]]` entry in `~/.onix/segments.toml` is implicitly global — a segment named `tasks` matches `@tasks` under any alias, so two projects can't have their own `tasks` shape without clobbering each other. Move the default to per-alias scope (e.g. a `[aliases.<name>.contexts]` block, or an equivalent per-alias contexts file) and require an explicit `scope = "global"` marker on entries that should remain shared across every alias (`notes`, etc.). Resolution rule for a segmented invocation `seg1@seg2@...@alias`: look up each segment name against the **terminal alias**'s local contexts first, then fall back to global contexts, then error or invoke `promptSegmentDefinition` as today. The `Pick a source:` prompt must also ask where to save (local-to-alias vs global) — see the fzf item above; the two should land together since the picker is the natural place to surface scope.
+
+---
+
 ## Tracking
 
 When a phase lands, strike it out here (or delete) and note the new coverage % in the budget table. Roadmap line "`[M]` Coverage gate at 80%" stays open until both the 80% number AND the CI gate are in.

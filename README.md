@@ -150,6 +150,8 @@ Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The include
 
 ## Status and scope
 
+> **Prototype stage — no migration guarantees.** Onix has one real user (the author) and is in heavy active development. Config files, on-disk layouts, command grammar, and TOML schemas can and do change shape without migration paths, compat shims, or deprecation windows. If you're using onix and a change breaks your `~/.onix`, you're expected to rewrite the affected file by hand. This note will be removed once a stability commitment is in place.
+
 This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
 
 **Note: macOS is NOT supported in this repository.** If you require macOS support, please feel free to create your own fork.
