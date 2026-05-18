@@ -27,11 +27,13 @@ type Action struct {
 // Grep tunes the `sg` (grep) command. Every field has a built-in
 // default — empty values fall through. FzfColors layers extra --color
 // flags on top of FZF_DEFAULT_OPTS; leave it empty to let the theme
-// (or the user's env) speak for itself.
+// (or the user's env) speak for itself. RgColors is a list of rg's
+// --colors specs (e.g. "path:fg:blue") that get passed verbatim.
 type Grep struct {
-	PreviewWindow  string `toml:"preview_window"`
-	PreviewCommand string `toml:"preview_command"`
-	FzfColors      string `toml:"fzf_colors"`
+	PreviewWindow  string   `toml:"preview_window"`
+	PreviewCommand string   `toml:"preview_command"`
+	FzfColors      string   `toml:"fzf_colors"`
+	RgColors       []string `toml:"rg_colors"`
 }
 
 // Defaults for the [grep] section. The preview-window value scrolls
@@ -42,6 +44,17 @@ const (
 	GrepPreviewWindowDefault  = "up:60%:border-bottom:+{2}+3/3:~3"
 	GrepPreviewCommandDefault = "bat --style=numbers --color=always --highlight-line {2} {1}"
 )
+
+// GrepRgColorsDefault returns a fresh copy of the default --colors
+// specs so callers can't mutate the package-level slice.
+func GrepRgColorsDefault() []string {
+	return []string{
+		"path:fg:blue",
+		"line:fg:green",
+		"match:fg:red",
+		"match:style:bold",
+	}
+}
 
 func (g Grep) PreviewWindowOrDefault() string {
 	if strings.TrimSpace(g.PreviewWindow) != "" {
@@ -55,6 +68,13 @@ func (g Grep) PreviewCommandOrDefault() string {
 		return g.PreviewCommand
 	}
 	return GrepPreviewCommandDefault
+}
+
+func (g Grep) RgColorsOrDefault() []string {
+	if len(g.RgColors) > 0 {
+		return g.RgColors
+	}
+	return GrepRgColorsDefault()
 }
 
 // Path returns home/config.toml.

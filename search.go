@@ -53,6 +53,9 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 	// the parent's tty below so rg falls back to "search cwd" instead
 	// of reading patterns from a nil stdin.
 	rgArgs := []string{"--smart-case", "--color=always", "--line-number", "--no-heading"}
+	for _, spec := range cfg.Grep.RgColorsOrDefault() {
+		rgArgs = append(rgArgs, "--colors", spec)
+	}
 	rgArgs = append(rgArgs, extras...)
 	if query != "" {
 		rgArgs = append(rgArgs, query)

@@ -337,6 +337,12 @@ match line. Configure via `~/.onix/config.toml`:
 preview_window  = "up:60%:border-bottom:+{2}+3/3:~3"
 preview_command = "bat --style=numbers --color=always --highlight-line {2} {1}"
 fzf_colors      = ""   # extra --color flags layered on top of the theme
+rg_colors       = [    # each entry becomes `--colors <spec>` on rg
+    "path:fg:blue",
+    "line:fg:green",
+    "match:fg:red",
+    "match:style:bold",
+]
 ```
 
 In the preview command, `{1}` is the file and `{2}` is the line number

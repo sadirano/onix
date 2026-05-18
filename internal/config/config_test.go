@@ -167,6 +167,41 @@ func TestGrep_Defaults(t *testing.T) {
 	}
 }
 
+// TestGrep_RgColorsOrDefault: empty or nil falls through to defaults;
+// a non-empty user list passes through verbatim.
+func TestGrep_RgColorsOrDefault(t *testing.T) {
+	t.Run("nil falls back", func(t *testing.T) {
+		got := (Grep{}).RgColorsOrDefault()
+		if !reflect.DeepEqual(got, GrepRgColorsDefault()) {
+			t.Errorf("got %v, want defaults %v", got, GrepRgColorsDefault())
+		}
+	})
+	t.Run("empty falls back", func(t *testing.T) {
+		got := (Grep{RgColors: []string{}}).RgColorsOrDefault()
+		if !reflect.DeepEqual(got, GrepRgColorsDefault()) {
+			t.Errorf("got %v, want defaults", got)
+		}
+	})
+	t.Run("override passes through", func(t *testing.T) {
+		want := []string{"match:fg:yellow"}
+		got := (Grep{RgColors: want}).RgColorsOrDefault()
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+}
+
+// TestGrep_DefaultRgColorsIsolated guards against a caller mutating
+// the slice the default-helper returns and corrupting future calls.
+func TestGrep_DefaultRgColorsIsolated(t *testing.T) {
+	first := GrepRgColorsDefault()
+	first[0] = "tampered"
+	second := GrepRgColorsDefault()
+	if second[0] == "tampered" {
+		t.Errorf("default leaked: %v", second)
+	}
+}
+
 // TestConfig_GrepRoundTrip checks the [grep] section parses cleanly
 // alongside [[actions]] and that every knob survives a load.
 func TestConfig_GrepRoundTrip(t *testing.T) {
@@ -176,6 +211,7 @@ func TestConfig_GrepRoundTrip(t *testing.T) {
 preview_window = "right:50%"
 preview_command = "bat {1}"
 fzf_colors = "hl:red"
+rg_colors = ["match:fg:yellow", "path:fg:cyan"]
 
 [[actions]]
 name = "t"
@@ -191,7 +227,8 @@ args = ["test"]
 	}
 	if cfg.Grep.PreviewWindow != "right:50%" ||
 		cfg.Grep.PreviewCommand != "bat {1}" ||
-		cfg.Grep.FzfColors != "hl:red" {
+		cfg.Grep.FzfColors != "hl:red" ||
+		!reflect.DeepEqual(cfg.Grep.RgColors, []string{"match:fg:yellow", "path:fg:cyan"}) {
 		t.Errorf("Grep round-trip mismatch: %+v", cfg.Grep)
 	}
 }
