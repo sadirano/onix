@@ -6,7 +6,7 @@ A 10/10 here means: a stranger could clone the repo, build it on Windows or Linu
 
 Pick from this list in order of cost/value. Items are grouped by axis and labelled `[S]` small, `[M]` medium, `[L]` large.
 
-Since the previous revision, six items shipped: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, least-privilege `GITHUB_TOKEN` on the test/lint workflows, third-party actions pinned by commit SHA, the `actions/dependency-review` job on pull_request, and `testing/quick`-based property tests for the name validators with a roundtrip invariant through `Save → Load → Lookup`. `internal/store` coverage moved 78.6% → 82.1%. The remaining 80% gate is entirely a `main`-package job.
+Since the previous revision, the `main`-package coverage push landed (Phases 1–8 of the working plan) and the 80%-per-package gate is now enforced in CI. Earlier in the cycle: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, least-privilege `GITHUB_TOKEN` on the test/lint workflows, third-party actions pinned by commit SHA, the `actions/dependency-review` job on pull_request, and `testing/quick`-based property tests for the name validators with a roundtrip invariant through `Save → Load → Lookup`.
 
 ---
 
@@ -18,22 +18,6 @@ Thread a `slog.Logger` through `env` so every command can emit a structured trac
 ---
 
 ## Test suite
-
-### `[M]` Coverage gate at 80%
-Per-package coverage as of 2026-05-17:
-
-| Package            | Coverage |
-|--------------------|----------|
-| `main`             | **56.1%** |
-| `internal/config`  | 88.9%    |
-| `internal/plugins` | 73.0%    |
-| `internal/resolver`| 75.7%    |
-| `internal/segments`| 88.6%    |
-| `internal/snippet` | 86.1%    |
-| `internal/store`   | 82.1%    |
-| `sdk`              | 92.3%    |
-
-The whole remaining gap is the `main` package — the alias-flag dispatcher and the handlers it routes to. Once `main` clears 80% (and `internal/plugins` and `internal/resolver` cross with it), wire the gate into CI.
 
 ### `[M]` Benchmark regression gate
 CI runs `benchstat bench_current.txt` informationally today. Add a second step that fetches the baseline from `main`, runs `benchstat baseline.txt current.txt`, and fails the build on >20% slowdown for `BenchmarkHotPath_LookupOnly`.
@@ -68,6 +52,9 @@ A per-repo config file, checked into version control, that can declare local ali
 
 ### `[L]` Workspace tier with sync
 A named bundle of aliases that lives between user-scope and project-scope and can be synced across machines or shared with a team. Backends: git repo or generic object store. Per-alias visibility flag so a workspace can be partially shared.
+
+### `[M]` Per-alias segment scope (with global opt-in)
+Today every `[[contexts]]` entry in `~/.onix/segments.toml` is implicitly global — a segment named `tasks` matches `@tasks` under any alias, so two projects can't have their own `tasks` shape without clobbering each other. Move the default to per-alias scope and require an explicit `scope = "global"` marker on entries that should remain shared across every alias. Resolution rule for `seg1@seg2@...@alias`: look up each segment against the **terminal alias**'s local contexts first, then fall back to global contexts, then error or invoke the interactive prompt. The "Pick a source" prompt must also ask where to save (local-to-alias vs global).
 
 ---
 
@@ -105,10 +92,9 @@ Use `cosign` to sign release blobs and document the verification command in the 
 
 ## Order of operations
 
-1. **Coverage gate:** push `main`-package coverage to 80% and turn on the gate. This is the single largest gap and the only one blocking a CI-enforced quality claim.
-2. **Hot-path safety net:** wire the benchstat-vs-main comparison so the perf claim is enforced, not asserted.
-3. **Daily-driver wins:** cross-shell nav history, multi-target aliases, undo. Small surface, big perceived improvement.
-4. **Scope leap:** project-scope `.onix.toml`. Validate layering inside the current architecture before tackling the workspace tier.
-5. **Sharing & ecosystem:** workspace tier with sync, plugin capability model, verified registry.
-6. **Supply-chain finish:** cosign-signed releases.
-7. **Performance peak:** daemon mode.
+1. **Hot-path safety net:** wire the benchstat-vs-main comparison so the perf claim is enforced, not asserted.
+2. **Daily-driver wins:** cross-shell nav history, multi-target aliases, undo. Small surface, big perceived improvement.
+3. **Scope leap:** project-scope `.onix.toml` and per-alias segment scope. Validate layering inside the current architecture before tackling the workspace tier.
+4. **Sharing & ecosystem:** workspace tier with sync, plugin capability model, verified registry.
+5. **Supply-chain finish:** cosign-signed releases.
+6. **Performance peak:** daemon mode.

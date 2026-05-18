@@ -24,4 +24,5 @@ Pointers to the documentation kept in this directory.
 
 In-flight specs and working plans live under [`design/`](./design/).
 They're transient: once the work lands, the doc is deleted, archived, or
-merged into one of the permanent docs above.
+merged into one of the permanent docs above. The directory is currently
+empty.
