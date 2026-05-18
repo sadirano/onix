@@ -25,23 +25,22 @@ type Action struct {
 }
 
 // Grep tunes the `sg` (grep) command. Every field has a built-in
-// default — empty values fall through.
+// default — empty values fall through. FzfColors layers extra --color
+// flags on top of FZF_DEFAULT_OPTS; leave it empty to let the theme
+// (or the user's env) speak for itself.
 type Grep struct {
 	PreviewWindow  string `toml:"preview_window"`
 	PreviewCommand string `toml:"preview_command"`
 	FzfColors      string `toml:"fzf_colors"`
-	Case           string `toml:"case"` // smart | ignore | match
 }
 
-// Defaults for the [grep] section. The preview-window value scrolls the
-// preview to the match line ({2} = rg's line number, +3 keeps it off
-// the top edge, /3 reserves a third of the pane below it) and freezes
-// the first three header lines.
+// Defaults for the [grep] section. The preview-window value scrolls
+// the preview to the match line ({2} = rg's line number, +3 keeps it
+// off the top edge, /3 reserves a third of the pane below it) and
+// freezes the first three header lines.
 const (
 	GrepPreviewWindowDefault  = "up:60%:border-bottom:+{2}+3/3:~3"
-	GrepPreviewCommandDefault = "bat --color=always {1} --highlight-line {2}"
-	GrepFzfColorsDefault      = "hl:-1:underline,hl+:-1:underline:reverse"
-	GrepCaseDefault           = "ignore"
+	GrepPreviewCommandDefault = "bat --style=numbers --color=always --highlight-line {2} {1}"
 )
 
 func (g Grep) PreviewWindowOrDefault() string {
@@ -56,27 +55,6 @@ func (g Grep) PreviewCommandOrDefault() string {
 		return g.PreviewCommand
 	}
 	return GrepPreviewCommandDefault
-}
-
-func (g Grep) FzfColorsOrDefault() string {
-	if strings.TrimSpace(g.FzfColors) != "" {
-		return g.FzfColors
-	}
-	return GrepFzfColorsDefault
-}
-
-// RipgrepCaseFlag returns the rg flag for the configured case mode.
-// "match" means "no override — case-sensitive (rg's default)".
-func (g Grep) RipgrepCaseFlag() string {
-	switch strings.ToLower(strings.TrimSpace(g.Case)) {
-	case "smart":
-		return "--smart-case"
-	case "match":
-		return "--case-sensitive"
-	case "ignore", "":
-		return "--ignore-case"
-	}
-	return "--ignore-case"
 }
 
 // Path returns home/config.toml.
@@ -106,11 +84,6 @@ func LoadConfig(home string) (*Config, error) {
 
 // Validate enforces the schema invariants.
 func (c *Config) Validate() error {
-	switch strings.ToLower(strings.TrimSpace(c.Grep.Case)) {
-	case "", "smart", "ignore", "match":
-	default:
-		return fmt.Errorf("[grep] case = %q: must be one of smart, ignore, match", c.Grep.Case)
-	}
 	seen := map[string]struct{}{}
 	for name, shortcut := range c.Shortcuts {
 		if !ValidActionName(shortcut) {

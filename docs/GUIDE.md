@@ -330,18 +330,22 @@ You land in your editor at that exact line. Nothing to copy, nothing to type.
 Multi-select is supported: select several matches with Tab, press Enter, they all open.
 
 The default layout is a top split that auto-scrolls the preview to the
-match line. Every knob is configurable via `~/.onix/config.toml`:
+match line. Configure via `~/.onix/config.toml`:
 
 ```toml
 [grep]
-preview_window  = "up:60%:border-bottom:+{2}+3/3:~3"   # any fzf --preview-window value
-preview_command = "bat --color=always {1} --highlight-line {2}"
-fzf_colors      = "hl:-1:underline,hl+:-1:underline:reverse"
-case            = "ignore"   # smart | ignore | match
+preview_window  = "up:60%:border-bottom:+{2}+3/3:~3"
+preview_command = "bat --style=numbers --color=always --highlight-line {2} {1}"
+fzf_colors      = ""   # extra --color flags layered on top of the theme
 ```
 
 In the preview command, `{1}` is the file and `{2}` is the line number
-(rg emits `file:line:text`; fzf splits on `:`).
+(rg emits `file:line:text`; fzf splits on `:`). rg case behaviour is
+`--smart-case` — pass `--ignore-case` or `--case-sensitive` as part of
+your query to override.
+
+fzf inherits `FZF_DEFAULT_OPTS` from the environment if you've set one;
+otherwise onix applies a Tokyo Night palette by default.
 
 ---
 

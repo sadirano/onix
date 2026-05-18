@@ -120,19 +120,29 @@ exec = "x"`,
 	}
 }
 
-// TestGrep_Defaults checks that every Grep knob falls through to its
-// built-in default when empty/whitespace, and passes overrides through
-// verbatim.
+// TestGrep_Defaults checks that the *OrDefault knobs fall through when
+// empty/whitespace and pass overrides through verbatim. FzfColors has
+// no default — it's consumed raw by search.go.
 func TestGrep_Defaults(t *testing.T) {
 	type probe struct {
 		name string
 		get  func(Grep) string
+		set  func(*Grep, string)
 		def  string
 	}
 	probes := []probe{
-		{"preview_window", func(g Grep) string { return g.PreviewWindowOrDefault() }, GrepPreviewWindowDefault},
-		{"preview_command", func(g Grep) string { return g.PreviewCommandOrDefault() }, GrepPreviewCommandDefault},
-		{"fzf_colors", func(g Grep) string { return g.FzfColorsOrDefault() }, GrepFzfColorsDefault},
+		{
+			"preview_window",
+			func(g Grep) string { return g.PreviewWindowOrDefault() },
+			func(g *Grep, v string) { g.PreviewWindow = v },
+			GrepPreviewWindowDefault,
+		},
+		{
+			"preview_command",
+			func(g Grep) string { return g.PreviewCommandOrDefault() },
+			func(g *Grep, v string) { g.PreviewCommand = v },
+			GrepPreviewCommandDefault,
+		},
 	}
 	for _, p := range probes {
 		t.Run(p.name+"/empty falls back", func(t *testing.T) {
@@ -141,55 +151,24 @@ func TestGrep_Defaults(t *testing.T) {
 			}
 		})
 		t.Run(p.name+"/whitespace falls back", func(t *testing.T) {
-			if got := p.get(setField(Grep{}, p.name, "   ")); got != p.def {
+			g := Grep{}
+			p.set(&g, "   ")
+			if got := p.get(g); got != p.def {
 				t.Errorf("got %q, want default %q", got, p.def)
 			}
 		})
 		t.Run(p.name+"/override passes through", func(t *testing.T) {
-			if got := p.get(setField(Grep{}, p.name, "OVERRIDE")); got != "OVERRIDE" {
+			g := Grep{}
+			p.set(&g, "OVERRIDE")
+			if got := p.get(g); got != "OVERRIDE" {
 				t.Errorf("got %q, want override", got)
 			}
 		})
 	}
 }
 
-// setField is a tiny helper so the table above can reuse one row per
-// field instead of repeating the same shape three times.
-func setField(g Grep, name, val string) Grep {
-	switch name {
-	case "preview_window":
-		g.PreviewWindow = val
-	case "preview_command":
-		g.PreviewCommand = val
-	case "fzf_colors":
-		g.FzfColors = val
-	}
-	return g
-}
-
-func TestGrep_RipgrepCaseFlag(t *testing.T) {
-	tests := []struct {
-		in, want string
-	}{
-		{"", "--ignore-case"},
-		{"ignore", "--ignore-case"},
-		{"IGNORE", "--ignore-case"},
-		{"smart", "--smart-case"},
-		{"match", "--case-sensitive"},
-		{"  smart  ", "--smart-case"},
-		{"garbage", "--ignore-case"}, // validator catches typos at load time; method is defensive.
-	}
-	for _, tc := range tests {
-		t.Run(tc.in, func(t *testing.T) {
-			if got := (Grep{Case: tc.in}).RipgrepCaseFlag(); got != tc.want {
-				t.Errorf("RipgrepCaseFlag(%q) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
 // TestConfig_GrepRoundTrip checks the [grep] section parses cleanly
-// alongside [[actions]] and that all four knobs survive a load.
+// alongside [[actions]] and that every knob survives a load.
 func TestConfig_GrepRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	body := `
@@ -197,7 +176,6 @@ func TestConfig_GrepRoundTrip(t *testing.T) {
 preview_window = "right:50%"
 preview_command = "bat {1}"
 fzf_colors = "hl:red"
-case = "smart"
 
 [[actions]]
 name = "t"
@@ -213,27 +191,8 @@ args = ["test"]
 	}
 	if cfg.Grep.PreviewWindow != "right:50%" ||
 		cfg.Grep.PreviewCommand != "bat {1}" ||
-		cfg.Grep.FzfColors != "hl:red" ||
-		cfg.Grep.Case != "smart" {
+		cfg.Grep.FzfColors != "hl:red" {
 		t.Errorf("Grep round-trip mismatch: %+v", cfg.Grep)
-	}
-	if got := cfg.Grep.RipgrepCaseFlag(); got != "--smart-case" {
-		t.Errorf("case=smart → flag %q, want --smart-case", got)
-	}
-}
-
-func TestConfig_GrepRejectsBadCase(t *testing.T) {
-	dir := t.TempDir()
-	body := `
-[grep]
-case = "loose"
-`
-	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err := LoadConfig(dir)
-	if err == nil || !strings.Contains(err.Error(), "case") {
-		t.Fatalf("want error mentioning 'case', got %v", err)
 	}
 }
 

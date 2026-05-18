@@ -50,8 +50,10 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 	// rg output is file:line:text — fzf splits on `:`, so {1}=file and
 	// {2}=line in the preview command. `.` anchors the search at cmd.Dir
 	// even when our stdin is nil (otherwise rg would read patterns from
-	// stdin).
-	rgArgs := []string{cfg.Grep.RipgrepCaseFlag(), "--color=always", "--line-number", "--no-heading"}
+	// stdin). Case behaviour is rg's --smart-case; if the user wants
+	// something else they can pass --ignore-case / --case-sensitive in
+	// the extras and the later flag wins.
+	rgArgs := []string{"--smart-case", "--color=always", "--line-number", "--no-heading"}
 	rgArgs = append(rgArgs, extras...)
 	if query != "" {
 		rgArgs = append(rgArgs, query)
@@ -59,8 +61,8 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 	rgArgs = append(rgArgs, ".")
 
 	fzfArgs := []string{"--ansi", "--multi"}
-	if colors := cfg.Grep.FzfColorsOrDefault(); colors != "" {
-		fzfArgs = append(fzfArgs, "--color", colors)
+	if strings.TrimSpace(cfg.Grep.FzfColors) != "" {
+		fzfArgs = append(fzfArgs, "--color", cfg.Grep.FzfColors)
 	}
 	fzfArgs = append(
 		fzfArgs,
@@ -80,6 +82,7 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 	fzfCmd.Dir = target
 	fzfCmd.Stdin = rgOut
 	fzfCmd.Stderr = os.Stderr // fzf UI uses stderr when stdout is captured
+	applyDefaultFzfTheme(fzfCmd)
 
 	if err := rgCmd.Start(); err != nil {
 		return fmt.Errorf("start rg: %w", err)
@@ -172,20 +175,16 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 
-	previewCmd := "bat --style=numbers --color=always {} 2>/dev/null || cat {}"
-	if runtime.GOOS == "windows" {
-		previewCmd = "bat --style=numbers --color=always {} 2>$null || type {}"
-	}
-
 	fzfArgs := []string{
 		"--ansi",
 		"--multi",
-		"--preview", previewCmd,
+		"--preview", "bat --style=numbers --color=always {}",
 	}
 	fzfCmd := execCommandContext(ctx, "fzf", fzfArgs...)
 	fzfCmd.Dir = target
 	fzfCmd.Stdin = findOut
 	fzfCmd.Stderr = os.Stderr
+	applyDefaultFzfTheme(fzfCmd)
 
 	if err := findCmd.Start(); err != nil {
 		return fmt.Errorf("start finder: %w", err)
@@ -208,6 +207,26 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	return openSelectionsInEditor(ctx, target, lines)
+}
+
+// fzfTokyoNightTheme is the default --color set we hand fzf via
+// FZF_DEFAULT_OPTS when the user hasn't set one. Whitespace (including
+// newlines) is fine inside FZF_DEFAULT_OPTS — fzf treats it as an
+// argument separator.
+const fzfTokyoNightTheme = "" +
+	"--color=fg:#c0caf5,bg:#1a1b26,hl:#2ac3de,fg+:#c0caf5,bg+:#283457 " +
+	"--color=hl+:#2ac3de,info:#7aa2f7,prompt:#2ac3de,pointer:#ff007c " +
+	"--color=marker:#ff5da0,spinner:#ff007c,header:#ff9e64,query:#c0caf5 " +
+	"--color=border:#27a1b9,separator:#ff9e64,gutter:#283457"
+
+// applyDefaultFzfTheme installs the Tokyo Night palette for fzf via
+// FZF_DEFAULT_OPTS, but only if the parent process hasn't already set
+// it — a user's own theme always wins.
+func applyDefaultFzfTheme(cmd *exec.Cmd) {
+	if os.Getenv("FZF_DEFAULT_OPTS") != "" {
+		return
+	}
+	cmd.Env = append(os.Environ(), "FZF_DEFAULT_OPTS="+fzfTokyoNightTheme)
 }
 
 func openSelectionsInEditor(ctx context.Context, target string, selections []string) error {
