@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -41,7 +40,7 @@ func resolveHome(override string) (string, error) {
 // It prefers 'pwsh' (PowerShell Core) but falls back to 'powershell.exe'
 // (Windows PowerShell) if pwsh isn't on PATH.
 func pwshBin() string {
-	if _, err := exec.LookPath("pwsh"); err == nil {
+	if _, err := lookPath("pwsh"); err == nil {
 		return "pwsh"
 	}
 	if runtime.GOOS == "windows" {

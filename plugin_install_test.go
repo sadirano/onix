@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -27,15 +28,18 @@ var (
 	fakeExecCalls [][]string
 )
 
-// installFakeExec swaps execCommand for the duration of t and resets the
-// shared queue / recorded-calls state. Tests push expected responses with
-// pushFakeResponse and inspect calls via fakeExecCalls.
+// installFakeExec swaps execCommand AND execCommandContext for the duration
+// of t and resets the shared queue / recorded-calls state. Tests push
+// expected responses with pushFakeResponse and inspect calls via
+// fakeExecCalls.
 func installFakeExec(t *testing.T) {
 	t.Helper()
-	prev := execCommand
+	prevCmd := execCommand
+	prevCtx := execCommandContext
 	fakeExecQueue = nil
 	fakeExecCalls = nil
-	execCommand = func(name string, args ...string) *exec.Cmd {
+
+	makeFakeCmd := func(name string, args ...string) *exec.Cmd {
 		fakeExecCalls = append(fakeExecCalls, append([]string{name}, args...))
 		var resp fakeExecResponse
 		if len(fakeExecQueue) > 0 {
@@ -45,16 +49,25 @@ func installFakeExec(t *testing.T) {
 		cs := []string{"-test.run=TestPluginInstallHelperProcess", "--", name}
 		cs = append(cs, args...)
 		cmd := exec.Command(os.Args[0], cs...)
-		cmd.Env = []string{
+		// Inherit env so the subprocess's TestMain has TMP/PATH/GOROOT
+		// available; the GO_WANT_HELPER_PROCESS sentinel makes TestMain
+		// short-circuit before any real work.
+		cmd.Env = append(
+			os.Environ(),
 			"GO_WANT_HELPER_PROCESS=1",
-			"HELPER_STDOUT=" + resp.stdout,
-			"HELPER_STDERR=" + resp.stderr,
-			"HELPER_EXIT=" + strconv.Itoa(resp.exit),
-		}
+			"HELPER_STDOUT="+resp.stdout,
+			"HELPER_STDERR="+resp.stderr,
+			"HELPER_EXIT="+strconv.Itoa(resp.exit),
+		)
 		return cmd
 	}
+	execCommand = makeFakeCmd
+	execCommandContext = func(_ context.Context, name string, args ...string) *exec.Cmd {
+		return makeFakeCmd(name, args...)
+	}
 	t.Cleanup(func() {
-		execCommand = prev
+		execCommand = prevCmd
+		execCommandContext = prevCtx
 		fakeExecQueue = nil
 		fakeExecCalls = nil
 	})

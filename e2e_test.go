@@ -19,11 +19,13 @@ func TestMain(m *testing.M) {
 
 	// Plugin-install tests fake exec by re-running the test binary as a
 	// scripted helper (see plugin_install_test.go). Skip the per-process
-	// onix build below for those subprocess invocations — the helper
-	// doesn't need a built binary and the build would fail anyway because
-	// the parent strips env vars before launching the child.
-	if os.Getenv("GO_WANT_HELPER_PROCESS") == "1" {
-		os.Exit(m.Run())
+	// onix build below for those subprocess invocations. The sentinel lives
+	// in argv rather than env because some callers (e.g. PluginExecCmd) set
+	// cmd.Env on the Cmd we return, which would clobber an env-based marker.
+	for _, a := range os.Args {
+		if a == "-test.run=TestPluginInstallHelperProcess" {
+			os.Exit(m.Run())
+		}
 	}
 
 	tmp, err := os.MkdirTemp("", "onix-e2e-build-*")

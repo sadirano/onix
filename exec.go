@@ -5,4 +5,5 @@ import "os/exec"
 var (
 	execCommand        = exec.Command
 	execCommandContext = exec.CommandContext
+	lookPath           = exec.LookPath
 )

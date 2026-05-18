@@ -353,6 +353,103 @@ func TestPluginListCmd_MissingBinary(t *testing.T) {
 	}
 }
 
+// TestPluginExecCmd_TooFewArgs surfaces the up-front usage error before any
+// filesystem or exec work.
+func TestPluginExecCmd_TooFewArgs(t *testing.T) {
+	err := (&PluginExecCmd{Args: nil}).Run(context.Background(), testEnv(t.TempDir()))
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Errorf("expected usage error, got %v", err)
+	}
+}
+
+// TestPluginExecCmd_MissingAlias checks both the "empty entry" and "named
+// entry" usage paths when no alias positional is supplied.
+func TestPluginExecCmd_MissingAlias(t *testing.T) {
+	t.Run("no entry", func(t *testing.T) {
+		err := (&PluginExecCmd{Args: []string{"probe", ""}}).Run(context.Background(), testEnv(t.TempDir()))
+		if err == nil || !strings.Contains(err.Error(), "-p probe") {
+			t.Errorf("expected usage error referencing -p probe, got %v", err)
+		}
+	})
+	t.Run("with entry", func(t *testing.T) {
+		err := (&PluginExecCmd{Args: []string{"probe", "ping"}}).Run(context.Background(), testEnv(t.TempDir()))
+		if err == nil || !strings.Contains(err.Error(), "-p probe:ping") {
+			t.Errorf("expected usage error referencing -p probe:ping, got %v", err)
+		}
+	})
+}
+
+// TestPluginExecCmd_UnknownPlugin reports the plugin name and the
+// plugins.toml path so the user can fix their config quickly.
+func TestPluginExecCmd_UnknownPlugin(t *testing.T) {
+	home := t.TempDir()
+	err := (&PluginExecCmd{Args: []string{"nope", "", "acme"}}).Run(context.Background(), testEnv(home))
+	if err == nil {
+		t.Fatal("expected error for unknown plugin")
+	}
+	if !strings.Contains(err.Error(), "unknown plugin") {
+		t.Errorf("error should say 'unknown plugin': %v", err)
+	}
+}
+
+// TestPluginExecCmd_BinaryMissing fires when the plugin is recorded but its
+// binary isn't on disk yet (e.g. failed build, manual deletion).
+func TestPluginExecCmd_BinaryMissing(t *testing.T) {
+	home := t.TempDir()
+	pf := &plugins.PluginsFile{Plugins: []plugins.Plugin{{
+		Name: "probe", Repo: "user/onix-probe", SHA: "abc",
+	}}}
+	if err := plugins.SavePlugins(home, pf); err != nil {
+		t.Fatal(err)
+	}
+	err := (&PluginExecCmd{Args: []string{"probe", "", "acme"}}).Run(context.Background(), testEnv(home))
+	if err == nil {
+		t.Fatal("expected error when plugin binary is missing")
+	}
+	if !strings.Contains(err.Error(), "plugin binary missing") {
+		t.Errorf("expected 'plugin binary missing' error, got %v", err)
+	}
+}
+
+// TestPluginExecCmd_HappyPath drives the full dispatch flow: registered
+// plugin, stand-in binary on disk, alias resolvable, fake execCommandContext
+// returns success. Also exercises the `--` separator stripping for extras.
+func TestPluginExecCmd_HappyPath(t *testing.T) {
+	home := t.TempDir()
+	repo := "user/onix-probe"
+	dir := plugins.SourceDir(home, repo)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(plugins.BinaryPath(home, repo), []byte("stub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pf := &plugins.PluginsFile{Plugins: []plugins.Plugin{{
+		Name: "probe", Repo: repo, SHA: "abc",
+	}}}
+	if err := plugins.SavePlugins(home, pf); err != nil {
+		t.Fatal(err)
+	}
+	// Register the alias so resolveAliasPath finds it.
+	aliasTarget := t.TempDir()
+	if err := (&AddCmd{Alias: "acme", Path: aliasTarget}).Run(context.Background(), testEnv(home)); err != nil {
+		t.Fatalf("AddCmd.Run: %v", err)
+	}
+
+	installFakeExec(t)
+	pushFakeResponse("", "", 0) // the plugin binary itself
+
+	args := []string{"probe", "ping", "acme", "--", "extra1", "extra2"}
+	err := (&PluginExecCmd{Args: args}).Run(context.Background(), testEnv(home))
+	if err != nil {
+		t.Fatalf("PluginExecCmd.Run: %v", err)
+	}
+	// The stripped extras should reach the plugin invocation.
+	if findCall("extra1", "extra2") == nil {
+		t.Errorf("plugin not invoked with stripped extras: %v", fakeExecCalls)
+	}
+}
+
 // TestPluginListCmd_UnpinnedFlag confirms the (unpinned) suffix appears on
 // the state column when the plugin record sets Unpinned=true.
 func TestPluginListCmd_UnpinnedFlag(t *testing.T) {

@@ -243,6 +243,92 @@ func TestExtractBashSnippetPin(t *testing.T) {
 	})
 }
 
+// TestCheckHome covers the three branches: missing dir, not-a-dir, dir.
+func TestCheckHome(t *testing.T) {
+	t.Run("missing", func(t *testing.T) {
+		r := checkHome(filepath.Join(t.TempDir(), "nope"))
+		if r.Status != "err" || !strings.Contains(r.Detail, "missing") {
+			t.Errorf("got %+v, want err/missing", r)
+		}
+	})
+	t.Run("not a directory", func(t *testing.T) {
+		dir := t.TempDir()
+		f := filepath.Join(dir, "file")
+		if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkHome(f)
+		if r.Status != "err" || !strings.Contains(r.Detail, "not a directory") {
+			t.Errorf("got %+v, want err/not-a-directory", r)
+		}
+	})
+	t.Run("ok", func(t *testing.T) {
+		r := checkHome(t.TempDir())
+		if r.Status != "ok" {
+			t.Errorf("got %+v, want ok", r)
+		}
+	})
+}
+
+// TestCheckAliasesFile covers missing-file and malformed-TOML branches.
+// The happy path is exercised indirectly by TestDoctorCmd.
+func TestCheckAliasesFile(t *testing.T) {
+	t.Run("missing", func(t *testing.T) {
+		r := checkAliasesFile(t.TempDir())
+		if r.Status != "warn" || !strings.Contains(r.Detail, "missing") {
+			t.Errorf("got %+v, want warn/missing", r)
+		}
+	})
+	t.Run("malformed", func(t *testing.T) {
+		home := t.TempDir()
+		if err := os.WriteFile(filepath.Join(home, "aliases.toml"), []byte("garbage [["), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkAliasesFile(home)
+		if r.Status != "err" {
+			t.Errorf("got %+v, want err", r)
+		}
+	})
+}
+
+// TestCheckConfigFile covers missing/malformed/empty/with-actions branches.
+func TestCheckConfigFile(t *testing.T) {
+	t.Run("missing", func(t *testing.T) {
+		r := checkConfigFile(t.TempDir())
+		if r.Status != "ok" || !strings.Contains(r.Detail, "absent") {
+			t.Errorf("got %+v, want ok/absent", r)
+		}
+	})
+	t.Run("malformed", func(t *testing.T) {
+		home := t.TempDir()
+		if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("garbage [["), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkConfigFile(home)
+		if r.Status != "err" {
+			t.Errorf("got %+v, want err", r)
+		}
+	})
+	t.Run("empty actions", func(t *testing.T) {
+		home := t.TempDir()
+		if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("# empty\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		r := checkConfigFile(home)
+		if r.Status != "ok" || !strings.Contains(r.Detail, "no actions") {
+			t.Errorf("got %+v, want ok/no actions", r)
+		}
+	})
+}
+
+// TestCheckShellSnippet covers the missing-snippet warn branch.
+func TestCheckShellSnippet(t *testing.T) {
+	r := checkShellSnippet(t.TempDir())
+	if r.Status != "warn" || !strings.Contains(r.Detail, "missing") {
+		t.Errorf("got %+v, want warn/missing", r)
+	}
+}
+
 func TestDoctorCmd(t *testing.T) {
 	home := t.TempDir()
 	// Initialize the home so doctor has something to check

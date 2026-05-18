@@ -33,22 +33,22 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 
-	if _, err := exec.LookPath("rg"); err != nil {
+	if _, err := lookPath("rg"); err != nil {
 		return fmt.Errorf("ripgrep ('rg') not found on PATH")
 	}
-	if _, err := exec.LookPath("fzf"); err != nil {
+	if _, err := lookPath("fzf"); err != nil {
 		return fmt.Errorf("fzf not found on PATH")
 	}
 
-	// Construct rg command.
-	rgArgs := []string{"--line-number", "--column", "--color=always", "--smart-case", "--heading", "never"}
+	// --vimgrep guarantees one match per line as file:line:col:text with no
+	// heading, which is what fzf needs for clean single-line records.
+	rgArgs := []string{"--vimgrep", "--color=always", "--smart-case"}
 	rgArgs = append(rgArgs, extras...)
 	if query != "" {
 		rgArgs = append(rgArgs, query)
 	}
 	rgArgs = append(rgArgs, ".")
 
-	// Construct fzf command.
 	previewCmd := "bat --style=numbers --color=always --highlight-line {2} {1} 2>/dev/null || cat {1}"
 	if runtime.GOOS == "windows" {
 		previewCmd = "bat --style=numbers --color=always --highlight-line {2} {1} 2>$null || type {1}"
@@ -122,13 +122,13 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 
-	if _, err := exec.LookPath("fzf"); err != nil {
+	if _, err := lookPath("fzf"); err != nil {
 		return fmt.Errorf("fzf not found on PATH")
 	}
 
 	var findCmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		if _, err := exec.LookPath("es"); err == nil {
+		if _, err := lookPath("es"); err == nil {
 			esArgs := []string{"-p", target}
 			if query != "" {
 				esArgs = append(esArgs, query)
@@ -139,7 +139,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	if findCmd == nil {
-		if _, err := exec.LookPath("fd"); err == nil {
+		if _, err := lookPath("fd"); err == nil {
 			fdArgs := []string{"--type", "f", "--color", "always"}
 			fdArgs = append(fdArgs, extras...)
 			if query != "" {
