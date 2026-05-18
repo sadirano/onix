@@ -48,17 +48,15 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	// rg output is file:line:text — fzf splits on `:`, so {1}=file and
-	// {2}=line in the preview command. `.` anchors the search at cmd.Dir
-	// even when our stdin is nil (otherwise rg would read patterns from
-	// stdin). Case behaviour is rg's --smart-case; if the user wants
-	// something else they can pass --ignore-case / --case-sensitive in
-	// the extras and the later flag wins.
+	// {2}=line in the preview command. No trailing "." so rg prints
+	// "src/foo.go:" rather than "./src/foo.go:". rgCmd.Stdin is set to
+	// the parent's tty below so rg falls back to "search cwd" instead
+	// of reading patterns from a nil stdin.
 	rgArgs := []string{"--smart-case", "--color=always", "--line-number", "--no-heading"}
 	rgArgs = append(rgArgs, extras...)
 	if query != "" {
 		rgArgs = append(rgArgs, query)
 	}
-	rgArgs = append(rgArgs, ".")
 
 	fzfArgs := []string{"--ansi", "--multi"}
 	if strings.TrimSpace(cfg.Grep.FzfColors) != "" {
@@ -73,6 +71,7 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 
 	rgCmd := execCommandContext(ctx, "rg", rgArgs...)
 	rgCmd.Dir = target
+	rgCmd.Stdin = os.Stdin
 	rgOut, err := rgCmd.StdoutPipe()
 	if err != nil {
 		return err
