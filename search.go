@@ -136,12 +136,13 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	var findCmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		if _, err := lookPath("es"); err == nil {
-			esArgs := []string{"-p", target}
+			esArgs := []string{"--path", "./"}
 			if query != "" {
 				esArgs = append(esArgs, query)
 			}
 			esArgs = append(esArgs, extras...)
 			findCmd = execCommandContext(ctx, "es", esArgs...)
+			findCmd.Dir = target
 		}
 	}
 
