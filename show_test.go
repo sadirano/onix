@@ -173,6 +173,9 @@ func TestHasShortFlag(t *testing.T) {
 		{"does not match --long", []string{"--long"}, "l", false},
 		{"does not match positional", []string{"long"}, "l", false},
 		{"does not match other short", []string{"-a"}, "l", false},
+		{"does not match single-dash long flag -Filter", []string{"-Filter"}, "l", false},
+		{"does not match single-dash long flag -Recurse", []string{"-Recurse"}, "r", false},
+		{"matches solo uppercase short -L", []string{"-L"}, "L", true},
 		{"empty args", []string{}, "l", false},
 	}
 
@@ -276,11 +279,12 @@ func TestBuildShowCommand(t *testing.T) {
 				t.Errorf("could not find expected Get-ChildItem script in args: %v", cmd.Args)
 			}
 		} else {
-			// Unix: ls -la -Filter *.go
-			if cmd.Path != "ls" {
-				t.Errorf("got path %q, want ls", cmd.Path)
+			// Unix: ls -la -Filter *.go. Path is LookPath-resolved
+			// (/usr/bin/ls etc.), so compare basename rather than the
+			// literal string.
+			if base := filepath.Base(cmd.Path); base != "ls" {
+				t.Errorf("got path %q, want basename ls", cmd.Path)
 			}
-			// Check for -la insertion
 			hasLA := false
 			for _, a := range cmd.Args {
 				if a == "-la" {
@@ -312,8 +316,8 @@ func TestBuildShowCommand(t *testing.T) {
 				t.Errorf("could not find expected Get-Content script in args: %v", cmd.Args)
 			}
 		} else {
-			if cmd.Path != "cat" {
-				t.Errorf("got path %q, want cat", cmd.Path)
+			if base := filepath.Base(cmd.Path); base != "cat" {
+				t.Errorf("got path %q, want basename cat", cmd.Path)
 			}
 			found := false
 			for _, a := range cmd.Args {

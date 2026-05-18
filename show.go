@@ -151,16 +151,42 @@ func psQuoteArgs(args []string) []string {
 // hasShortFlag reports whether args contains a single-char flag like -l or
 // -la (matches anywhere in clustered shorts). Used to skip the default
 // `ls -la` when the user supplied their own listing flags.
+//
+// Single-dash long flags (e.g. PowerShell-style `-Filter`) are NOT short
+// clusters — the rule treats any post-dash run containing an uppercase
+// letter or a non-letter as a long flag.
 func hasShortFlag(args []string, ch string) bool {
 	for _, a := range args {
 		if !strings.HasPrefix(a, "-") || strings.HasPrefix(a, "--") {
 			continue
 		}
-		if strings.Contains(a[1:], ch) {
+		rest := a[1:]
+		if rest == "" || !isShortCluster(rest) {
+			continue
+		}
+		if strings.Contains(rest, ch) {
 			return true
 		}
 	}
 	return false
+}
+
+// isShortCluster decides whether the post-dash run looks like a cluster
+// of single-char short flags. Allow a single letter (any case) for
+// solo shorts like -l or -L; for multi-char runs require all-lowercase
+// letters so `-Filter`, `-Recurse`, `-NotZ` don't get treated as
+// clusters of l/r/etc.
+func isShortCluster(s string) bool {
+	if len(s) == 1 {
+		r := rune(s[0])
+		return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+	}
+	for _, r := range s {
+		if r < 'a' || r > 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 var exit = os.Exit
