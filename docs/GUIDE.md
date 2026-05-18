@@ -334,8 +334,8 @@ match line. Configure via `~/.onix/config.toml`:
 
 ```toml
 [grep]
-preview_window  = "up:60%:border-bottom:+{2}+3/3:~1"
-preview_command = "bat --style=numbers,header --color=always {1} --highlight-line {2}"
+preview_window  = "up:60%:border-bottom:+{2}+3/3:~2"
+preview_command = "bat --style=numbers,header,grid --color=always {1} --highlight-line {2}"
 fzf_colors      = ""   # extra --color flags layered on top of the theme
 rg_colors       = [    # each entry becomes `--colors <spec>` on rg
     "path:fg:blue",
