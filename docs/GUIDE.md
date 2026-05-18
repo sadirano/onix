@@ -329,12 +329,19 @@ You land in your editor at that exact line. Nothing to copy, nothing to type.
 
 Multi-select is supported: select several matches with Tab, press Enter, they all open.
 
-The default layout is a top split (`up:60%:~1`) — bat above, results below.
-Override it via `~/.onix/config.toml`:
+The default layout is a top split that auto-scrolls the preview to the
+match line. Every knob is configurable via `~/.onix/config.toml`:
+
 ```toml
 [grep]
-preview_window = "right:50%:~1"   # any fzf --preview-window value
+preview_window  = "up:60%:border-bottom:+{2}+3/3:~3"   # any fzf --preview-window value
+preview_command = "bat --color=always {1} --highlight-line {2}"
+fzf_colors      = "hl:-1:underline,hl+:-1:underline:reverse"
+case            = "ignore"   # smart | ignore | match
 ```
+
+In the preview command, `{1}` is the file and `{2}` is the line number
+(rg emits `file:line:text`; fzf splits on `:`).
 
 ---
 

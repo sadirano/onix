@@ -42,32 +42,32 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 		return fmt.Errorf("fzf not found on PATH")
 	}
 
-	// --vimgrep guarantees one match per line as file:line:col:text with no
-	// heading, which is what fzf needs for clean single-line records.
-	rgArgs := []string{"--vimgrep", "--color=always", "--smart-case"}
+	cfg, err := config.LoadConfig(e.Home)
+	if err != nil {
+		return err
+	}
+
+	// rg output is file:line:text — fzf splits on `:`, so {1}=file and
+	// {2}=line in the preview command. `.` anchors the search at cmd.Dir
+	// even when our stdin is nil (otherwise rg would read patterns from
+	// stdin).
+	rgArgs := []string{cfg.Grep.RipgrepCaseFlag(), "--color=always", "--line-number", "--no-heading"}
 	rgArgs = append(rgArgs, extras...)
 	if query != "" {
 		rgArgs = append(rgArgs, query)
 	}
 	rgArgs = append(rgArgs, ".")
 
-	previewCmd := "bat --style=numbers --color=always --highlight-line {2} {1} 2>/dev/null || cat {1}"
-	if runtime.GOOS == "windows" {
-		previewCmd = "bat --style=numbers --color=always --highlight-line {2} {1} 2>$null || type {1}"
+	fzfArgs := []string{"--ansi", "--multi"}
+	if colors := cfg.Grep.FzfColorsOrDefault(); colors != "" {
+		fzfArgs = append(fzfArgs, "--color", colors)
 	}
-
-	cfg, err := config.LoadConfig(e.Home)
-	if err != nil {
-		return err
-	}
-
-	fzfArgs := []string{
-		"--ansi",
-		"--multi",
+	fzfArgs = append(
+		fzfArgs,
 		"--delimiter", ":",
-		"--preview", previewCmd,
+		"--preview", cfg.Grep.PreviewCommandOrDefault(),
 		"--preview-window", cfg.Grep.PreviewWindowOrDefault(),
-	}
+	)
 
 	rgCmd := execCommandContext(ctx, "rg", rgArgs...)
 	rgCmd.Dir = target
@@ -213,21 +213,13 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 func openSelectionsInEditor(ctx context.Context, target string, selections []string) error {
 	ed := resolveEditor()
 
-	// Pre-process selections. For grep, they are file:line:col:text.
-	// For find, they are just file.
-
+	// grep selections are file:line:text; find selections are just file.
 	argv := []string{}
 	for _, s := range selections {
 		parts := strings.Split(s, ":")
 		if len(parts) >= 2 {
-			// grep format: file:line[:col]:text
-			file := parts[0]
-			line := parts[1]
-
-			// Most editors support +<line>
-			argv = append(argv, fmt.Sprintf("+%s", line), file)
+			argv = append(argv, fmt.Sprintf("+%s", parts[1]), parts[0])
 		} else {
-			// find format: file
 			argv = append(argv, s)
 		}
 	}
