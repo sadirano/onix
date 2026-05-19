@@ -36,7 +36,7 @@ function global:o {
         & $global:onixExe --apply-context $Alias | Invoke-Expression
     }
 }
-function global:n {
+function global:e {
     [CmdletBinding()]
     param(
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
@@ -97,4 +97,4 @@ function global:pr {
     & $global:onixExe $Alias --exec pr @Rest
 }
 
-Register-ArgumentCompleter -CommandName ff,n,o,pr,r,s,sg,test,y -ParameterName Alias -ScriptBlock $onixAliasCompleter
+Register-ArgumentCompleter -CommandName e,ff,o,pr,r,s,sg,test,y -ParameterName Alias -ScriptBlock $onixAliasCompleter

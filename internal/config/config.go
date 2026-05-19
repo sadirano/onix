@@ -218,7 +218,7 @@ func BuiltinDefaults() map[string]string {
 
 var builtinDefaults = map[string]string{
 	"o":  "o",
-	"n":  "n",
+	"e":  "e",
 	"s":  "s",
 	"y":  "y",
 	"r":  "r",

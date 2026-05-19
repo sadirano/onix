@@ -173,7 +173,7 @@ func ValidatePlugins(pf *PluginsFile, actions []config.Action) error {
 }
 
 // BuiltinWrapperNames is the list of names emitted by snippetBuiltins.
-var BuiltinWrapperNames = []string{"o", "n", "s", "y", "r", "sg", "ff"}
+var BuiltinWrapperNames = []string{"o", "e", "s", "y", "r", "sg", "ff"}
 
 // ConfigJSON serialises Plugin.Config for ONIX_MODULE_CONFIG.
 func (p *Plugin) ConfigJSON() string {

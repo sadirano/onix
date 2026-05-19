@@ -48,7 +48,7 @@ const pwshO = `function global:%s {
 }
 `
 
-const pwshN = `function global:%s {
+const pwshE = `function global:%s {
     [CmdletBinding()]
     param(
         [Parameter(Position=0, Mandatory=$true)][string]$Alias,
@@ -124,7 +124,7 @@ const bashO = `%s() {
 }
 `
 
-const bashN = `%s() {
+const bashE = `%s() {
     local alias=$1
     shift
     "$ONIX_EXE" "$alias" --edit "$@"
@@ -221,7 +221,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	}
 
 	fmt.Fprintf(&b, pwshO, s["o"], s["o"])
-	fmt.Fprintf(&b, pwshN, s["n"])
+	fmt.Fprintf(&b, pwshE, s["e"])
 	fmt.Fprintf(&b, pwshS, s["s"])
 	fmt.Fprintf(&b, pwshY, s["y"])
 	fmt.Fprintf(&b, pwshR, s["r"])
@@ -237,7 +237,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	_ = os.MkdirAll(binDir, 0o755)
 
 	writeOCmdWrapper(binDir, exe, s["o"])
-	writeAliasFlagWrapper(binDir, exe, s["n"], "--edit")
+	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
 	writeAliasFlagWrapper(binDir, exe, s["s"], "--explore")
 	writeAliasFlagWrapper(binDir, exe, s["y"], "--yank")
 	writeAliasFlagWrapper(binDir, exe, s["r"], "--run")
@@ -355,7 +355,7 @@ func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []c
 	}
 
 	fmt.Fprintf(&b, bashO, s["o"], s["o"])
-	fmt.Fprintf(&b, bashN, s["n"])
+	fmt.Fprintf(&b, bashE, s["e"])
 	fmt.Fprintf(&b, bashS, s["s"])
 	fmt.Fprintf(&b, bashY, s["y"])
 	fmt.Fprintf(&b, bashR, s["r"])

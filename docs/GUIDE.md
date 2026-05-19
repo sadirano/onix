@@ -96,7 +96,7 @@ source-template = "/source"
 
 ```
 s docs@sms       → shell in <sms>/documentation
-n src@sms        → editor in <sms>/source
+e src@sms        → editor in <sms>/source
 ```
 
 If you invoke a segment that isn't defined, onix opens an interactive prompt that
@@ -235,17 +235,17 @@ nvim .
 
 **With onix:**
 ```
-o acme -n
+o acme -e
 ```
 ```
-n acme
+e acme
 ```
 
 Goes straight to the project root in your editor (respects `$EDITOR`, defaults to nvim).
 
 Want to open a subdirectory directly?
 ```
-n acme -s src
+e acme -s src
 ```
 
 ---
@@ -534,17 +534,17 @@ timing        = false```
 
 ```
 sg acme handleAuth              # search contents → jump to line in editor
-n acme -s src                   # open editor directly in a subdirectory
+e acme -s src                   # open editor directly in a subdirectory
 r acme "go test ./..."          # run tests without leaving your current shell
 f acme README.md                # open a known file from anywhere
 ff acme migration               # find a filename, open it
 y acme                          # resolved path → print + clipboard + ONIX_LAST
-o acme -s internal -n           # land in a subdir and open editor in one shot
+o acme -s internal -e           # land in a subdir and open editor in one shot
 img acme screenshot-name        # paste clipboard image into project
 
 # Sub-alias navigation (segments defined as [[contexts]] in segments.toml)
 s docs@sms                      # shell in <sms>/documentation
-n src@sms                       # editor in <sms>/source
+e src@sms                       # editor in <sms>/source
 s tasks:432@acme                # inline value: <acme>/tickets/432
 f task:432@client:bob@projb     # multi-segment: <projb>/bob_432.md
 

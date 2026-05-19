@@ -23,7 +23,7 @@ onix acme C:\Users\dev\projects\acme       # register an alias (auto-creates the
 o acme                                     # cd into it (in your current shell)
 o acme C:\Users\dev\projects\acme          # register + cd in one step (dir auto-created)
 o                                          # no args: open aliases.toml in your editor
-n acme                                     # open it in your editor
+e acme                                     # open it in your editor
 s acme                                     # open it in Explorer
 y acme                                     # print the path and copy to clipboard
 r acme go test ./...                       # run a command at that path
@@ -38,7 +38,7 @@ The `o` command changes the **current** shell's working directory — it does no
 - `o <alias> <path>` — register (or update) the alias to point at `<path>` and cd there. The directory is auto-created if it doesn't exist.
 - `o` (no args) — open `aliases.toml` in `$EDITOR`. Use `onix --list` if you want a tabular dump to stdout instead.
 
-Everything else (`n`, `s`, `y`, `r`) invokes `onix` directly, so those don't need shell integration to work.
+Everything else (`e`, `s`, `y`, `r`) invokes `onix` directly, so those don't need shell integration to work.
 
 ## Configuration
 
@@ -79,7 +79,7 @@ Append subdirectory shortcuts to any alias with `@`. Each segment is defined as 
 
 ```powershell
 o docs@acme              # cd into <acme-path>/documentation
-n src@acme               # editor at <acme-path>/source
+e src@acme               # editor at <acme-path>/source
 o tasks:432@acme         # inline value: cd into <acme-path>/tickets/432
 o client:bob@projb       # multi-segment, innermost first
 ```
