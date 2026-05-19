@@ -215,18 +215,14 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 // must handle both files (bat) and directories (listing). es returns
 // directories alongside files; bat errors on a directory path, so a
 // flat `bat {}` breaks the preview pane the moment the user lands on a
-// folder. We branch in the shell that fzf invokes — that's cmd.exe on
-// Windows and /bin/sh elsewhere.
+// folder. Instead of an if/else block (cmd.exe's parser chokes on the
+// parens combined with quoted Windows paths), we try bat first and fall
+// back to a directory listing on failure.
 func findPreviewCommand() string {
 	if runtime.GOOS == "windows" {
-		// cmd.exe trick: `<path>\.` only resolves when <path> is a
-		// directory, so `if exist "{}\."` is the portable batch test
-		// for "is this a folder". /b keeps `dir` to one filename per
-		// line so the preview pane isn't overwhelmed.
-		return `if exist "{}\." (dir /b "{}") else (bat --style=numbers --color=always "{}")`
+		return `bat --style=numbers --color=always "{}" 2>nul || dir /b "{}"`
 	}
-	// POSIX sh: -d tests for a directory.
-	return `if [ -d "{}" ]; then ls -la "{}"; else bat --style=numbers --color=always "{}"; fi`
+	return `bat --style=numbers --color=always "{}" 2>/dev/null || ls -la "{}"`
 }
 
 // fzfTokyoNightTheme is the default --color set we hand fzf via
