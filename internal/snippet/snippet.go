@@ -272,11 +272,18 @@ const FindPreviewWrapperName = "onix-preview.cmd"
 // branching logic in a real script (rather than inline in --preview)
 // sidesteps cmd.exe's parser quirks with parens and quoted paths.
 func writeFindPreviewWrapper(binDir string) {
+	// NB: fzf shell-escapes substituted {} values with carets on Windows,
+	// and because we wrap {} in double quotes (so paths with spaces stay
+	// one token) cmd.exe does NOT strip those carets — they survive into
+	// %~1 and break path resolution. Strip them ourselves; Windows paths
+	// effectively never contain a literal ^.
 	const content = `@echo off
-if exist "%~1\." (
-  dir /b "%~1"
+set "p=%~1"
+set "p=%p:^=%"
+if exist "%p%\." (
+  dir /b "%p%"
 ) else (
-  bat --style=numbers --color=always "%~1"
+  bat --style=numbers --color=always "%p%"
 )
 `
 	_ = os.WriteFile(filepath.Join(binDir, FindPreviewWrapperName), []byte(content), 0o644)
