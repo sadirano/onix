@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
+	"github.com/sadirano/onix/internal/snippet"
 )
 
 // -----------------------------------------------------------------------------
@@ -180,7 +182,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	fzfArgs := []string{
 		"--ansi",
 		"--multi",
-		"--preview", findPreviewCommand(),
+		"--preview", findPreviewCommand(e.Home),
 	}
 	fzfCmd := execCommandContext(ctx, "fzf", fzfArgs...)
 	fzfCmd.Dir = target
@@ -211,16 +213,17 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	return openSelectionsInEditor(ctx, target, lines, false)
 }
 
-// findPreviewCommand returns the fzf --preview command for `ff`, which
-// must handle both files (bat) and directories (listing). es returns
-// directories alongside files; bat errors on a directory path, so a
-// flat `bat {}` breaks the preview pane the moment the user lands on a
-// folder. Instead of an if/else block (cmd.exe's parser chokes on the
-// parens combined with quoted Windows paths), we try bat first and fall
-// back to a directory listing on failure.
-func findPreviewCommand() string {
+// findPreviewCommand returns the fzf --preview command for `ff`. It
+// must handle both files (bat) and directories (listing) since es
+// returns directories alongside files and bat errors on a directory.
+// On Windows we delegate to a real .cmd shim (written by
+// writeFindPreviewWrapper); inline if/else inside fzf's --preview
+// trips cmd.exe's parser on Windows paths. POSIX shells parse the
+// inline form just fine.
+func findPreviewCommand(home string) string {
 	if runtime.GOOS == "windows" {
-		return `bat --style=numbers --color=always "{}" 2>nul || dir /b "{}"`
+		wrapper := filepath.Join(home, "bin", snippet.FindPreviewWrapperName)
+		return `"` + wrapper + `" "{}"`
 	}
 	return `bat --style=numbers --color=always "{}" 2>/dev/null || ls -la "{}"`
 }

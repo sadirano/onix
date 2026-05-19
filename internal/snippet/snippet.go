@@ -233,6 +233,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	_ = os.MkdirAll(binDir, 0o755)
 
 	writeOCmdWrapper(binDir, exe, s["o"])
+	writeFindPreviewWrapper(binDir)
 	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
 	writeAliasFlagWrapper(binDir, exe, s["s"], "--explore")
 	writeAliasFlagWrapper(binDir, exe, s["y"], "--yank")
@@ -258,6 +259,27 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	writeCompleterRegistration(&b, s, actions, plgs)
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+// FindPreviewWrapperName is the on-disk filename of the fzf preview
+// helper used by `onix find`. Exported so search.go can build its path
+// without re-encoding the string.
+const FindPreviewWrapperName = "onix-preview.cmd"
+
+// writeFindPreviewWrapper drops a tiny batch helper next to the other
+// shims. fzf calls it once per highlighted row: directories get a
+// `dir /b` listing, everything else goes through bat. Keeping the
+// branching logic in a real script (rather than inline in --preview)
+// sidesteps cmd.exe's parser quirks with parens and quoted paths.
+func writeFindPreviewWrapper(binDir string) {
+	const content = `@echo off
+if exist "%~1\." (
+  dir /b "%~1"
+) else (
+  bat --style=numbers --color=always "%~1"
+)
+`
+	_ = os.WriteFile(filepath.Join(binDir, FindPreviewWrapperName), []byte(content), 0o644)
 }
 
 func writeOCmdWrapper(binDir, exe, name string) {

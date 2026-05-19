@@ -147,6 +147,25 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	}
 }
 
+func TestWritePwshShellSnippet_FindPreviewWrapper(t *testing.T) {
+	dir := t.TempDir()
+	if err := WritePwshShellSnippet(dir, nil, nil, nil); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	path := filepath.Join(dir, "bin", FindPreviewWrapperName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `if exist "%~1\."`) {
+		t.Errorf("preview wrapper missing directory test:\n%s", content)
+	}
+	if !strings.Contains(content, "dir /b") || !strings.Contains(content, "bat ") {
+		t.Errorf("preview wrapper missing dir/bat branches:\n%s", content)
+	}
+}
+
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
