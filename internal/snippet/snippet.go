@@ -275,15 +275,23 @@ func writeFindPreviewWrapper(binDir string) {
 	// NB: fzf shell-escapes substituted {} values with carets on Windows,
 	// and because we wrap {} in double quotes (so paths with spaces stay
 	// one token) cmd.exe does NOT strip those carets — they survive into
-	// %~1 and break path resolution. Strip them ourselves; Windows paths
-	// effectively never contain a literal ^.
+	// %~1. We scrub them via delayed-expansion substitution (the regular
+	// %p:^=% form is unreliable; cmd's parser treats `^=` as escaped `=`
+	// so the pattern collapses and nothing gets stripped).
+	//
+	// Directory test uses pushd, not `if exist "...\."` — the latter
+	// returns true for files on some cmd builds, which is exactly the
+	// regression that sent files through the `dir /b` branch.
 	const content = `@echo off
+setlocal enabledelayedexpansion
 set "p=%~1"
-set "p=%p:^=%"
-if exist "%p%\." (
-  dir /b "%p%"
+set "p=!p:^=!"
+pushd "!p!" >nul 2>&1
+if errorlevel 1 (
+  bat --style=numbers --color=always "!p!"
 ) else (
-  bat --style=numbers --color=always "%p%"
+  popd
+  dir /b "!p!"
 )
 `
 	_ = os.WriteFile(filepath.Join(binDir, FindPreviewWrapperName), []byte(content), 0o644)

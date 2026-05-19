@@ -158,16 +158,20 @@ func TestWritePwshShellSnippet_FindPreviewWrapper(t *testing.T) {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	content := string(data)
-	if !strings.Contains(content, `if exist "%p%\."`) {
-		t.Errorf("preview wrapper missing directory test:\n%s", content)
+	if !strings.Contains(content, `pushd "!p!"`) {
+		t.Errorf("preview wrapper missing pushd directory test:\n%s", content)
 	}
 	if !strings.Contains(content, "dir /b") || !strings.Contains(content, "bat ") {
 		t.Errorf("preview wrapper missing dir/bat branches:\n%s", content)
 	}
 	// Regression: fzf prefixes substituted {} chars with ^ on Windows,
-	// and quoting protects them from cmd's normal stripping. The wrapper
-	// must scrub them itself.
-	if !strings.Contains(content, "set \"p=%p:^=%\"") {
+	// quotes protect them from cmd's normal stripping. We strip via
+	// delayed expansion because the plain %p:^=% pattern collapses
+	// (cmd treats ^= as escaped =).
+	if !strings.Contains(content, "setlocal enabledelayedexpansion") {
+		t.Errorf("preview wrapper missing delayed expansion:\n%s", content)
+	}
+	if !strings.Contains(content, "set \"p=!p:^=!\"") {
 		t.Errorf("preview wrapper missing caret strip:\n%s", content)
 	}
 }
