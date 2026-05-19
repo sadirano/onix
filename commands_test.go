@@ -590,6 +590,10 @@ func TestExploreCmd(t *testing.T) {
 		if lastCmd[0] != "explorer.exe" {
 			t.Errorf("got %q, want explorer.exe", lastCmd[0])
 		}
+	} else {
+		if lastCmd[0] != "xdg-open" {
+			t.Errorf("got %q, want xdg-open", lastCmd[0])
+		}
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -107,5 +108,20 @@ func TestOpenSelectionsInEditor(t *testing.T) {
 	}
 	if err := openSelectionsInEditor(context.Background(), ".", []string{`C:\path\file.go`, "other.go"}, false); err != nil {
 		t.Errorf("openSelectionsInEditor (find) failed: %v", err)
+	}
+}
+
+// TestFindPreviewCommand confirms the OS branches: Windows points fzf at
+// the onix-preview.cmd shim, POSIX uses an inline bat-or-ls fallback.
+func TestFindPreviewCommand(t *testing.T) {
+	got := findPreviewCommand("/home/onix")
+	if runtime.GOOS == "windows" {
+		if !strings.Contains(got, "onix-preview.cmd") || !strings.Contains(got, "{}") {
+			t.Errorf("windows preview should invoke the shim: %q", got)
+		}
+	} else {
+		if !strings.Contains(got, "bat ") || !strings.Contains(got, "ls -la") {
+			t.Errorf("posix preview should fall back from bat to ls: %q", got)
+		}
 	}
 }
