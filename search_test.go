@@ -102,8 +102,10 @@ func TestOpenSelectionsInEditor(t *testing.T) {
 	// Set EDITOR to a command that does nothing
 	t.Setenv("EDITOR", "true")
 
-	err := openSelectionsInEditor(context.Background(), ".", []string{"file.go:10:text", "other.go"})
-	if err != nil {
-		t.Errorf("openSelectionsInEditor failed: %v", err)
+	if err := openSelectionsInEditor(context.Background(), ".", []string{"file.go:10:text"}, true); err != nil {
+		t.Errorf("openSelectionsInEditor (grep) failed: %v", err)
+	}
+	if err := openSelectionsInEditor(context.Background(), ".", []string{`C:\path\file.go`, "other.go"}, false); err != nil {
+		t.Errorf("openSelectionsInEditor (find) failed: %v", err)
 	}
 }

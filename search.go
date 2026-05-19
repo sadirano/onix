@@ -107,7 +107,7 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 		return nil
 	}
 
-	return openSelectionsInEditor(ctx, target, lines)
+	return openSelectionsInEditor(ctx, target, lines, true)
 }
 
 // -----------------------------------------------------------------------------
@@ -208,7 +208,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 		return nil
 	}
 
-	return openSelectionsInEditor(ctx, target, lines)
+	return openSelectionsInEditor(ctx, target, lines, false)
 }
 
 // fzfTokyoNightTheme is the default --color set we hand fzf via
@@ -231,18 +231,23 @@ func applyDefaultFzfTheme(cmd *exec.Cmd) {
 	cmd.Env = append(os.Environ(), "FZF_DEFAULT_OPTS="+fzfTokyoNightTheme)
 }
 
-func openSelectionsInEditor(ctx context.Context, target string, selections []string) error {
+func openSelectionsInEditor(ctx context.Context, target string, selections []string, hasLineNumbers bool) error {
 	ed := resolveEditor()
 
-	// grep selections are file:line:text; find selections are just file.
+	// grep selections are <relative file>:<line>:<text>; find selections
+	// are just the file path. On Windows, find can return drive-letter
+	// paths ("C:\..."), which themselves contain a colon — so we can't
+	// detect the format from the split alone. The caller tells us.
 	argv := []string{}
 	for _, s := range selections {
-		parts := strings.Split(s, ":")
-		if len(parts) >= 2 {
-			argv = append(argv, fmt.Sprintf("+%s", parts[1]), parts[0])
-		} else {
-			argv = append(argv, s)
+		if hasLineNumbers {
+			parts := strings.SplitN(s, ":", 3)
+			if len(parts) >= 2 {
+				argv = append(argv, fmt.Sprintf("+%s", parts[1]), parts[0])
+				continue
+			}
 		}
+		argv = append(argv, s)
 	}
 
 	if len(argv) == 0 {
