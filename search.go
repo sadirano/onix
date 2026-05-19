@@ -180,7 +180,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	fzfArgs := []string{
 		"--ansi",
 		"--multi",
-		"--preview", "bat --style=numbers --color=always {}",
+		"--preview", findPreviewCommand(),
 	}
 	fzfCmd := execCommandContext(ctx, "fzf", fzfArgs...)
 	fzfCmd.Dir = target
@@ -209,6 +209,24 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	return openSelectionsInEditor(ctx, target, lines, false)
+}
+
+// findPreviewCommand returns the fzf --preview command for `ff`, which
+// must handle both files (bat) and directories (listing). es returns
+// directories alongside files; bat errors on a directory path, so a
+// flat `bat {}` breaks the preview pane the moment the user lands on a
+// folder. We branch in the shell that fzf invokes — that's cmd.exe on
+// Windows and /bin/sh elsewhere.
+func findPreviewCommand() string {
+	if runtime.GOOS == "windows" {
+		// cmd.exe trick: `<path>\.` only resolves when <path> is a
+		// directory, so `if exist "{}\."` is the portable batch test
+		// for "is this a folder". /b keeps `dir` to one filename per
+		// line so the preview pane isn't overwhelmed.
+		return `if exist "{}\." (dir /b "{}") else (bat --style=numbers --color=always "{}")`
+	}
+	// POSIX sh: -d tests for a directory.
+	return `if [ -d "{}" ]; then ls -la "{}"; else bat --style=numbers --color=always "{}"; fi`
 }
 
 // fzfTokyoNightTheme is the default --color set we hand fzf via
