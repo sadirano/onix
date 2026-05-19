@@ -5,16 +5,18 @@ Use this as a fast copy/paste sheet to try every core Onix flow.
 ## 1) Base Pattern
 
 ```powershell
-onix <alias> [-s <subdir>] [action flag] [action extras...]
+onix <alias> [action flag] [action extras...]
 ```
 
 Examples:
 
 ```powershell
 onix api
-onix api -s src
-onix api -s src -n
+onix api -e
+onix api -e README.md
 ```
+
+To land in a subdirectory of an alias, define a segment in `~/.onix/segments.toml` and use `@`-syntax (`onix src@api`). See section 9.
 
 ## 2) Alias Management
 
@@ -24,9 +26,6 @@ onix
 
 # Register alias
 onix -a api -d C:\temp\api
-
-# Register alias + subdir baked in
-onix -a api-src -d C:\temp\api -s src
 ```
 
 Shortcut behavior:
@@ -41,24 +40,16 @@ c -a api -d C:\temp\api
 
 | Goal | Full form | Shortcut |
 |---|---|---|
-| Open shell | `onix api` | `o api` / `c api` |
-| Open Explorer | `onix api -e` | `s api` |
-| Open editor in folder | `onix api -n` | `n api` |
+| Open shell | `onix api` | `o api` |
+| Open Explorer | `onix api -x` | `s api` |
+| Open editor in folder | `onix api -e` | `e api` |
 | Print resolved path | `onix api -y` | `y api` |
 | Open specific file(s) | `onix api -f README.md` | `f api README.md` |
 | Run command in target dir | `onix api -r "go test ./..."` | `r api "go test ./..."` |
-| Search content (rg+fzf) | `onix api -sg handler` | `sg api handler` |
-| Search files (es+fzf) | `onix api -ff migration` | `ff api migration` |
+| Search content (rg+fzf) | `onix api -g handler` | `sg api handler` |
+| Search files (fd+fzf) | `onix api -f migration` | `ff api migration` |
 
-With subdir:
-
-```powershell
-onix api -s src -n
-onix api -s internal -f config.go
-onix api -s cmd -r "go build ."
-onix api -s src -sg router
-onix api -s src -ff handler
-```
+To scope these to a subdirectory, use a segment: `e src@api`, `sg src@api router`, etc.
 
 ## 4) sg / ff Quick Usage
 
@@ -103,7 +94,7 @@ set ONIX_DEBUG=1
 set ONIX_TIMING=1
 
 # Then run any command
-onix api -n
+onix api -e
 ```
 
 ## 9) Sub-Alias Navigation
@@ -166,8 +157,8 @@ to script shell side effects on `cd`.
 ```powershell
 onix -a demo -d C:\temp\demo
 onix demo
+onix demo -x
 onix demo -e
-onix demo -n
 onix demo -y
 onix demo -f README.md
 onix demo -r "dir"

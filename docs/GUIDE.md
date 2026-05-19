@@ -51,19 +51,7 @@ o acme
 
 Opens `cmd.exe` in that directory. Works from anywhere — no matter where your current shell is.
 
-Need to land in a subdirectory?
-
-**Manual:**
-```
-cd C:\Users\dev\projects\client-work\acme\backend\api\v2\src\handlers
-```
-
-**With onix:**
-```
-o acme -s src\handlers
-```
-
-The `-s` flag appends a subpath to the resolved alias before opening the shell.
+Need to land in a subdirectory? Define a segment for it (see *Sub-Alias Navigation* below) and call `o handlers@acme`.
 
 ### Unknown alias — interactive pick
 
@@ -242,11 +230,6 @@ e acme
 ```
 
 Goes straight to the project root in your editor (respects `$EDITOR`, defaults to nvim).
-
-Want to open a subdirectory directly?
-```
-e acme -s src
-```
 
 ---
 
@@ -496,7 +479,6 @@ If that's also empty, the image lands directly in `ONIX_TARGET`.
 **More examples:**
 ```
 img acme dark-mode-toggle          # → acme\assets\screenshots\2026-04-06\dark-mode-toggle.png
-img acme ui-flow -s reviews        # -s overrides the subdir for this one call
 img mysite hero-banner             # → mysite\docs\images\hero-banner.png
 ```
 
@@ -534,12 +516,11 @@ timing        = false```
 
 ```
 sg acme handleAuth              # search contents → jump to line in editor
-e acme -s src                   # open editor directly in a subdirectory
+e acme                          # open project root in editor
 r acme "go test ./..."          # run tests without leaving your current shell
 f acme README.md                # open a known file from anywhere
 ff acme migration               # find a filename, open it
 y acme                          # resolved path → print + clipboard + ONIX_LAST
-o acme -s internal -e           # land in a subdir and open editor in one shot
 img acme screenshot-name        # paste clipboard image into project
 
 # Sub-alias navigation (segments defined as [[contexts]] in segments.toml)
