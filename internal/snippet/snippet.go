@@ -43,7 +43,6 @@ const pwshO = `function global:%s {
     }
     if ($LASTEXITCODE -eq 0) {
         Set-Location -LiteralPath $resolved
-        & $global:onixExe --apply-context $Alias | Invoke-Expression
     }
 }
 `
@@ -117,9 +116,6 @@ const bashO = `%s() {
     fi
     if [ $? -eq 0 ]; then
         cd "$path"
-        local shell="bash"
-        if [ -n "$ZSH_VERSION" ]; then shell="zsh"; fi
-        eval "$("$ONIX_EXE" --apply-context "$1" --shell "$shell")"
     fi
 }
 `
@@ -298,9 +294,8 @@ if not defined _onix_target (
 
 cd /d "%%_onix_target%%"
 set "_onix_target="
-for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" --apply-context %%~1 --shell cmd`+"`"+`) do %%%%i
 if %%0 == "%%~f0" cmd /k
-`, exe, exe, exe, exe)
+`, exe, exe, exe)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 

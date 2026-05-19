@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -12,8 +11,8 @@ import (
 )
 
 // ContextListCmd prints every context defined in segments.toml in a
-// scannable table: segment name, env keys (sorted), exec command.
-// Invoked via `onix --contexts`.
+// scannable table: segment name, env keys, and the source field that
+// produces the path fragment. Invoked via `onix --contexts`.
 type ContextListCmd struct{}
 
 func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
@@ -27,7 +26,7 @@ func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "SEGMENT\tENV\tEXEC")
+	fmt.Fprintln(w, "SEGMENT\tENV\tSOURCE")
 	for _, cd := range sf.Contexts {
 		envKeys := make([]string, 0, len(cd.Env))
 		for k := range cd.Env {
@@ -38,97 +37,20 @@ func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
 		if len(envKeys) > 0 {
 			envStr = strings.Join(envKeys, ", ")
 		}
-		execStr := "-"
-		if len(cd.Exec) > 0 {
-			execStr = strings.Join(cd.Exec, " ")
-		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", cd.Segment, envStr, execStr)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", cd.Segment, envStr, sourceSummary(cd))
 	}
 	return w.Flush()
 }
 
-// applyContexts is the core of `onix --apply-context`. It is called by
-// both the dispatcher and the `o` shell function after every Set-Location.
-//
-// For plain aliases (no '@') it returns immediately — no file I/O, no
-// allocations. For segmented aliases it loads segments.toml, finds any
-// matching [[contexts]] entries, and writes shell env-var setters
-// and exec invocations to w in innermost-first segment order.
-func applyContexts(home, input, shell string, w io.Writer) error {
-	if !strings.Contains(input, "@") {
-		return nil // plain alias — no context possible, skip all I/O
+func sourceSummary(cd segments.ContextDef) string {
+	switch {
+	case cd.SourceTemplate != "":
+		return "template=" + cd.SourceTemplate
+	case len(cd.SourceExec) > 0:
+		return "exec=" + strings.Join(cd.SourceExec, " ")
+	case cd.SourceFile != "":
+		return "file=" + cd.SourceFile
+	default:
+		return "-"
 	}
-	segs, _ := segments.ParseSegmentedAlias(input)
-	if len(segs) == 0 {
-		return nil
-	}
-	sf, err := segments.LoadSegments(home)
-	if err != nil {
-		return err
-	}
-	if len(sf.Contexts) == 0 {
-		return nil
-	}
-
-	isBash := shell == "bash" || shell == "zsh"
-	isCmd := shell == "cmd"
-
-	// Apply in innermost-first order (right-to-left in the segments slice)
-	// to mirror the path-building direction. First-defined wins for
-	// duplicates so the TOML author controls precedence by ordering their
-	// [[contexts]] — that's the semantics of segments.LookupContext.
-	for i := len(segs) - 1; i >= 0; i-- {
-		cd, ok := segments.LookupContext(sf, segs[i].Name)
-		if !ok {
-			continue
-		}
-		// Env vars in sorted key order for deterministic output.
-		keys := make([]string, 0, len(cd.Env))
-		for k := range cd.Env {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			if isBash {
-				fmt.Fprintf(w, "export %s=%s\n", k, shQuote(cd.Env[k]))
-			} else if isCmd {
-				fmt.Fprintf(w, "set %s=%s\n", k, cd.Env[k])
-			} else {
-				fmt.Fprintf(w, "$env:%s = %s\n", k, psSingleQuote(cd.Env[k]))
-			}
-		}
-		// Exec: each argument individually quoted.
-		if len(cd.Exec) > 0 {
-			if isCmd {
-				fmt.Fprintf(w, "%s\n", strings.Join(cd.Exec, " "))
-				continue
-			}
-			quoted := make([]string, len(cd.Exec))
-			for j, arg := range cd.Exec {
-				if isBash {
-					quoted[j] = shQuote(arg)
-				} else {
-					quoted[j] = psSingleQuote(arg)
-				}
-			}
-			if isBash {
-				fmt.Fprintf(w, "%s\n", strings.Join(quoted, " "))
-			} else {
-				fmt.Fprintf(w, "& %s\n", strings.Join(quoted, " "))
-			}
-		}
-	}
-	return nil
-}
-
-// shQuote wraps s in single quotes for POSIX shells, escaping any embedded
-// single quotes by ending the string, adding an escaped quote, then restarting.
-func shQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-// psSingleQuote wraps s in PowerShell single quotes, escaping any embedded
-// single quotes by doubling them (the only escape in a PS literal string).
-func psSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

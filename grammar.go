@@ -102,7 +102,6 @@ var systemActionFlags = map[string]string{
 	"-T":              "stats",
 	"--version":       "version",
 	"-v":              "version",
-	"--apply-context": "apply-context",
 }
 
 // printUsage writes the alias-flag grammar reference to stdout. It's
@@ -144,7 +143,6 @@ SYSTEM VERBS:
   --doctor, -D           health checks
   --stats, -T [...]      navigation report
   --version, -v          print version
-  --apply-context <alias>   internal (called by the o shell function)
 
 ADD FLAGS:
   --description, -d <text>
@@ -233,32 +231,6 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string, std
 		return runStatsFromArgs(ctx, e, rest)
 	case "version":
 		return (&VersionCmd{}).Run(ctx, e)
-	case "apply-context":
-		if len(rest) == 0 {
-			return fmt.Errorf("--apply-context requires an alias name")
-		}
-		shell := "pwsh"
-		alias := ""
-		for i := 0; i < len(rest); i++ {
-			a := rest[i]
-			if a == "--shell" && i+1 < len(rest) {
-				shell = rest[i+1]
-				i++
-				continue
-			}
-			if strings.HasPrefix(a, "--shell=") {
-				shell = strings.TrimPrefix(a, "--shell=")
-				continue
-			}
-			if alias == "" && !startsWithDash(a) {
-				alias = a
-				continue
-			}
-		}
-		if alias == "" {
-			return fmt.Errorf("--apply-context requires an alias name")
-		}
-		return applyContexts(e.Home, alias, shell, stdout)
 	}
 	return fmt.Errorf("unknown system action %q", verb)
 }

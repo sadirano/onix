@@ -112,13 +112,12 @@ source-file = "@home/state/x"
 
 // TestLoadSegments_ContextWithoutSourceIsAllowed confirms a context with no
 // source-* field loads cleanly. Such a context contributes no path fragment;
-// its env/exec map still drives apply-context's shell-side emission.
+// its env map is still consulted during resolve-time variable lookup.
 func TestLoadSegments_ContextWithoutSourceIsAllowed(t *testing.T) {
 	dir := t.TempDir()
 	body := `[[contexts]]
 segment = "prod"
 env = { DEPLOY_ENV = "production" }
-exec = ["kubectl", "config", "use-context", "prod"]
 `
 	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
 		t.Fatal(err)

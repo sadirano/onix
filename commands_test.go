@@ -344,30 +344,6 @@ func TestEditCmd_PropagatesEditorError(t *testing.T) {
 	}
 }
 
-func TestApplyContexts_PlainAliasSilent(t *testing.T) {
-	home := t.TempDir()
-	stdout, _, err := captureStdio(func() error {
-		return applyContexts(home, "plain", "pwsh", os.Stdout)
-	})
-	if err != nil {
-		t.Fatalf("applyContexts: %v", err)
-	}
-	if stdout != "" {
-		t.Errorf("expected no output for plain alias, got: %q", stdout)
-	}
-}
-
-func TestApplyContexts_SegmentedNoFile(t *testing.T) {
-	home := t.TempDir()
-	// No segments.toml file; applyContexts should still succeed silently.
-	_, _, err := captureStdio(func() error {
-		return applyContexts(home, "src@acme", "pwsh", os.Stdout)
-	})
-	if err != nil {
-		t.Errorf("applyContexts on missing segments: %v", err)
-	}
-}
-
 // TestFastResolve_RecordsUsage guards the resolve path against silently
 // regressing on frecency: every successful resolve must append to
 // usage.log so `onix --stats` and tab-completion ranking reflect reality.

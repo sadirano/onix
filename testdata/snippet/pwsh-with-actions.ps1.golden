@@ -33,7 +33,6 @@ function global:o {
     }
     if ($LASTEXITCODE -eq 0) {
         Set-Location -LiteralPath $resolved
-        & $global:onixExe --apply-context $Alias | Invoke-Expression
     }
 }
 function global:e {

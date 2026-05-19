@@ -149,8 +149,9 @@ Source kinds (exactly one per `[[contexts]]`):
 | `source-exec`     | Run cmd in alias base; trimmed stdout is the fragment. |
 | `source-file`     | Read file (supports `@home/...`, `@alias/...`, `~/...`). |
 
-The same `[[contexts]]` block can also carry `env = {...}` and `exec = [...]`
-to script shell side effects on `cd`.
+A `[[contexts]]` block may also carry `env = {...}`; those keys are
+consulted during resolve-time template variable lookup. They are **not**
+exported to the shell after `cd`.
 
 ## 10) Fast Smoke Run
 

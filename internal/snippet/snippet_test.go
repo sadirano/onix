@@ -133,9 +133,6 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if !strings.Contains(content, "if not defined _onix_target") {
 		t.Errorf("o.cmd missing subcommand passthrough fallback:\n%s", content)
 	}
-	if !strings.Contains(content, "--apply-context") {
-		t.Errorf("o.cmd missing '--apply-context' invocation:\n%s", content)
-	}
 	// Regression guard: setlocal + cd reverts the working directory when
 	// the script exits, which would silently break `o`. The wrapper must
 	// not use setlocal.

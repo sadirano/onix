@@ -398,29 +398,6 @@ func TestDispatchSystem(t *testing.T) {
 		}
 	})
 
-	t.Run("apply-context error", func(t *testing.T) {
-		err := dispatchSystem(ctx, e, "apply-context", nil, os.Stdout, os.Stderr)
-		if err == nil || !strings.Contains(err.Error(), "requires an alias") {
-			t.Errorf("expected missing alias error, got %v", err)
-		}
-	})
-
-	t.Run("apply-context happy", func(t *testing.T) {
-		// Register an alias first
-		target := t.TempDir()
-		_ = (&AddCmd{Alias: "demo", Path: target}).Run(ctx, e)
-
-		err := dispatchSystem(ctx, e, "apply-context", []string{"--shell", "pwsh", "demo"}, os.Stdout, os.Stderr)
-		if err != nil {
-			t.Errorf("apply-context: %v", err)
-		}
-
-		err = dispatchSystem(ctx, e, "apply-context", []string{"--shell=bash", "demo"}, os.Stdout, os.Stderr)
-		if err != nil {
-			t.Errorf("apply-context --shell= form: %v", err)
-		}
-	})
-
 	t.Run("bad verb", func(t *testing.T) {
 		err := dispatchSystem(ctx, e, "bogus", nil, os.Stdout, os.Stderr)
 		if err == nil || !strings.Contains(err.Error(), "unknown system action") {

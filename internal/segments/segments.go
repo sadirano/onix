@@ -13,8 +13,8 @@ import (
 
 // ContextDef is one [[contexts]] entry in segments.toml.
 //
-// A context with no source-* field still drives apply-context's env / exec
-// scripting; it just doesn't contribute to path resolution.
+// Env is consulted during resolve-time variable lookup inside templates
+// and source-exec args; it is not exported to the shell after cd.
 type ContextDef struct {
 	Segment        string            `toml:"segment"`
 	Param          string            `toml:"param,omitempty"`
@@ -22,7 +22,6 @@ type ContextDef struct {
 	SourceExec     []string          `toml:"source-exec,omitempty"`
 	SourceFile     string            `toml:"source-file,omitempty"`
 	Env            map[string]string `toml:"env,omitempty"`
-	Exec           []string          `toml:"exec,omitempty"`
 }
 
 // SegmentsFile is the on-disk shape of ~/.onix/segments.toml.

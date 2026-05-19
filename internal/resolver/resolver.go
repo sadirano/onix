@@ -212,8 +212,8 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 }
 
 // evalSegment resolves one segment's fragment by dispatching on the
-// context's source-* field. A context with no source-* contributes no path
-// fragment — its env/exec scripting still runs at the apply-context step.
+// context's source-* field. A context with no source-* contributes no
+// path fragment.
 //
 // Variable resolution chain inside templates and exec args:
 //  1. Segment-bound inline value under ${<param>} (default: <segment>).

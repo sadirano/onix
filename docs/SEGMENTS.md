@@ -11,9 +11,8 @@ This document is the authoritative description of how segments resolve.
 Today, `o test@play` silently resolves to `<play>/test` even when `test` is
 not a registered subdir anywhere. Combined with `fastResolve`'s
 unconditional `MkdirAll`, this means typos like `o tst@play` quietly create
-junk directories. `[[contexts]]` exists but is invisible to the resolver —
-it only emits post-CD env vars and shell commands. There is no mechanism for
-a context to contribute to the path itself.
+junk directories. `[[contexts]]` exists but is invisible to the resolver.
+There is no mechanism for a context to contribute to the path itself.
 
 The redesign:
 
@@ -84,10 +83,9 @@ param = "clientId"
 # Omitted means resolution always requires an inline value (else hard error).
 source-template = "/${clientId}"
 
-# Post-CD scripting — unchanged, optional. env values also overlay into the
-# resolve-time variable lookup (see "Variable resolution order" below).
+# Optional env map: consulted only during resolve-time variable lookup
+# (see "Variable resolution order" below). Not exported to the shell.
 env  = { CLIENT_ID = "${clientId}" }
-exec = ["pwsh", "-c", "Write-Host 'switched client'"]
 ```
 
 ### Source types
@@ -132,8 +130,8 @@ For any `${name}` reference inside a template, exec arg, or file path:
 
 The context's static `env` is overlaid onto the shell env, not the other
 way around — so a context-declared `env` value beats a same-named shell
-env var during the resolve. (Note: the same `env` map is also written to
-the shell post-CD by `apply-context`; that path is unchanged.)
+env var during the resolve. The env map is **not** exported to the shell
+after cd; it exists solely to feed resolve-time variable lookup.
 
 ---
 
@@ -248,7 +246,7 @@ The prompt uses the same I/O surface as today's unknown-alias prompt
 |------------------------------------|---------------------------------------------|
 | `[subdirs]` in `segments.toml`     | Ignored on load. Silent — no warning.       |
 | `subdirs = {...}` in `aliases.toml`| Ignored on load. Silent.                    |
-| `[[contexts]]` with only `env`/`exec` | Unchanged. Continues to drive post-CD scripting only; segment has no resolution role until a `source-*` field is added. |
+| `[[contexts]]` with only `env`    | Loads cleanly; contributes nothing to the path. The env map is only consulted during resolve-time variable lookup. |
 | `o unknown@alias` (silent literal) | Prompt fires; user defines the segment.     |
 | Path joiner inserts `/` between segments | Joiner appends directly; templates control separators. |
 | `ResolveSegment` falls back to literal name | `ResolveSegment` errors / prompts.    |
@@ -362,22 +360,6 @@ $ o task@work
 # fragment = "TASK-9001" → appended directly (probably wants a /)
 ```
 
-### Example 5 — context with both resolution and post-CD scripting
-
-```toml
-[[contexts]]
-segment = "prod"
-source-template = "/prod"
-
-env = { DEPLOY_ENV = "production", KUBECTL_CTX = "prod-cluster" }
-exec = ["kubectl", "config", "use-context", "prod-cluster"]
-```
-
-```sh
-$ o web@prod
-# resolves to <web>/prod, then sets DEPLOY_ENV and switches kubectl context
-```
-
 ---
 
 ## Out of scope (for now)
@@ -410,7 +392,6 @@ Where the work lands:
 | Schema for sources                   | `internal/segments/segments.go:15-19` `ContextDef` (add `Param`, `SourceTemplate`, `SourceExec`, `SourceFile`) |
 | Schema loader (subdirs ignore, source mutex check) | `internal/segments/segments.go:37` `LoadSegments` |
 | Unknown-segment prompt               | new function alongside `promptDestination` in `fastresolve.go` |
-| `apply-context` env overlay (resolve-time vs post-CD) | `context.go:57-131` (overlay logic, unchanged shell-side emission) |
 | `--no-prompt` propagation            | already plumbed via `fastResolve(..., noPrompt, ...)` — extend the same flag |
 | Traversal guard                      | new helper in `internal/segments` or `internal/resolver` |
 

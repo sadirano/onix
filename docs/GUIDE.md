@@ -153,21 +153,19 @@ segment = "current"
 source-file = "@home/state/current-task"
 ```
 
-### Context scripting
+### Context env
 
-The same `[[contexts]]` entry can also drive shell-side side effects when the user
-navigates to the alias — env vars to export and a command to run on `cd`:
+A `[[contexts]]` entry may also declare an `env` map. These keys are
+consulted during resolve-time variable lookup (as a fallback after inline
+values, before process env). They are **not** exported to the shell after
+`cd` — if you want shell-side side effects, drive them yourself.
 
 ```toml
 [[contexts]]
-segment = "prod"
-source-template = "/prod"
-env = { DEPLOY_ENV = "production", KUBECTL_CTX = "prod-cluster" }
-exec = ["kubectl", "config", "use-context", "prod-cluster"]
+segment = "branch"
+source-template = "/${BRANCH}"
+env = { BRANCH = "main" }    # default when $BRANCH is unset in the shell
 ```
-
-`o web@prod` resolves to `<web>/prod`, exports `DEPLOY_ENV` / `KUBECTL_CTX`, and
-runs the `kubectl` switch — all from one shortcut.
 
 ### Migrating from `[subdirs]`
 

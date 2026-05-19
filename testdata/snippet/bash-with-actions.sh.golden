@@ -33,9 +33,6 @@ o() {
     fi
     if [ $? -eq 0 ]; then
         cd "$path"
-        local shell="bash"
-        if [ -n "$ZSH_VERSION" ]; then shell="zsh"; fi
-        eval "$("$ONIX_EXE" --apply-context "$1" --shell "$shell")"
     fi
 }
 e() {
