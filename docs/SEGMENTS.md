@@ -302,9 +302,9 @@ path = "C:/projectb/"
 ```
 
 ```sh
-$ f task:432@client:bob@projb
+$ e task:432@client:bob@projb
 # resolves to: C:/projectb/bob_432.md
-# `f` (find) opens it in $EDITOR
+# `e` (--edit) opens it in $EDITOR
 ```
 
 Trace:

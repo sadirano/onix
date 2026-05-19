@@ -43,11 +43,11 @@ c -a api -d C:\temp\api
 | Open shell | `onix api` | `o api` |
 | Open Explorer | `onix api -x` | `s api` |
 | Open editor in folder | `onix api -e` | `e api` |
+| Open specific file(s) in editor | `onix api -e README.md` | `e api README.md` |
 | Print resolved path | `onix api -y` | `y api` |
-| Open specific file(s) | `onix api -f README.md` | `f api README.md` |
 | Run command in target dir | `onix api -r "go test ./..."` | `r api "go test ./..."` |
 | Search content (rg+fzf) | `onix api -g handler` | `sg api handler` |
-| Search files (fd+fzf) | `onix api -f migration` | `ff api migration` |
+| Find file by name (fd+fzf) | `onix api -f migration` | `ff api migration` |
 
 To scope these to a subdirectory, use a segment: `e src@api`, `sg src@api router`, etc.
 
@@ -138,7 +138,7 @@ Multi-segment composition:
 # segment = "task"
 # source-template = "_${task}.md"     # no leading / — appends as filename
 
-f task:432@client:bob@projb     # opens <projb>/bob_432.md
+e task:432@client:bob@projb     # opens <projb>/bob_432.md
 ```
 
 Source kinds (exactly one per `[[contexts]]`):

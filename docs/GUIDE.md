@@ -129,7 +129,7 @@ source-template = "_${task}.md"   # no leading / — appends to the previous fra
 ```
 
 ```
-f task:432@client:bob@projb     → opens <projb>/bob_432.md in $EDITOR
+e task:432@client:bob@projb     → opens <projb>/bob_432.md in $EDITOR
 ```
 
 ### Source kinds
@@ -243,10 +243,16 @@ nvim src\handlers\auth.go
 
 **With onix:**
 ```
-o acme -f src\handlers\auth.go
+o acme -e src\handlers\auth.go
 ```
 ```
-f acme src\handlers\auth.go
+e acme src\handlers\auth.go
+```
+
+If you only remember part of the filename, use `f` (fd+fzf):
+
+```
+f acme auth
 ```
 
 One command from anywhere. No cd required.
@@ -518,8 +524,8 @@ timing        = false```
 sg acme handleAuth              # search contents → jump to line in editor
 e acme                          # open project root in editor
 r acme "go test ./..."          # run tests without leaving your current shell
-f acme README.md                # open a known file from anywhere
-ff acme migration               # find a filename, open it
+e acme README.md                # open a known file from anywhere
+ff acme migration               # fuzzy-find a filename, open it
 y acme                          # resolved path → print + clipboard + ONIX_LAST
 img acme screenshot-name        # paste clipboard image into project
 
@@ -527,7 +533,7 @@ img acme screenshot-name        # paste clipboard image into project
 s docs@sms                      # shell in <sms>/documentation
 e src@sms                       # editor in <sms>/source
 s tasks:432@acme                # inline value: <acme>/tickets/432
-f task:432@client:bob@projb     # multi-segment: <projb>/bob_432.md
+e task:432@client:bob@projb     # multi-segment: <projb>/bob_432.md
 
 # Define new segments by editing ~/.onix/segments.toml or letting the
 # unknown-segment prompt walk you through it on first use.
