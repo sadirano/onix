@@ -4,11 +4,20 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/sadirano/onix/internal/plugins"
 )
+
+// snippetFile returns the platform-appropriate generated shell snippet name.
+func snippetFile() string {
+	if runtime.GOOS == "windows" {
+		return "onix.ps1"
+	}
+	return "onix.sh"
+}
 
 // preparePluginSrcDir creates the on-disk shape that PluginAddCmd /
 // PluginUpdateCmd expects to find inside SourceDir after gitClone/gitFetch:
@@ -108,7 +117,7 @@ name = "run"
 	}
 
 	// Snippet must have been regenerated.
-	if _, err := os.Stat(filepath.Join(home, "shell", "onix.ps1")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, "shell", snippetFile())); err != nil {
 		t.Errorf("snippet not regenerated: %v", err)
 	}
 }
