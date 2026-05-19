@@ -285,6 +285,17 @@ if "%%~1"=="" (
   exit /b
 )
 
+rem A leading dash means a system verb (-v, --version, --doctor, ...).
+rem Skip the alias-resolve attempt — onix's stdout would otherwise be
+rem captured and fed to 'cd' as a bogus path.
+set "_onix_arg=%%~1"
+if "%%_onix_arg:~0,1%%"=="-" (
+  set "_onix_arg="
+  "%s" %%*
+  exit /b
+)
+set "_onix_arg="
+
 set "_onix_target="
 for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" %%~1 --no-prompt 2^>nul`+"`"+`) do set "_onix_target=%%%%i"
 if not defined _onix_target (
@@ -295,7 +306,7 @@ if not defined _onix_target (
 cd /d "%%_onix_target%%"
 set "_onix_target="
 if %%0 == "%%~f0" cmd /k
-`, exe, exe, exe)
+`, exe, exe, exe, exe)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 

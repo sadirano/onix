@@ -133,6 +133,12 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if !strings.Contains(content, "if not defined _onix_target") {
 		t.Errorf("o.cmd missing subcommand passthrough fallback:\n%s", content)
 	}
+	// Regression guard: a leading-dash first arg ('-v', '--doctor', ...)
+	// must bypass the alias-resolve attempt — otherwise its stdout is
+	// captured into _onix_target and fed to 'cd' as a bogus path.
+	if !strings.Contains(content, `if "%_onix_arg:~0,1%"=="-"`) {
+		t.Errorf("o.cmd missing leading-dash bypass:\n%s", content)
+	}
 	// Regression guard: setlocal + cd reverts the working directory when
 	// the script exits, which would silently break `o`. The wrapper must
 	// not use setlocal.
