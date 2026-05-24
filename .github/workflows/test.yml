@@ -49,14 +49,37 @@ jobs:
           echo "main package coverage: ${total}%"
           awk -v p="$total" -v t="$threshold" 'BEGIN { if (p+0 < t+0) { printf "main package below %s%% threshold (got %s%%)\n", t, p; exit 1 } }'
 
-      # Hot-path benchmark — informational only, not gated.
-      - name: Bench
+      # Hot-path benchmark — compare against main and fail on >20% slowdown for BenchmarkHotPath_LookupOnly
+      - name: Bench (current)
+        shell: bash
         run: |
-          go test -bench=. -benchmem -run=^$ ./... > bench_current.txt
+          go test -bench=BenchmarkHotPath_LookupOnly -benchmem -run=^$ ./... > bench_current.txt
           cat bench_current.txt
 
-      - name: Install benchstat
-        run: go install golang.org/x/perf/cmd/benchstat@latest
+      - name: Checkout main for baseline
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: main
+          path: baseline
 
-      - name: Benchstat (current)
-        run: benchstat bench_current.txt
+      - name: Bench (baseline)
+        shell: bash
+        run: |
+          pushd baseline
+          go test -bench=BenchmarkHotPath_LookupOnly -benchmem -run=^$ ./... > ../bench_baseline.txt
+          popd
+
+      - name: Compare benches and gate
+        shell: bash
+        run: |
+          go install golang.org/x/perf/cmd/benchstat@latest
+          benchstat bench_baseline.txt bench_current.txt | tee benchstat.txt
+          pct=$(benchstat bench_baseline.txt bench_current.txt | awk '/BenchmarkHotPath_LookupOnly/ {print $4; exit}')
+          pct=${pct//+/}
+          pct=${pct//%/}
+          if [ -z "$pct" ]; then echo "BenchmarkHotPath_LookupOnly not present in benchstat output"; exit 1; fi
+          echo "$pct" | awk -v threshold=20 '{
+            gsub(/[^0-9.-]/,"",$1);
+            if ($1+0 > threshold) { printf("Regression %.2f%% > %.2f%% threshold\n",$1,threshold); exit 1 }
+            else { printf("OK: change %.2f%% <= %.2f%% threshold\n",$1,threshold); exit 0 }
+          }'
