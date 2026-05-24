@@ -26,7 +26,7 @@ We aim for a high quality bar (see [ROADMAP.md](./ROADMAP.md)):
 
 1. **Testing:** All new features must include unit tests and, where applicable, E2E tests in `e2e_test.go`.
 2. **Verification:** Run `go vet ./...` and `go test ./...` before submitting changes.
-3. **Benchmarks:** Performance is a feature. Ensure `BenchmarkFastResolve` and other hot-path benchmarks do not regress.
+3. **Benchmarks:** Performance is a feature. Ensure `BenchmarkHotPath_LookupOnly` and `BenchmarkHotPath_LoadAndLookup` (and any other hot-path benchmarks) do not regress. CI fails on a >20% slowdown against the baseline; see `docs/CI.md`.
 4. **Golden Files:** Shell integration tests use golden files. Run `go test ./... -update` to update them if you intentionally change the generated code.
 
 ## Submitting Changes

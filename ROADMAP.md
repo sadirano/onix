@@ -6,7 +6,7 @@ A 10/10 here means: a stranger could clone the repo, build it on Windows or Linu
 
 Pick from this list in order of cost/value. Items are grouped by axis and labelled `[S]` small, `[M]` medium, `[L]` large.
 
-Since the previous revision, the `main`-package coverage push landed (Phases 1–8 of the working plan) and the 80%-per-package gate is now enforced in CI. Earlier in the cycle: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, least-privilege `GITHUB_TOKEN` on the test/lint workflows, third-party actions pinned by commit SHA, the `actions/dependency-review` job on pull_request, and `testing/quick`-based property tests for the name validators with a roundtrip invariant through `Save → Load → Lookup`.
+Since the previous revision: the hot-path benchmark gate (>20% slowdown on `BenchmarkHotPath_LookupOnly` vs `main` fails CI) landed; the `main`-package coverage push landed (Phases 1–8 of the working plan) and the 80%-per-package gate is enforced in CI. Earlier in the cycle: end-to-end shell tests (`pwsh` + `bash` subprocesses that source the snippet and assert on `cd`), the README architecture diagram, least-privilege `GITHUB_TOKEN` on the test/lint workflows, third-party actions pinned by commit SHA, the `actions/dependency-review` job on pull_request, and `testing/quick`-based property tests for the name validators with a roundtrip invariant through `Save → Load → Lookup`.
 
 ---
 
@@ -14,13 +14,6 @@ Since the previous revision, the `main`-package coverage push landed (Phases 1�
 
 ### `[L]` Structured trace mode (`ONIX_DEBUG=1`)
 Thread a `slog.Logger` through `env` so every command can emit a structured trace on demand for easier remote debugging. Default off; zero allocations on the hot path when disabled.
-
----
-
-## Test suite
-
-### `[M]` Benchmark regression gate
-CI runs `benchstat bench_current.txt` informationally today. Add a second step that fetches the baseline from `main`, runs `benchstat baseline.txt current.txt`, and fails the build on >20% slowdown for `BenchmarkHotPath_LookupOnly`.
 
 ---
 
@@ -92,9 +85,8 @@ Use `cosign` to sign release blobs and document the verification command in the 
 
 ## Order of operations
 
-1. **Hot-path safety net:** wire the benchstat-vs-main comparison so the perf claim is enforced, not asserted.
-2. **Daily-driver wins:** cross-shell nav history, multi-target aliases, undo. Small surface, big perceived improvement.
-3. **Scope leap:** project-scope `.onix.toml` and per-alias segment scope. Validate layering inside the current architecture before tackling the workspace tier.
-4. **Sharing & ecosystem:** workspace tier with sync, plugin capability model, verified registry.
-5. **Supply-chain finish:** cosign-signed releases.
-6. **Performance peak:** daemon mode.
+1. **Daily-driver wins:** cross-shell nav history, multi-target aliases, undo. Small surface, big perceived improvement.
+2. **Scope leap:** project-scope `.onix.toml` and per-alias segment scope. Validate layering inside the current architecture before tackling the workspace tier.
+3. **Sharing & ecosystem:** workspace tier with sync, plugin capability model, verified registry.
+4. **Supply-chain finish:** cosign-signed releases.
+5. **Performance peak:** daemon mode.
