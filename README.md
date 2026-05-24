@@ -190,3 +190,5 @@ graph TD
 ## License
 
 MIT.
+
+CI: See docs/CI.md for details about the hot-path benchmark gate (BenchmarkHotPath_LookupOnly), how to run benches locally, and the 20% slowdown threshold that the CI job enforces.
