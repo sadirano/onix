@@ -5,3 +5,5 @@ onix.exe
 coverage.out
 cover
 cover.out
+ISSUES.md
+gofumpt_changes.txt
