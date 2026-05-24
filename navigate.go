@@ -71,7 +71,7 @@ func promptDestination(aliasName string, stderr io.Writer, stdin io.Reader) stri
 // All prompts share a single bufio.Reader so each ReadString consumes
 // exactly one line — using the package-level readLine helper per prompt
 // creates a fresh reader each call, which would swallow buffered input.
-func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Writer, stdin io.Reader) (*segments.ContextDef, error) {
+func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Writer, stdin io.Reader, aliasBase string) (*segments.ContextDef, error) {
 	fmt.Fprintf(stderr, "segment %q is not defined.\n", segmentName)
 	if inlineValue != "" {
 		fmt.Fprintf(stderr, "  (inline value: %s)\n", inlineValue)
@@ -118,24 +118,45 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 		return nil, fmt.Errorf("segment prompt: unrecognised choice %q (expected template, exec, or file)", kind)
 	}
 
-	confirm, ok := read("Save to segments.toml? [Y/n] ")
-	if !ok {
-		return nil, nil
+	// Ask where to save: global (~/.onix/segments.toml) or local (<alias>/.onix/segments.toml).
+	for {
+		choice, ok := read("Save where? [1] global (~/.onix/segments.toml) [2] local (<alias>/.onix/segments.toml) [1/2] (or 'n' to cancel): ")
+		if !ok {
+			return nil, nil
+		}
+		if choice == "" || choice == "1" {
+			// global
+			sf, err := segments.LoadSegments(home)
+			if err != nil {
+				return nil, fmt.Errorf("segment prompt: %w", err)
+			}
+			sf.Contexts = append(sf.Contexts, *cd)
+			if err := segments.SaveSegments(home, sf); err != nil {
+				return nil, fmt.Errorf("segment prompt: save: %w", err)
+			}
+			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q\n", segmentName)
+			return cd, nil
+		}
+		if strings.EqualFold(choice, "n") || strings.EqualFold(choice, "no") {
+			// user declined save
+			return nil, nil
+		}
+		if choice == "2" {
+			// local
+			localPath := segments.LocalPath(aliasBase)
+			sf, err := segments.LoadSegmentsFile(localPath)
+			if err != nil {
+				return nil, fmt.Errorf("segment prompt: %w", err)
+			}
+			sf.Contexts = append(sf.Contexts, *cd)
+			if err := segments.SaveSegmentsFile(localPath, sf); err != nil {
+				return nil, fmt.Errorf("segment prompt: save local: %w", err)
+			}
+			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q (local)\n", segmentName)
+			return cd, nil
+		}
+		fmt.Fprintln(stderr, "Invalid choice; please enter 1, 2, or 'n' to cancel.")
 	}
-	if confirm != "" && !strings.EqualFold(confirm, "y") && !strings.EqualFold(confirm, "yes") {
-		return nil, nil
-	}
-
-	sf, err := segments.LoadSegments(home)
-	if err != nil {
-		return nil, fmt.Errorf("segment prompt: %w", err)
-	}
-	sf.Contexts = append(sf.Contexts, *cd)
-	if err := segments.SaveSegments(home, sf); err != nil {
-		return nil, fmt.Errorf("segment prompt: save: %w", err)
-	}
-	fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q\n", segmentName)
-	return cd, nil
 }
 
 // printTemplateSamples shows a few worked examples of source-template values

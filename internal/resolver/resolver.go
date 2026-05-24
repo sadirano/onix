@@ -21,10 +21,14 @@ var ErrCancelled = errors.New("prompt cancelled")
 // that has no matching [[contexts]] entry in segments.toml.
 //
 // The callback is expected to interact with the user, persist a new
-// [[contexts]] entry to disk, and return the new ContextDef. Returning
-// (nil, nil) is treated as "user cancelled" and is reported as
-// ErrCancelled. A non-nil error is propagated to the caller verbatim.
-type SegmentPrompter func(segmentName, inlineValue string) (*segments.ContextDef, error)
+// [[contexts]] entry to disk (either global or local to the target alias),
+// and return the new ContextDef. Returning (nil, nil) is treated as
+// "user cancelled" and is reported as ErrCancelled. A non-nil error is
+// propagated to the caller verbatim.
+//
+// Note: the prompter receives aliasBase so it can offer a local save
+// option (e.g., <alias>/.onix/segments.toml).
+type SegmentPrompter func(segmentName, inlineValue, aliasBase string) (*segments.ContextDef, error)
 
 // Resolve finds the absolute path for an alias.
 //
@@ -160,20 +164,27 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 		return "", fmt.Errorf("unknown alias %q", alias)
 	}
 
-	sf, err := segments.LoadSegments(home)
+	sfGlobal, err := segments.LoadSegments(home)
 	if err != nil {
 		return "", err
 	}
+	// Try to load a per-alias segments file first. Missing files are fine.
+	aliasSegmentsPath := segments.LocalPath(a.Path)
+	sfLocal, _ := segments.LoadSegmentsFile(aliasSegmentsPath)
 
 	target := strings.TrimRight(a.Path, "/")
 	for i := len(segs) - 1; i >= 0; i-- {
 		ps := segs[i]
-		cd, ok := segments.LookupContext(sf, ps.Name)
+		// Prefer per-alias local definition, then fall back to the global file.
+		cd, ok := segments.LookupContext(sfLocal, ps.Name)
+		if !ok {
+			cd, ok = segments.LookupContext(sfGlobal, ps.Name)
+		}
 		if !ok {
 			if prompter == nil {
 				return "", fmt.Errorf("segment %q is not defined in segments.toml", ps.Name)
 			}
-			cd, err = prompter(ps.Name, ps.Value)
+			cd, err = prompter(ps.Name, ps.Value, a.Path)
 			if err != nil {
 				return "", err
 			}
@@ -181,13 +192,14 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 				return "", ErrCancelled
 			}
 			// Reload after the prompt — the prompter persisted the new
-			// context to segments.toml, so re-reading is the safest way
-			// to pick up any later validation the loader performs.
-			sf, err = segments.LoadSegments(home)
-			if err != nil {
-				return "", err
+			// context to either the alias-local file or the global file, so
+			// re-reading is the safest way to pick up any later validation.
+			sfLocal, _ = segments.LoadSegmentsFile(aliasSegmentsPath)
+			sfGlobal, _ = segments.LoadSegments(home)
+			cd, ok = segments.LookupContext(sfLocal, ps.Name)
+			if !ok {
+				cd, ok = segments.LookupContext(sfGlobal, ps.Name)
 			}
-			cd, ok = segments.LookupContext(sf, ps.Name)
 			if !ok {
 				return "", fmt.Errorf("segment %q: prompter saved a context but it was not loadable", ps.Name)
 			}

@@ -55,15 +55,25 @@ func LookupContext(sf *SegmentsFile, name string) (*ContextDef, bool) {
 // The file is round-tripped through go-toml/v2's marshaller; hand-written
 // comments in the original are not preserved.
 func SaveSegments(home string, sf *SegmentsFile) error {
-	p := Path(home)
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(p), err)
+	return SaveSegmentsFile(Path(home), sf)
+}
+
+// LocalPath returns the per-alias segments.toml path for aliasBase.
+func LocalPath(aliasBase string) string {
+	return filepath.Join(aliasBase, ".onix", "segments.toml")
+}
+
+// SaveSegmentsFile writes sf to the exact file path atomically. Parent
+// directories are created as needed.
+func SaveSegmentsFile(filePath string, sf *SegmentsFile) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(filePath), err)
 	}
 	data, err := toml.Marshal(sf)
 	if err != nil {
 		return fmt.Errorf("marshal segments: %w", err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(p), ".segments.*.toml")
+	tmp, err := os.CreateTemp(filepath.Dir(filePath), ".segments.*.toml")
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
@@ -76,38 +86,43 @@ func SaveSegments(home string, sf *SegmentsFile) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp file: %w", err)
 	}
-	if err := os.Rename(tmpName, p); err != nil {
+	if err := os.Rename(tmpName, filePath); err != nil {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	return nil
 }
 
-// LoadSegments reads ~/.onix/segments.toml.
-func LoadSegments(home string) (*SegmentsFile, error) {
-	p := Path(home)
-	data, err := os.ReadFile(p)
+// LoadSegmentsFile reads segments from the exact file path. Missing files
+// yield an empty SegmentsFile without error.
+func LoadSegmentsFile(filePath string) (*SegmentsFile, error) {
+	data, err := os.ReadFile(filePath)
 	if errors.Is(err, os.ErrNotExist) {
 		return &SegmentsFile{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", p, err)
+		return nil, fmt.Errorf("read %s: %w", filePath, err)
 	}
 	sf := &SegmentsFile{}
 	if err := toml.Unmarshal(data, sf); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", p, err)
+		return nil, fmt.Errorf("parse %s: %w", filePath, err)
 	}
 
 	for i := range sf.Contexts {
 		cd := &sf.Contexts[i]
 		if err := store.ValidateSegmentName(cd.Segment); err != nil {
-			return nil, fmt.Errorf("%s: context: %w", p, err)
+			return nil, fmt.Errorf("%s: context: %w", filePath, err)
 		}
 		if err := validateSources(cd); err != nil {
-			return nil, fmt.Errorf("%s: context %q: %w", p, cd.Segment, err)
+			return nil, fmt.Errorf("%s: context %q: %w", filePath, cd.Segment, err)
 		}
 	}
 
 	return sf, nil
+}
+
+// LoadSegments reads ~/.onix/segments.toml.
+func LoadSegments(home string) (*SegmentsFile, error) {
+	return LoadSegmentsFile(Path(home))
 }
 
 // validateSources rejects a context that sets more than one source-* field.

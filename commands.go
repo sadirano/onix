@@ -569,8 +569,8 @@ func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 		selector = func(options []string) string {
 			return promptSelection(options, e.Stderr, e.Stdin)
 		}
-		segPrompter = func(segmentName, inlineValue string) (*segments.ContextDef, error) {
-			return promptSegmentDefinition(e.Home, segmentName, inlineValue, e.Stderr, e.Stdin)
+		segPrompter = func(segmentName, inlineValue, aliasBase string) (*segments.ContextDef, error) {
+			return promptSegmentDefinition(e.Home, segmentName, inlineValue, e.Stderr, e.Stdin, aliasBase)
 		}
 	}
 

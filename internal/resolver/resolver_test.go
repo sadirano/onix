@@ -302,7 +302,7 @@ func TestResolve_Segmented_UnknownWithPrompt(t *testing.T) {
 	}
 
 	calls := 0
-	prompter := func(segmentName, inlineValue string) (*segments.ContextDef, error) {
+	prompter := func(segmentName, inlineValue, aliasBase string) (*segments.ContextDef, error) {
 		calls++
 		if segmentName != "tasks" {
 			t.Errorf("prompt got segment=%q, want tasks", segmentName)
@@ -357,7 +357,7 @@ func TestResolve_Segmented_PromptCancelled(t *testing.T) {
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	prompter := func(string, string) (*segments.ContextDef, error) { return nil, nil }
+	prompter := func(string, string, string) (*segments.ContextDef, error) { return nil, nil }
 	_, err := Resolve(dir, "mystery@acme", nil, nil, prompter)
 	if err != ErrCancelled {
 		t.Fatalf("got %v, want ErrCancelled", err)
