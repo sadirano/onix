@@ -51,7 +51,7 @@ path = "C:/Users/dev/projects/acme"
 
 You can hand-edit the file (`onix --list` and resolve will pick up changes immediately) or use `onix <name> <path>` to register and `onix <name> --remove` to forget. Alias lookups are case-insensitive.
 
-Editor is taken from `$EDITOR` (falls back to `nvim`). Override the onix home location with `$ONIX_HOME`.
+Editor is taken from `$EDITOR`, then `$VISUAL`, then the first of `nvim`, `vim`, `code`, `nano`, or `notepad` found on PATH. Override the onix home location with `$ONIX_HOME`.
 
 ## Custom actions
 
@@ -134,7 +134,7 @@ Plugin wrappers participate in tab completion just like built-ins and custom act
 
 ## Tab completion
 
-Every command that takes an alias (`o`, `n`, `s`, `y`, `r`, plus your custom actions and plugins) supports tab-completion of alias names. The completer calls `onix --list-names` under the hood — a dedicated hot path that bypasses kong and go-toml for sub-millisecond Tab response.
+Every command that takes an alias (`o`, `e`, `s`, `y`, `r`, `sg`, `ff`, plus your custom actions and plugins) supports tab-completion of alias names. The completer calls `onix --list-names` under the hood — a dedicated hot path that bypasses kong and go-toml for sub-millisecond Tab response.
 
 ## Commands
 
@@ -144,7 +144,7 @@ Every command that takes an alias (`o`, `n`, `s`, `y`, `r`, plus your custom act
 
 If `onix --doctor` warns that your shell profile does not source the snippet, run `onix --init` again without `--skip-profile`. On Windows this updates `$PROFILE`; on Linux it appends a `[ -f ... ] && . ...` line to `.bashrc` and/or `.zshrc`.
 
-If `doctor` warns that `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin` (Linux) to PATH and restart your shell. Shortcuts (`o`, `n`, `s`, `y`, `r`) work without `onix` on PATH because the snippet pins the binary location at install time; `PATH` only matters when you type `onix` directly. Zsh tab completion additionally requires `compinit` to be loaded in `.zshrc` before sourcing the snippet — without it, completion silently skips registration rather than erroring.
+If `doctor` warns that `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin` (Linux) to PATH and restart your shell. Shortcuts (`o`, `e`, `s`, `y`, `r`, `sg`, `ff`) work without `onix` on PATH because the snippet pins the binary location at install time; `PATH` only matters when you type `onix` directly. Zsh tab completion additionally requires `compinit` to be loaded in `.zshrc` before sourcing the snippet — without it, completion silently skips registration rather than erroring.
 
 Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The included `scripts/smoke.ps1` does exactly that — it builds, runs every command against a throwaway home, and measures the hot path.
 
@@ -152,11 +152,11 @@ Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The include
 
 > **Prototype stage — no migration guarantees.** Onix has one real user (the author) and is in heavy active development. Config files, on-disk layouts, command grammar, and TOML schemas can and do change shape without migration paths, compat shims, or deprecation windows. If you're using onix and a change breaks your `~/.onix`, you're expected to rewrite the affected file by hand. This note will be removed once a stability commitment is in place.
 
-This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions, custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
+This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions (including the `sg` / `ff` search shortcuts backed by ripgrep + fzf and Everything / fd + fzf respectively), custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
 
 **Note: macOS is NOT supported in this repository.** If you require macOS support, please feel free to create your own fork.
 
-Search shortcuts (`sg`, `ff`) as first-party features and an optional daemon mode for sub-millisecond resolution are tracked but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
+An optional daemon mode for sub-millisecond resolution is tracked on the roadmap but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
 
 ## Architecture
 
