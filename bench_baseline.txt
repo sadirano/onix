@@ -1,0 +1,64 @@
+goos: windows
+goarch: amd64
+pkg: github.com/sadirano/onix
+cpu: 11th Gen Intel(R) Core(TM) i5-11600K @ 3.90GHz
+BenchmarkHotPath_LoadAndLookup-12    	    4513	    244516 ns/op	  152862 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    5097	    243106 ns/op	  152860 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    5143	    241157 ns/op	  152860 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    5101	    239243 ns/op	  152860 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    5106	    240472 ns/op	  152861 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    4899	    242317 ns/op	  152861 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    4974	    240531 ns/op	  152862 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    4464	    239085 ns/op	  152860 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    4959	    245427 ns/op	  152861 B/op	     834 allocs/op
+BenchmarkHotPath_LoadAndLookup-12    	    4706	    242231 ns/op	  153005 B/op	     835 allocs/op
+BenchmarkHotPath_LookupOnly-12       	59281507	        19.04 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	64325572	        19.10 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	60838352	        19.36 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	63804672	        19.63 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	62027043	        19.05 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	60753033	        19.19 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	58711574	        19.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	62790405	        19.87 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	62801248	        19.25 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12       	62658931	        19.23 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/sadirano/onix	25.956s
+PASS
+ok  	github.com/sadirano/onix/internal/config	0.013s
+PASS
+ok  	github.com/sadirano/onix/internal/plugins	0.013s
+goos: windows
+goarch: amd64
+pkg: github.com/sadirano/onix/internal/resolver
+cpu: 11th Gen Intel(R) Core(TM) i5-11600K @ 3.90GHz
+BenchmarkResolve_Segmented_Template-12    	    9835	    113958 ns/op	    6916 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    112614 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    112762 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    111299 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    113802 ns/op	    6916 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    113260 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    111079 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    111822 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    113599 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    114135 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    2938	    387922 ns/op	   23741 B/op	     212 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3088	    379839 ns/op	   24413 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3135	    381998 ns/op	   24413 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3121	    380899 ns/op	   23741 B/op	     212 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3081	    379746 ns/op	   23741 B/op	     212 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3117	    377550 ns/op	   24414 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3127	    379475 ns/op	   24414 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3103	    376465 ns/op	   24414 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3001	    376846 ns/op	   24413 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3176	    374751 ns/op	   24414 B/op	     215 allocs/op
+PASS
+ok  	github.com/sadirano/onix/internal/resolver	23.646s
+PASS
+ok  	github.com/sadirano/onix/internal/segments	0.014s
+PASS
+ok  	github.com/sadirano/onix/internal/snippet	0.013s
+PASS
+ok  	github.com/sadirano/onix/internal/store	0.012s
+PASS
+ok  	github.com/sadirano/onix/sdk	0.011s

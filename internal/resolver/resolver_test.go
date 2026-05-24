@@ -132,6 +132,49 @@ source-template = "/documentation"
 	}
 }
 
+// BenchmarkResolve_Segmented_Multi measures resolving multiple segments with mixed sources.
+func BenchmarkResolve_Segmented_Multi(b *testing.B) {
+	dir := b.TempDir()
+	s := &store.Store{Aliases: map[string]store.Alias{}}
+	s.Set("acme", store.Alias{Path: "C:/projects/acme"})
+	if err := store.SaveStore(dir, s); err != nil {
+		b.Fatal(err)
+	}
+	// create a file used by file-source segment
+	if err := os.WriteFile(filepath.Join(dir, "data.txt"), []byte("filecontent"), 0o644); err != nil {
+		b.Fatal(err)
+	}
+	segs := `[[contexts]]
+segment = "docs"
+source-template = "/documentation"
+
+[[contexts]]
+segment = "src"
+source-template = "/source"
+
+[[contexts]]
+segment = "fileseg"
+source-file = "` + filepath.ToSlash(filepath.Join(dir, "data.txt")) + `"
+
+`
+	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(segs), 0o644); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := Resolve(dir, "docs@acme", nil, nil, nil); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := Resolve(dir, "fileseg@acme", nil, nil, nil); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := Resolve(dir, "src@docs@acme", nil, nil, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func seedStore(t testing.TB, dir string, count int) {
 	s := &store.Store{Aliases: map[string]store.Alias{}}
 	for i := 0; i < count; i++ {
@@ -302,7 +345,7 @@ func TestResolve_Segmented_UnknownWithPrompt(t *testing.T) {
 	}
 
 	calls := 0
-	prompter := func(segmentName, inlineValue, aliasBase string) (*segments.ContextDef, error) {
+	prompter := func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
 		calls++
 		if segmentName != "tasks" {
 			t.Errorf("prompt got segment=%q, want tasks", segmentName)
@@ -357,7 +400,7 @@ func TestResolve_Segmented_PromptCancelled(t *testing.T) {
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	prompter := func(string, string, string) (*segments.ContextDef, error) { return nil, nil }
+	prompter := func(string, string, string, string) (*segments.ContextDef, error) { return nil, nil }
 	_, err := Resolve(dir, "mystery@acme", nil, nil, prompter)
 	if err != ErrCancelled {
 		t.Fatalf("got %v, want ErrCancelled", err)
