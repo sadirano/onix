@@ -133,7 +133,7 @@ func sourceFromBashLike(e *env, snippet string) error {
 
 	if len(updated) > 0 {
 		fmt.Fprintf(e.Stderr, "updated: %s\n", strings.Join(updated, ", "))
-		fmt.Fprintln(e.Stderr, "restart your shell (or source the updated file) to activate o/n/s/r/y")
+		fmt.Fprintln(e.Stderr, "restart your shell (or source the updated file) to activate o/e/s/y/r and sg/ff")
 	} else if !found {
 		fmt.Fprintf(e.Stderr, "no .bashrc or .zshrc found — add this to your shell rc manually:\n  %s\n", sourceLine)
 	}
@@ -187,6 +187,6 @@ func sourceFromProfile(e *env, snippet string) error {
 		return fmt.Errorf("append to $PROFILE: %w", err)
 	}
 	fmt.Fprintf(e.Stderr, "updated $PROFILE: %s\n", profilePath)
-	fmt.Fprintln(e.Stderr, "restart PowerShell (or run: . $PROFILE) to activate o/n/s/r/y and custom actions")
+	fmt.Fprintln(e.Stderr, "restart PowerShell (or run: . $PROFILE) to activate o/e/s/y/r, sg/ff, and any custom actions")
 	return nil
 }

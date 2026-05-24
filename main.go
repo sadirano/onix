@@ -46,7 +46,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Fprintf(stderr, "\n[onix] CRASH: encountered an unexpected error\n")
-			fmt.Fprintf(stderr, "Please report this issue at https://github.com/sadirano/issues/new\n\n")
+			fmt.Fprintf(stderr, "Please report this issue at https://github.com/sadirano/onix/issues/new\n\n")
 
 			stack := make([]byte, 1024)
 			for {

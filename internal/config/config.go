@@ -112,7 +112,7 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("shortcut %q: name must be [A-Za-z0-9_-]+ (got %q)", name, shortcut)
 		}
 		if _, ok := builtinDefaults[name]; !ok {
-			return fmt.Errorf("shortcut %q: invalid built-in name (must be one of: o, n, s, y, r)", name)
+			return fmt.Errorf("shortcut %q: invalid built-in name (must be one of: o, e, s, y, r, sg, ff)", name)
 		}
 		seen[strings.ToLower(shortcut)] = struct{}{}
 	}
