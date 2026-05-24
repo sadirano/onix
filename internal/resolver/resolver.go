@@ -28,7 +28,7 @@ var ErrCancelled = errors.New("prompt cancelled")
 //
 // Note: the prompter receives aliasBase so it can offer a local save
 // option (e.g., <alias>/.onix/segments.toml).
-type SegmentPrompter func(segmentName, inlineValue, aliasBase string) (*segments.ContextDef, error)
+type SegmentPrompter func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error)
 
 // Resolve finds the absolute path for an alias.
 //
@@ -171,12 +171,18 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 	// Try to load a per-alias segments file first. Missing files are fine.
 	aliasSegmentsPath := segments.LocalPath(a.Path)
 	sfLocal, _ := segments.LoadSegmentsFile(aliasSegmentsPath)
+	// Try central store for this alias under ~/.onix/segments.d/<alias>.toml
+	centralPath := segments.CentralPath(home, alias)
+	sfCentral, _ := segments.LoadSegmentsFile(centralPath)
 
 	target := strings.TrimRight(a.Path, "/")
 	for i := len(segs) - 1; i >= 0; i-- {
 		ps := segs[i]
-		// Prefer per-alias local definition, then fall back to the global file.
+		// Resolution precedence: local -> central -> global.
 		cd, ok := segments.LookupContext(sfLocal, ps.Name)
+		if !ok {
+			cd, ok = segments.LookupContext(sfCentral, ps.Name)
+		}
 		if !ok {
 			cd, ok = segments.LookupContext(sfGlobal, ps.Name)
 		}
@@ -184,19 +190,22 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 			if prompter == nil {
 				return "", fmt.Errorf("segment %q is not defined in segments.toml", ps.Name)
 			}
-			cd, err = prompter(ps.Name, ps.Value, a.Path)
+			cd, err = prompter(ps.Name, ps.Value, a.Path, alias)
 			if err != nil {
 				return "", err
 			}
 			if cd == nil {
 				return "", ErrCancelled
 			}
-			// Reload after the prompt — the prompter persisted the new
-			// context to either the alias-local file or the global file, so
-			// re-reading is the safest way to pick up any later validation.
+			// Reload after the prompt — the prompter could have saved to local,
+			// central, or global; re-read all sources.
 			sfLocal, _ = segments.LoadSegmentsFile(aliasSegmentsPath)
+			sfCentral, _ = segments.LoadSegmentsFile(centralPath)
 			sfGlobal, _ = segments.LoadSegments(home)
 			cd, ok = segments.LookupContext(sfLocal, ps.Name)
+			if !ok {
+				cd, ok = segments.LookupContext(sfCentral, ps.Name)
+			}
 			if !ok {
 				cd, ok = segments.LookupContext(sfGlobal, ps.Name)
 			}

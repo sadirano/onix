@@ -71,7 +71,7 @@ func promptDestination(aliasName string, stderr io.Writer, stdin io.Reader) stri
 // All prompts share a single bufio.Reader so each ReadString consumes
 // exactly one line — using the package-level readLine helper per prompt
 // creates a fresh reader each call, which would swallow buffered input.
-func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Writer, stdin io.Reader, aliasBase string) (*segments.ContextDef, error) {
+func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Writer, stdin io.Reader, aliasBase, aliasName string) (*segments.ContextDef, error) {
 	fmt.Fprintf(stderr, "segment %q is not defined.\n", segmentName)
 	if inlineValue != "" {
 		fmt.Fprintf(stderr, "  (inline value: %s)\n", inlineValue)
@@ -120,7 +120,7 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 
 	// Ask where to save: global (~/.onix/segments.toml) or local (<alias>/.onix/segments.toml).
 	for {
-		choice, ok := read("Save where? [1] global (~/.onix/segments.toml) [2] local (<alias>/.onix/segments.toml) [1/2] (or 'n' to cancel): ")
+		choice, ok := read("Save where? [1] global (~/.onix/segments.toml) [2] local (<alias>/.onix/segments.toml) [3] central (~/.onix/segments.d/<alias>.toml) [1/2/3] (or 'n' to cancel): ")
 		if !ok {
 			return nil, nil
 		}
@@ -155,7 +155,21 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q (local)\n", segmentName)
 			return cd, nil
 		}
-		fmt.Fprintln(stderr, "Invalid choice; please enter 1, 2, or 'n' to cancel.")
+		if choice == "3" {
+			// central
+			centralPath := segments.CentralPath(home, aliasName)
+			sf, err := segments.LoadSegmentsFile(centralPath)
+			if err != nil {
+				return nil, fmt.Errorf("segment prompt: %w", err)
+			}
+			sf.Contexts = append(sf.Contexts, *cd)
+			if err := segments.SaveSegmentsFile(centralPath, sf); err != nil {
+				return nil, fmt.Errorf("segment prompt: save central: %w", err)
+			}
+			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q (central)\n", segmentName)
+			return cd, nil
+		}
+		fmt.Fprintln(stderr, "Invalid choice; please enter 1, 2, 3, or 'n' to cancel.")
 	}
 }
 

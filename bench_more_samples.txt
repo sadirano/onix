@@ -1,0 +1,8 @@
+ok  	github.com/sadirano/onix	0.601s [no tests to run]
+ok  	github.com/sadirano/onix/internal/config	0.018s [no tests to run]
+ok  	github.com/sadirano/onix/internal/plugins	0.021s [no tests to run]
+ok  	github.com/sadirano/onix/internal/resolver	0.018s [no tests to run]
+ok  	github.com/sadirano/onix/internal/segments	0.030s [no tests to run]
+ok  	github.com/sadirano/onix/internal/snippet	0.017s [no tests to run]
+ok  	github.com/sadirano/onix/internal/store	0.024s [no tests to run]
+ok  	github.com/sadirano/onix/sdk	0.021s [no tests to run]

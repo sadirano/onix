@@ -171,7 +171,7 @@ func TestPromptSegmentDefinition(t *testing.T) {
 		// Inputs: choose template, then template body, then accept save.
 		withStdin(t, "1\n/tickets/${tasks}\n\n", func() {
 			_, _, _ = captureStdio(func() error {
-				cd, perr = promptSegmentDefinition(home, "tasks", "42", os.Stderr, os.Stdin, ".")
+				cd, perr = promptSegmentDefinition(home, "tasks", "42", os.Stderr, os.Stdin, ".", "acme")
 				return nil
 			})
 		})
@@ -205,7 +205,7 @@ func TestPromptSegmentDefinition(t *testing.T) {
 		// Template chosen, but the [Y/n] gets "n" → cancel.
 		withStdin(t, "1\n/${x}\nn\n", func() {
 			_, _, _ = captureStdio(func() error {
-				cd, _ = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin, ".")
+				cd, _ = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin, ".", "acme")
 				return nil
 			})
 		})
@@ -223,7 +223,7 @@ func TestPromptSegmentDefinition(t *testing.T) {
 		var cd *segments.ContextDef
 		withStdin(t, "\n", func() {
 			_, _, _ = captureStdio(func() error {
-				cd, _ = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin, ".")
+				cd, _ = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin, ".", "acme")
 				return nil
 			})
 		})
@@ -237,7 +237,7 @@ func TestPromptSegmentDefinition(t *testing.T) {
 		var perr error
 		withStdin(t, "9\n", func() {
 			_, _, _ = captureStdio(func() error {
-				_, perr = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin, ".")
+				_, perr = promptSegmentDefinition(home, "x", "", os.Stderr, os.Stdin, ".", "acme")
 				return nil
 			})
 		})

@@ -29,8 +29,8 @@ func fastResolve(home, name string, noPrompt bool, stdout, stderr io.Writer, std
 		selector = func(options []string) string {
 			return promptSelection(options, stderr, stdin)
 		}
-		segPrompter = func(segmentName, inlineValue, aliasBase string) (*segments.ContextDef, error) {
-			return promptSegmentDefinition(home, segmentName, inlineValue, stderr, stdin, aliasBase)
+		segPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
+			return promptSegmentDefinition(home, segmentName, inlineValue, stderr, stdin, aliasBase, aliasName)
 		}
 	}
 	p, err := resolver.Resolve(home, name, prompter, selector, segPrompter)

@@ -1,0 +1,30 @@
+goos: windows
+goarch: amd64
+pkg: github.com/sadirano/onix
+cpu: 11th Gen Intel(R) Core(TM) i5-11600K @ 3.90GHz
+BenchmarkHotPath_LookupOnly-12    	62496868	        19.36 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	63428634	        19.23 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	65453593	        19.20 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	62434963	        19.39 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	64443024	        19.14 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	58363771	        19.14 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	62856513	        19.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	64402904	        19.06 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	60179937	        19.26 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHotPath_LookupOnly-12    	59988301	        19.36 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/sadirano/onix	13.782s
+PASS
+ok  	github.com/sadirano/onix/internal/config	0.013s
+PASS
+ok  	github.com/sadirano/onix/internal/plugins	0.015s
+PASS
+ok  	github.com/sadirano/onix/internal/resolver	0.017s
+PASS
+ok  	github.com/sadirano/onix/internal/segments	0.012s
+PASS
+ok  	github.com/sadirano/onix/internal/snippet	0.012s
+PASS
+ok  	github.com/sadirano/onix/internal/store	0.013s
+PASS
+ok  	github.com/sadirano/onix/sdk	0.012s

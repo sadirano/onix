@@ -1,0 +1,20 @@
+goos: windows
+goarch: amd64
+pkg: github.com/sadirano/onix/internal/resolver
+cpu: 11th Gen Intel(R) Core(TM) i5-11600K @ 3.90GHz
+BenchmarkResolve_Segmented_Template-12    	   10000	    111976 ns/op	    6916 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    111337 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    110947 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	    8961	    111847 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    112371 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10776	    111030 ns/op	    6916 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    110781 ns/op	    6916 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    111628 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    113014 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    111977 ns/op	    6915 B/op	      59 allocs/op
+--- FAIL: BenchmarkResolve_Segmented_Multi
+    resolver_test.go:170: source-template: unresolved variable ${docs}
+FAIL
+exit status 1
+FAIL	github.com/sadirano/onix/internal/resolver	12.309s
+FAIL
