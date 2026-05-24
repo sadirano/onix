@@ -56,18 +56,24 @@ jobs:
           go test -bench=BenchmarkHotPath_LookupOnly -benchmem -run=^$ ./... > bench_current.txt
           cat bench_current.txt
 
-      - name: Checkout main for baseline
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          ref: main
-          path: baseline
-
-      - name: Bench (baseline)
+      - name: Fetch baseline files
         shell: bash
         run: |
-          pushd baseline
-          go test -bench=BenchmarkHotPath_LookupOnly -benchmem -run=^$ ./... > ../bench_baseline.txt
-          popd
+          set -eux
+          # Try to fetch baseline files from bench/baseline branch
+          git fetch origin bench/baseline || true
+          if git ls-remote --heads origin bench/baseline | grep -q bench/baseline; then
+            # checkout baseline files into workspace
+            git checkout origin/bench/baseline -- bench_baseline.txt bench_baseline_resolver.txt || true
+          else
+            echo "bench/baseline branch or files not found; generating baseline from origin/main"
+            git fetch origin main
+            git worktree add --detach baseline origin/main
+            pushd baseline
+            go test -bench=BenchmarkHotPath_LookupOnly -benchmem -run=^$ ./... > ../bench_baseline.txt
+            popd
+            rm -rf baseline
+          fi
 
       - name: Compare benches and gate
         shell: bash
