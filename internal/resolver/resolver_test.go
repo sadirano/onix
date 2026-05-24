@@ -400,7 +400,9 @@ func TestResolve_Segmented_PromptCancelled(t *testing.T) {
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	var prompter SegmentPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) { return nil, nil }
+	var prompter SegmentPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
+		return nil, nil
+	}
 	_, err := Resolve(dir, "mystery@acme", nil, nil, prompter)
 	if err != ErrCancelled {
 		t.Fatalf("got %v, want ErrCancelled", err)
