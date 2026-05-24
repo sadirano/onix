@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/sadirano/onix/internal/segments"
 )
@@ -95,6 +96,7 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 	cd := &segments.ContextDef{Segment: segmentName}
 	switch kind {
 	case "template":
+		printTemplateSamples(segmentName, stderr)
 		v, ok := read("Template: ")
 		if !ok || v == "" {
 			return nil, nil
@@ -134,6 +136,27 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 	}
 	fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q\n", segmentName)
 	return cd, nil
+}
+
+// printTemplateSamples shows a few worked examples of source-template values
+// so the user has a starting point at the Template: prompt. The leading `/`
+// (or its absence) is the load-bearing detail — examples cover both the
+// directory case and the filename-suffix case.
+func printTemplateSamples(segmentName string, stderr io.Writer) {
+	ref := "${" + segmentName + "}"
+	samples := []struct{ tmpl, result string }{
+		{"/" + ref, "directory under the alias"},
+		{"/tickets/" + ref, "nested directory"},
+		{"/" + ref + "/notes", "deeper path"},
+		{"_" + ref + ".md", "no leading / — appends to the previous segment"},
+	}
+	fmt.Fprintln(stderr, "Samples:")
+	w := tabwriter.NewWriter(stderr, 0, 0, 2, ' ', 0)
+	for _, s := range samples {
+		fmt.Fprintf(w, "  %s\t%s\n", s.tmpl, s.result)
+	}
+	_ = w.Flush()
+	fmt.Fprintln(stderr, "")
 }
 
 // pickSegmentSource asks the user to choose the source kind for a new

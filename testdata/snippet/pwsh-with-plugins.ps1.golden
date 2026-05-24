@@ -77,6 +77,7 @@ function global:ff {
     )
     & $global:onixExe $Alias --find @Rest
 }
+function global:q { exit }
 
 function global:tts {
     [CmdletBinding()]

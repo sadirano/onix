@@ -233,7 +233,7 @@ func findPreviewCommand(home string) string {
 // newlines) is fine inside FZF_DEFAULT_OPTS — fzf treats it as an
 // argument separator.
 const fzfTokyoNightTheme = "" +
-	"--color=fg:#c0caf5,bg:#1a1b26,hl:#2ac3de,fg+:#c0caf5,bg+:#283457 " +
+	"--color=fg:#c0caf5,bg:-1,hl:#2ac3de,fg+:#c0caf5,bg+:#283457 " +
 	"--color=hl+:#2ac3de,info:#7aa2f7,prompt:#2ac3de,pointer:#ff007c " +
 	"--color=marker:#ff5da0,spinner:#ff007c,header:#ff9e64,query:#c0caf5 " +
 	"--color=border:#27a1b9,separator:#ff9e64,gutter:#283457"

@@ -154,6 +154,10 @@ const bashFF = `%s() {
 }
 `
 
+// pwshQ is a tiny convenience: type `q` to exit the shell.
+const pwshQ = `function global:q { exit }
+`
+
 const pwshCompleter = `$onixAliasCompleter = {
     param($wordToComplete, $commandAst, $cursorPosition)
     @(& $global:onixExe --list-names 2>$null) |
@@ -223,6 +227,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	fmt.Fprintf(&b, pwshR, s["r"])
 	fmt.Fprintf(&b, pwshSG, s["sg"])
 	fmt.Fprintf(&b, pwshFF, s["ff"])
+	b.WriteString(pwshQ)
 	b.WriteString("\n")
 
 	// On Windows, we also drop .cmd wrappers into ~/.onix/bin for each
@@ -235,7 +240,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	writeOCmdWrapper(binDir, exe, s["o"])
 	writeFindPreviewWrapper(binDir)
 	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
-	writeAliasFlagWrapper(binDir, exe, s["s"], "--explore")
+	writeExploreWrapper(binDir, s["r"], s["s"])
 	writeAliasFlagWrapper(binDir, exe, s["y"], "--yank")
 	writeAliasFlagWrapper(binDir, exe, s["r"], "--run")
 	writeAliasFlagWrapper(binDir, exe, s["sg"], "--grep")
@@ -344,6 +349,18 @@ cd /d "%%_onix_target%%"
 set "_onix_target="
 if %%0 == "%%~f0" cmd /k
 `, exe, exe, exe, exe)
+	_ = os.WriteFile(path, []byte(content), 0o644)
+}
+
+// writeExploreWrapper emits the explore shim. Instead of going through
+// onix --explore (which shells out to explorer.exe and inherits its
+// non-zero exit codes and awkward cwd handling), it delegates to the run
+// wrapper: resolve the alias's directory, cd there, and launch
+// `explorer .`. runName is the run shortcut's wrapper name, which lives
+// in the same bin dir and is therefore resolvable on PATH.
+func writeExploreWrapper(binDir, runName, name string) {
+	path := filepath.Join(binDir, name+".cmd")
+	content := fmt.Sprintf("@echo off\r\n%s %%* explorer .\r\n", runName)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 

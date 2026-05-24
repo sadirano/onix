@@ -77,5 +77,6 @@ function global:ff {
     )
     & $global:onixExe $Alias --find @Rest
 }
+function global:q { exit }
 
 Register-ArgumentCompleter -CommandName e,ff,o,r,s,sg,y -ParameterName Alias -ScriptBlock $onixAliasCompleter
