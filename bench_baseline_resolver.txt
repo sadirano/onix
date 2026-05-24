@@ -1,0 +1,26 @@
+goos: windows
+goarch: amd64
+pkg: github.com/sadirano/onix/internal/resolver
+cpu: 11th Gen Intel(R) Core(TM) i5-11600K @ 3.90GHz
+BenchmarkResolve_Segmented_Template-12    	   10000	    113725 ns/op	    6916 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    110600 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    111145 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    111661 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    113063 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    112122 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    112132 ns/op	    6916 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    113364 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    112429 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Template-12    	   10000	    110062 ns/op	    6915 B/op	      59 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3144	    378061 ns/op	   24413 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3198	    373357 ns/op	   23741 B/op	     212 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    2967	    374353 ns/op	   24414 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3195	    378534 ns/op	   24413 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3069	    377132 ns/op	   24413 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3157	    381135 ns/op	   24414 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3057	    377147 ns/op	   24413 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    2964	    381982 ns/op	   24414 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3235	    375488 ns/op	   24413 B/op	     215 allocs/op
+BenchmarkResolve_Segmented_Multi-12       	    3055	    378445 ns/op	   24413 B/op	     215 allocs/op
+PASS
+ok  	github.com/sadirano/onix/internal/resolver	23.591s
