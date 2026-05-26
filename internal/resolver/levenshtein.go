@@ -39,6 +39,7 @@ func ComputeDistance(a, b string) int {
 			}
 
 			// Find minimum of (insertion, deletion, substitution).
+			// Go 1.21+ builtin min accepts variadic int args.
 			curr[j] = min(
 				curr[j-1]+1,    // insertion
 				prev[j]+1,      // deletion
@@ -50,14 +51,4 @@ func ComputeDistance(a, b string) int {
 	}
 
 	return curr[m]
-}
-
-func min(a, b, c int) int {
-	if a <= b && a <= c {
-		return a
-	}
-	if b <= a && b <= c {
-		return b
-	}
-	return c
 }
