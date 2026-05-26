@@ -111,6 +111,22 @@ func TestOpenSelectionsInEditor(t *testing.T) {
 	}
 }
 
+func TestOpenSelectionsInEditor_NoEditor(t *testing.T) {
+	// Clear EDITOR and VISUAL so resolveEditor falls through to PATH probing.
+	t.Setenv("EDITOR", "")
+	t.Setenv("VISUAL", "")
+	// Declare every fallback editor as absent.
+	fakeLookPath(t, map[string]bool{})
+
+	err := openSelectionsInEditor(context.Background(), ".", []string{"file.go"}, false)
+	if err == nil {
+		t.Fatal("expected error when no editor is available")
+	}
+	if !strings.Contains(err.Error(), "no editor found") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
 // TestFindPreviewCommand confirms the OS branches: Windows points fzf at
 // the onix-preview.cmd shim, POSIX uses an inline bat-or-ls fallback.
 func TestFindPreviewCommand(t *testing.T) {

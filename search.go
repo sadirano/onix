@@ -250,6 +250,9 @@ func applyDefaultFzfTheme(cmd *exec.Cmd) {
 
 func openSelectionsInEditor(ctx context.Context, target string, selections []string, hasLineNumbers bool) error {
 	ed := resolveEditor()
+	if ed == "" {
+		return fmt.Errorf("no editor found: set $EDITOR or ensure one of nvim, vim, code, nano, notepad is on PATH")
+	}
 
 	// grep selections are <relative file>:<line>:<text>; find selections
 	// are just the file path. On Windows, find can return drive-letter
