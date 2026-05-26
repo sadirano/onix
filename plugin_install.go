@@ -175,7 +175,7 @@ func readPluginManifest(srcDir string) ([]plugins.PluginEntry, error) {
 // path automation should take.
 func confirmInstall(stdin io.Reader, stdout io.Writer, repo, name, sha, message string, entries []plugins.PluginEntry, unpinned bool) bool {
 	fmt.Fprintln(stdout)
-	fmt.Fprintf(stdout, "  repo:    https://github.com/%s\n", repo)
+	fmt.Fprintf(stdout, "  repo:    %s\n", resolveRepoURL(repo))
 	fmt.Fprintf(stdout, "  wrapper: %s\n", name)
 	if unpinned {
 		// Go 1.21+'s builtin min(int, int) gives us the SHA prefix without

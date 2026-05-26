@@ -339,3 +339,18 @@ func TestConfirmInstall_EntriesListed(t *testing.T) {
 		t.Errorf("commit line missing: %q", body)
 	}
 }
+
+func TestConfirmInstall_LocalPathRepo(t *testing.T) {
+	// A local absolute path should be displayed as-is, not wrapped in a
+	// GitHub URL prefix.
+	localPath := `/tmp/my-plugin`
+	var out bytes.Buffer
+	confirmInstall(strings.NewReader("n\n"), &out, localPath, "wrap", "abc", "", nil, false)
+	body := out.String()
+	if strings.Contains(body, "github.com") {
+		t.Errorf("local path should not be shown as a GitHub URL: %q", body)
+	}
+	if !strings.Contains(body, localPath) {
+		t.Errorf("local path missing from output: %q", body)
+	}
+}
