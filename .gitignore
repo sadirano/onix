@@ -7,3 +7,5 @@ cover
 cover.out
 ISSUES.md
 gofumpt_changes.txt
+bench_*.txt
+benchstat*.txt
