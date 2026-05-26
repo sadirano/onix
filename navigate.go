@@ -118,14 +118,18 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 		return nil, fmt.Errorf("segment prompt: unrecognised choice %q (expected template, exec, or file)", kind)
 	}
 
-	// Ask where to save: global (~/.onix/segments.toml) or local (<alias>/.onix/segments.toml).
+	// Ask where to save.
+	//   [1] global  — ~/.onix/segments.toml with scope = "global" (all aliases)
+	//   [2] local   — <alias>/.onix/segments.toml (only this alias's directory)
+	//   [3] central — ~/.onix/segments.d/<alias>.toml (only this alias, stored centrally)
 	for {
-		choice, ok := read("Save where? [1] global (~/.onix/segments.toml) [2] local (<alias>/.onix/segments.toml) [3] central (~/.onix/segments.d/<alias>.toml) [1/2/3] (or 'n' to cancel): ")
+		choice, ok := read("Save where? [1] global (scope=\"global\", all aliases) [2] local (<alias>/.onix/) [3] central (~/.onix/segments.d/<alias>.toml) [1/2/3] (or 'n' to cancel): ")
 		if !ok {
 			return nil, nil
 		}
 		if choice == "" || choice == "1" {
-			// global
+			// global — must carry scope = "global" so LookupGlobalContext finds it.
+			cd.Scope = "global"
 			sf, err := segments.LoadSegments(home)
 			if err != nil {
 				return nil, fmt.Errorf("segment prompt: %w", err)
@@ -134,7 +138,7 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 			if err := segments.SaveSegments(home, sf); err != nil {
 				return nil, fmt.Errorf("segment prompt: save: %w", err)
 			}
-			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q\n", segmentName)
+			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q (global)\n", segmentName)
 			return cd, nil
 		}
 		if strings.EqualFold(choice, "n") || strings.EqualFold(choice, "no") {
@@ -251,6 +255,37 @@ func pickSegmentSource(segmentName string, stderr io.Writer, reader *bufio.Reade
 		}
 	}
 	return choice, true
+}
+
+// promptMultiTargetPath presents the path list for a multi-target alias and
+// returns the user's choice. Empty string means the user cancelled.
+func promptMultiTargetPath(alias string, paths []string, stderr io.Writer, stdin io.Reader) string {
+	header := fmt.Sprintf("Multiple paths for %q — pick one:", alias)
+
+	if fzf, err := exec.LookPath("fzf"); err == nil {
+		cmd := execCommand(fzf, "--header", header, "--reverse", "--height", "40%")
+		cmd.Stderr = stderr
+		cmd.Stdin = strings.NewReader(strings.Join(paths, "\n"))
+		out, err := cmd.Output()
+		if err == nil {
+			return strings.TrimSpace(string(out))
+		}
+		return ""
+	}
+
+	fmt.Fprintf(stderr, "%s\n", header)
+	for i, p := range paths {
+		fmt.Fprintf(stderr, "  %d) %s\n", i+1, p)
+	}
+	line, ok := readLine(fmt.Sprintf("Select [1-%d] or press Enter to cancel: ", len(paths)), stderr, stdin)
+	if !ok || line == "" {
+		return ""
+	}
+	idx, err := strconv.Atoi(line)
+	if err != nil || idx < 1 || idx > len(paths) {
+		return ""
+	}
+	return paths[idx-1]
 }
 
 // promptSelection presents a list of options and returns the selected one.

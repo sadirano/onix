@@ -45,9 +45,14 @@ type SegmentPrompter func(segmentName, inlineValue, aliasBase, aliasName string)
 // when a referenced segment has no [[contexts]] entry. Passing nil makes
 // unknown segments a hard error — used by --no-prompt callers.
 //
+// multiSelector is invoked when an alias resolves to multiple paths. It
+// receives the alias name and the path list; the chosen path is returned.
+// Returning "" is treated as ErrCancelled. Pass nil to silently pick the
+// first path (useful for non-interactive callers).
+//
 // Resolve does NOT create directories on disk. It returns a host-native path
 // (using filepath.FromSlash).
-func Resolve(home, name string, prompter func(string) string, selector func([]string) string, segmentPrompter SegmentPrompter) (string, error) {
+func Resolve(home, name string, prompter func(string) string, selector func([]string) string, segmentPrompter SegmentPrompter, multiSelector func(string, []string) string) (string, error) {
 	if strings.Contains(name, "@") {
 		return resolveSegmented(home, name, segmentPrompter)
 	}
@@ -56,6 +61,8 @@ func Resolve(home, name string, prompter func(string) string, selector func([]st
 	if err == nil {
 		target := strings.ToLower(strings.TrimSpace(name))
 		if p, ok := ScanForAlias(data, target); ok {
+			// Fast path only handles single-target (path = "..."). Multi-target
+			// aliases (paths = [...]) fall through to the slow path below.
 			return filepath.FromSlash(p), nil
 		}
 	} else if !os.IsNotExist(err) {
@@ -117,7 +124,7 @@ func Resolve(home, name string, prompter func(string) string, selector func([]st
 				if selected != "" {
 					// Recursively resolve the selected alias (without prompter/selector
 					// to avoid loops, but since it's from s.Names() it must exist).
-					return Resolve(home, selected, nil, nil, nil)
+					return Resolve(home, selected, nil, nil, nil, nil)
 				}
 			}
 		}
@@ -146,7 +153,24 @@ func Resolve(home, name string, prompter func(string) string, selector func([]st
 		return abs, nil
 	}
 
-	return filepath.FromSlash(a.Path), nil
+	// Multi-target: when the alias holds multiple paths, ask the user to pick.
+	all := a.AllPaths()
+	switch len(all) {
+	case 0:
+		return "", fmt.Errorf("alias %q has no path set", name)
+	case 1:
+		return filepath.FromSlash(all[0]), nil
+	default:
+		if multiSelector == nil {
+			// Non-interactive callers get the first path silently.
+			return filepath.FromSlash(all[0]), nil
+		}
+		chosen := multiSelector(name, all)
+		if chosen == "" {
+			return "", ErrCancelled
+		}
+		return filepath.FromSlash(chosen), nil
+	}
 }
 
 func resolveSegmented(home, input string, prompter SegmentPrompter) (string, error) {
@@ -178,13 +202,13 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 	target := strings.TrimRight(a.Path, "/")
 	for i := len(segs) - 1; i >= 0; i-- {
 		ps := segs[i]
-		// Resolution precedence: local -> central -> global.
+		// Resolution precedence: local -> central -> global (scope="global" only).
 		cd, ok := segments.LookupContext(sfLocal, ps.Name)
 		if !ok {
 			cd, ok = segments.LookupContext(sfCentral, ps.Name)
 		}
 		if !ok {
-			cd, ok = segments.LookupContext(sfGlobal, ps.Name)
+			cd, ok = segments.LookupGlobalContext(sfGlobal, ps.Name)
 		}
 		if !ok {
 			if prompter == nil {
@@ -207,7 +231,7 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 				cd, ok = segments.LookupContext(sfCentral, ps.Name)
 			}
 			if !ok {
-				cd, ok = segments.LookupContext(sfGlobal, ps.Name)
+				cd, ok = segments.LookupGlobalContext(sfGlobal, ps.Name)
 			}
 			if !ok {
 				return "", fmt.Errorf("segment %q: prompter saved a context but it was not loadable", ps.Name)

@@ -148,6 +148,7 @@ ADD FLAGS:
   --description, -d <text>
   --owner, -o <name>
   --tags, -t <tag>           (repeatable)
+  --add-path                 append path to the alias (creates multi-target)
 
 REMOVE FLAGS:
   --force, -F                skip confirm; bypass load-bearing file guard
@@ -331,11 +332,13 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 		return fastResolve(e.Home, alias, noPrompt, e.Stdout, e.Stderr, e.Stdin)
 	}
 
-	// Parse: <path> [--description X] [--owner X] [--tags X]...
+	// Parse: <path> [--add-path] [--description X] [--owner X] [--tags X]...
 	add := &AddCmd{Alias: alias}
 	for i := 0; i < len(cleaned); i++ {
 		a := cleaned[i]
 		switch {
+		case a == "--add-path":
+			add.AddPath = true
 		case a == "--description" || a == "-d":
 			if i+1 >= len(cleaned) {
 				return fmt.Errorf("--description requires a value")

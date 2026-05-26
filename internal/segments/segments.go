@@ -15,8 +15,16 @@ import (
 //
 // Env is consulted during resolve-time variable lookup inside templates
 // and source-exec args; it is not exported to the shell after cd.
+//
+// Scope controls visibility when the entry lives in the global
+// ~/.onix/segments.toml file. Set scope = "global" to make the entry
+// available to all aliases (the old implicit behaviour). Without it, the
+// entry is ignored during global lookup — it must be in a per-alias file
+// (~/.onix/segments.d/<alias>.toml or <alias>/.onix/segments.toml) to
+// take effect.
 type ContextDef struct {
 	Segment        string            `toml:"segment"`
+	Scope          string            `toml:"scope,omitempty"`
 	Param          string            `toml:"param,omitempty"`
 	SourceTemplate string            `toml:"source-template,omitempty"`
 	SourceExec     []string          `toml:"source-exec,omitempty"`
@@ -37,6 +45,8 @@ func Path(home string) string {
 // LookupContext finds the [[contexts]] entry whose Segment matches name
 // case-insensitively. When multiple entries share a name, the first one
 // wins (so the TOML author controls precedence by ordering).
+// Use this for per-alias files (local and central) where every entry is
+// implicitly scoped to the alias.
 func LookupContext(sf *SegmentsFile, name string) (*ContextDef, bool) {
 	if sf == nil {
 		return nil, false
@@ -45,6 +55,23 @@ func LookupContext(sf *SegmentsFile, name string) (*ContextDef, bool) {
 	for i := range sf.Contexts {
 		if strings.ToLower(sf.Contexts[i].Segment) == target {
 			return &sf.Contexts[i], true
+		}
+	}
+	return nil, false
+}
+
+// LookupGlobalContext finds a [[contexts]] entry in the global segments.toml
+// that has scope = "global". Entries without an explicit scope are not
+// returned — they must live in a per-alias file to take effect.
+func LookupGlobalContext(sf *SegmentsFile, name string) (*ContextDef, bool) {
+	if sf == nil {
+		return nil, false
+	}
+	target := strings.ToLower(name)
+	for i := range sf.Contexts {
+		cd := &sf.Contexts[i]
+		if strings.ToLower(cd.Segment) == target && strings.ToLower(cd.Scope) == "global" {
+			return cd, true
 		}
 	}
 	return nil, false

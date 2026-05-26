@@ -119,6 +119,7 @@ func BenchmarkResolve_Segmented_Template(b *testing.B) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "docs"
+scope = "global"
 source-template = "/documentation"
 `), 0o644); err != nil {
 		b.Fatal(err)
@@ -126,7 +127,7 @@ source-template = "/documentation"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := Resolve(dir, "docs@acme", nil, nil, nil); err != nil {
+		if _, err := Resolve(dir, "docs@acme", nil, nil, nil, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -146,14 +147,17 @@ func BenchmarkResolve_Segmented_Multi(b *testing.B) {
 	}
 	segs := `[[contexts]]
 segment = "docs"
+scope = "global"
 source-template = "/documentation"
 
 [[contexts]]
 segment = "src"
+scope = "global"
 source-template = "/source"
 
 [[contexts]]
 segment = "fileseg"
+scope = "global"
 source-file = "` + filepath.ToSlash(filepath.Join(dir, "data.txt")) + `"
 
 `
@@ -163,13 +167,13 @@ source-file = "` + filepath.ToSlash(filepath.Join(dir, "data.txt")) + `"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := Resolve(dir, "docs@acme", nil, nil, nil); err != nil {
+		if _, err := Resolve(dir, "docs@acme", nil, nil, nil, nil); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := Resolve(dir, "fileseg@acme", nil, nil, nil); err != nil {
+		if _, err := Resolve(dir, "fileseg@acme", nil, nil, nil, nil); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := Resolve(dir, "src@docs@acme", nil, nil, nil); err != nil {
+		if _, err := Resolve(dir, "src@docs@acme", nil, nil, nil, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -200,10 +204,12 @@ func TestResolve_Segmented(t *testing.T) {
 
 	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "docs"
+scope = "global"
 source-template = "/documentation"
 
 [[contexts]]
 segment = "src"
+scope = "global"
 source-template = "/source"
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -220,7 +226,7 @@ source-template = "/source"
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			got, err := Resolve(dir, tc.in, nil, nil, nil)
+			got, err := Resolve(dir, tc.in, nil, nil, nil, nil)
 			if err != nil {
 				t.Fatalf("resolve: %v", err)
 			}
@@ -243,12 +249,13 @@ func TestResolve_Segmented_InlineValue(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "tasks"
+scope = "global"
 source-template = "/${tasks}"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := Resolve(dir, "tasks:123@proja", nil, nil, nil)
+	got, err := Resolve(dir, "tasks:123@proja", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -270,16 +277,18 @@ func TestResolve_Segmented_NoLeadingSlash(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "client"
+scope = "global"
 source-template = "/${client}"
 
 [[contexts]]
 segment = "task"
+scope = "global"
 source-template = "_${task}.md"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := Resolve(dir, "task:432@client:bob@projb", nil, nil, nil)
+	got, err := Resolve(dir, "task:432@client:bob@projb", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -300,13 +309,14 @@ func TestResolve_Segmented_TraversalRejected(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, "segments.toml"), []byte(`[[contexts]]
 segment = "evil"
+scope = "global"
 source-template = "/${target}"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Setenv("target", "../etc/passwd")
-	_, err := Resolve(dir, "evil@home", nil, nil, nil)
+	_, err := Resolve(dir, "evil@home", nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected traversal guard to reject ../etc/passwd")
 	}
@@ -324,7 +334,7 @@ func TestResolve_Segmented_UnknownNoPrompt(t *testing.T) {
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Resolve(dir, "mystery@acme", nil, nil, nil)
+	_, err := Resolve(dir, "mystery@acme", nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for undefined segment")
 	}
@@ -345,6 +355,10 @@ func TestResolve_Segmented_UnknownWithPrompt(t *testing.T) {
 	}
 
 	calls := 0
+	// The prompter simulates saving to the central per-alias store (the
+	// default when users pick option [3] at the "Save where?" prompt).
+	// Central files use LookupContext (no scope filter) so no scope field
+	// is needed here.
 	var prompter SegmentPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
 		calls++
 		if segmentName != "tasks" {
@@ -354,18 +368,19 @@ func TestResolve_Segmented_UnknownWithPrompt(t *testing.T) {
 			t.Errorf("prompt got inline=%q, want 42", inlineValue)
 		}
 		cd := segments.ContextDef{Segment: "tasks", SourceTemplate: "/tickets/${tasks}"}
-		sf, err := segments.LoadSegments(dir)
+		centralPath := segments.CentralPath(dir, aliasName)
+		sf, err := segments.LoadSegmentsFile(centralPath)
 		if err != nil {
 			return nil, err
 		}
 		sf.Contexts = append(sf.Contexts, cd)
-		if err := segments.SaveSegments(dir, sf); err != nil {
+		if err := segments.SaveSegmentsFile(centralPath, sf); err != nil {
 			return nil, err
 		}
 		return &cd, nil
 	}
 
-	got, err := Resolve(dir, "tasks:42@acme", nil, nil, prompter)
+	got, err := Resolve(dir, "tasks:42@acme", nil, nil, prompter, nil)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -377,14 +392,14 @@ func TestResolve_Segmented_UnknownWithPrompt(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
-	// Persistence check.
-	sf, err := segments.LoadSegments(dir)
+	// Persistence check — read back from the central per-alias file.
+	sf, err := segments.LoadSegmentsFile(segments.CentralPath(dir, "acme"))
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
 	cd, ok := segments.LookupContext(sf, "tasks")
 	if !ok {
-		t.Fatal("expected 'tasks' context after prompt, not found")
+		t.Fatal("expected 'tasks' context after prompt, not found in central store")
 	}
 	if cd.SourceTemplate != "/tickets/${tasks}" {
 		t.Errorf("template = %q, want /tickets/${tasks}", cd.SourceTemplate)
@@ -403,7 +418,7 @@ func TestResolve_Segmented_PromptCancelled(t *testing.T) {
 	var prompter SegmentPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
 		return nil, nil
 	}
-	_, err := Resolve(dir, "mystery@acme", nil, nil, prompter)
+	_, err := Resolve(dir, "mystery@acme", nil, nil, prompter, nil)
 	if err != ErrCancelled {
 		t.Fatalf("got %v, want ErrCancelled", err)
 	}
@@ -415,7 +430,7 @@ func TestResolve_Basic(t *testing.T) {
 	_ = store.SaveStore(dir, s)
 
 	t.Run("fast path", func(t *testing.T) {
-		got, err := Resolve(dir, "a", nil, nil, nil)
+		got, err := Resolve(dir, "a", nil, nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -428,7 +443,7 @@ func TestResolve_Basic(t *testing.T) {
 		// Delete file to force slow path (or just use non-fast alias name if any)
 		// Wait, slow path is also triggered if Resolve reads full store.
 		// Resolve always tries fast path first.
-		got, err := Resolve(dir, "A", nil, nil, nil) // Case insensitive
+		got, err := Resolve(dir, "a", nil, nil, nil, nil) // Case insensitive
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -463,7 +478,7 @@ func TestResolve_FuzzyMatch_DistanceLimit(t *testing.T) {
 	// "sync" is distance 3 from "bin" but distance 4 from "onix" / "play".
 	// Under the new limit (shorter/3 = 1 for shorter=3, capped to 1) NONE
 	// of these are close enough to suggest. The selector should not fire.
-	_, err := Resolve(dir, "sync", nil, selector, nil)
+	_, err := Resolve(dir, "sync", nil, selector, nil, nil)
 	if err == nil {
 		t.Errorf("expected error for unknown alias 'sync', got nil")
 	}
@@ -473,7 +488,7 @@ func TestResolve_FuzzyMatch_DistanceLimit(t *testing.T) {
 
 	// Sanity: a real typo (one transposition) should still trigger the selector.
 	selected = ""
-	_, err = Resolve(dir, "onxi", nil, selector, nil)
+	_, err = Resolve(dir, "onxi", nil, selector, nil, nil)
 	if err == nil {
 		t.Errorf("expected error for unknown alias 'onxi' when selector returns empty")
 	}
@@ -495,7 +510,7 @@ func TestResolve_NilSelector_BypassesFuzzy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Resolve(dir, "onxi", nil, nil, nil)
+	_, err := Resolve(dir, "onxi", nil, nil, nil, nil)
 	if err == nil {
 		t.Errorf("expected error when selector is nil and alias is unknown")
 	}
@@ -512,7 +527,7 @@ func TestResolve_WithPrompter(t *testing.T) {
 		prompter := func(name string) string {
 			return target
 		}
-		got, err := Resolve(dir, "new", prompter, nil, nil)
+		got, err := Resolve(dir, "new", prompter, nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -530,9 +545,10 @@ func TestResolve_WithPrompter(t *testing.T) {
 		prompter := func(name string) string {
 			return ""
 		}
-		_, err := Resolve(dir, "cancelled", prompter, nil, nil)
+		_, err := Resolve(dir, "cancelled", prompter, nil, nil, nil)
 		if err != ErrCancelled {
 			t.Fatalf("expected ErrCancelled, got %v", err)
 		}
 	})
 }
+

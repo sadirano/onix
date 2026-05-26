@@ -21,6 +21,14 @@ import (
 	"github.com/sadirano/onix/internal/store"
 )
 
+// childExitError is returned by RunCmd and ExecCmd when the child process
+// exits with a non-zero code. The top-level run() detects this type and
+// calls os.Exit with the exact code so deferred cleanup still runs — unlike
+// an inline os.Exit which would bypass every defer in the call stack.
+type childExitError struct{ Code int }
+
+func (e *childExitError) Error() string { return fmt.Sprintf("exit status %d", e.Code) }
+
 func printJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -43,6 +51,7 @@ type AddCmd struct {
 	Description string   `help:"Human-readable description of the alias."`
 	Owner       string   `help:"The person or team responsible for this directory."`
 	Tags        []string `help:"Categorization labels (multiple flags)."`
+	AddPath     bool     `help:"Append path to the alias instead of replacing it (creates a multi-target alias)."`
 }
 
 func (c *AddCmd) Run(ctx context.Context, e *env) error {
@@ -76,7 +85,27 @@ func (c *AddCmd) Run(ctx context.Context, e *env) error {
 
 	// Merge with existing alias if present.
 	alias, _ := s.Lookup(c.Alias)
-	alias.Path = filepath.ToSlash(abs)
+
+	if c.AddPath {
+		// --add-path: append to the multi-target list; migrate from single
+		// path if the alias was previously single-target.
+		all := alias.AllPaths()
+		newSlash := filepath.ToSlash(abs)
+		for _, p := range all {
+			if filepath.ToSlash(p) == newSlash {
+				fmt.Fprintf(e.Stderr, "path already registered for %s: %s\n", c.Alias, abs)
+				fmt.Fprintln(e.Stdout, abs)
+				return nil
+			}
+		}
+		alias.Paths = append(all, newSlash)
+		alias.Path = "" // use Paths exclusively once multi-target
+	} else {
+		// Standard set: replace any existing path(s) with the new one.
+		alias.Path = filepath.ToSlash(abs)
+		alias.Paths = nil
+	}
+
 	if c.Description != "" {
 		alias.Description = c.Description
 	}
@@ -424,8 +453,10 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	if err := cmd.Run(); err != nil {
 		// Propagate child exit codes verbatim. Without this a `go test`
 		// failure inside `onix run` would surface as a generic exit 1.
+		// We return a childExitError so the deferred panic-recovery in
+		// run() still executes before os.Exit is called.
 		if ee, ok := err.(*exec.ExitError); ok {
-			os.Exit(ee.ExitCode())
+			return &childExitError{Code: ee.ExitCode()}
 		}
 		return fmt.Errorf("run %s: %w", argv[0], err)
 	}
@@ -485,7 +516,7 @@ func (c *ExecCmd) Run(ctx context.Context, e *env) error {
 	cmd.Stderr = e.Stderr
 	if err := cmd.Run(); err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
-			os.Exit(ee.ExitCode())
+			return &childExitError{Code: ee.ExitCode()}
 		}
 		return fmt.Errorf("exec %s %s: %w", actionName, argv[0], err)
 	}
@@ -562,6 +593,8 @@ func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 	var selector func([]string) string
 	var segPrompter resolver.SegmentPrompter
 
+	var multiSelector func(string, []string) string
+
 	if !noPrompt {
 		prompter = func(name string) string {
 			return promptDestination(name, e.Stderr, e.Stdin)
@@ -572,9 +605,12 @@ func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 		segPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
 			return promptSegmentDefinition(e.Home, segmentName, inlineValue, e.Stderr, e.Stdin, aliasBase, aliasName)
 		}
+		multiSelector = func(alias string, paths []string) string {
+			return promptMultiTargetPath(alias, paths, e.Stderr, e.Stdin)
+		}
 	}
 
-	p, err := resolver.Resolve(e.Home, name, prompter, selector, segPrompter)
+	p, err := resolver.Resolve(e.Home, name, prompter, selector, segPrompter, multiSelector)
 	if err != nil {
 		return "", err
 	}
@@ -598,7 +634,7 @@ func resolveEditor() string {
 		return e
 	}
 	for _, e := range []string{"nvim", "vim", "code", "nano", "notepad"} {
-		if _, err := exec.LookPath(e); err == nil {
+		if _, err := lookPath(e); err == nil {
 			return e
 		}
 	}

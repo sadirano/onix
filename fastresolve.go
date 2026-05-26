@@ -22,6 +22,8 @@ func fastResolve(home, name string, noPrompt bool, stdout, stderr io.Writer, std
 	var selector func([]string) string
 	var segPrompter resolver.SegmentPrompter
 
+	var multiSelector func(string, []string) string
+
 	if !noPrompt {
 		prompter = func(name string) string {
 			return promptDestination(name, stderr, stdin)
@@ -32,8 +34,11 @@ func fastResolve(home, name string, noPrompt bool, stdout, stderr io.Writer, std
 		segPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
 			return promptSegmentDefinition(home, segmentName, inlineValue, stderr, stdin, aliasBase, aliasName)
 		}
+		multiSelector = func(alias string, paths []string) string {
+			return promptMultiTargetPath(alias, paths, stderr, stdin)
+		}
 	}
-	p, err := resolver.Resolve(home, name, prompter, selector, segPrompter)
+	p, err := resolver.Resolve(home, name, prompter, selector, segPrompter, multiSelector)
 	if err != nil {
 		return err
 	}

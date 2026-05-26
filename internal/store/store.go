@@ -17,11 +17,28 @@ type Store struct {
 }
 
 // Alias is one alias entry.
+//
+// Single-target aliases use Path. Multi-target aliases use Paths; when Paths
+// is non-empty it takes precedence over Path. Resolution of multiple targets
+// is handled by the caller (typically an interactive fzf picker).
 type Alias struct {
-	Path        string   `toml:"path"`
+	Path        string   `toml:"path,omitempty"`
+	Paths       []string `toml:"paths,omitempty"`
 	Description string   `toml:"description,omitempty"`
 	Tags        []string `toml:"tags,omitempty"`
 	Owner       string   `toml:"owner,omitempty"`
+}
+
+// AllPaths returns the effective set of paths for this alias.
+// Paths takes precedence over Path for multi-target aliases.
+func (a Alias) AllPaths() []string {
+	if len(a.Paths) > 0 {
+		return a.Paths
+	}
+	if a.Path != "" {
+		return []string{a.Path}
+	}
+	return nil
 }
 
 // AliasesPath returns home/aliases.toml.
@@ -157,9 +174,18 @@ func validateName(kind, name string) error {
 	return nil
 }
 
-// ExpandTilde expands a leading ~ to the user home directory.
+// ExpandTilde expands a leading ~/ (or a bare ~) to the user home directory.
+// It intentionally does NOT expand ~user/... forms: those refer to other users'
+// home directories and the resolution would be OS-dependent and wrong on Windows.
 func ExpandTilde(p string) string {
-	if !strings.HasPrefix(p, "~") {
+	if p == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return p
+		}
+		return home
+	}
+	if !strings.HasPrefix(p, "~/") && !strings.HasPrefix(p, `~\`) {
 		return p
 	}
 	home, err := os.UserHomeDir()

@@ -102,6 +102,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 
 	// Dispatch the alias-flag grammar.
 	if err := dispatchNewGrammar(sigCtx, e, processedArgs[1:], stdout, stderr); err != nil {
+		var cee *childExitError
+		if errors.As(err, &cee) {
+			return cee.Code
+		}
 		if !errors.Is(err, resolver.ErrCancelled) {
 			fmt.Fprintf(stderr, "onix: %v\n", err)
 		}
@@ -151,6 +155,10 @@ func runPluginKong(sigCtx context.Context, e *env, args []string, stdout, stderr
 	ctx.BindTo(sigCtx, (*context.Context)(nil))
 
 	if err := ctx.Run(); err != nil {
+		var cee *childExitError
+		if errors.As(err, &cee) {
+			return cee.Code
+		}
 		if !errors.Is(err, resolver.ErrCancelled) {
 			fmt.Fprintf(stderr, "onix: %v\n", err)
 		}
