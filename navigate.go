@@ -11,8 +11,6 @@ import (
 	"github.com/sadirano/onix/internal/segments"
 )
 
-
-
 // promptSegmentDefinition asks the user to define a [[contexts]] entry for
 // a segment that wasn't found in segments.toml by opening their editor with
 // a template and instructions.
@@ -79,5 +77,3 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 	fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q in %s\n", segmentName, filePath)
 	return cd, nil
 }
-
-

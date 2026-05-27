@@ -154,8 +154,6 @@ func LoadSegments(home string) (*SegmentsFile, error) {
 	return LoadSegmentsFile(Path(home))
 }
 
-
-
 // ParsedSegment is one segment token, possibly carrying an inline value
 // supplied via the `seg:value` syntax.
 //
