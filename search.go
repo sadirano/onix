@@ -30,7 +30,10 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) > 1 {
 		query = c.Args[1]
 	}
-	extras := c.Args[2:]
+	var extras []string
+	if len(c.Args) > 2 {
+		extras = c.Args[2:]
+	}
 
 	target, err := resolveAliasPath(e, alias)
 	if err != nil {
@@ -129,7 +132,10 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) > 1 {
 		query = c.Args[1]
 	}
-	extras := c.Args[2:]
+	var extras []string
+	if len(c.Args) > 2 {
+		extras = c.Args[2:]
+	}
 
 	target, err := resolveAliasPath(e, alias)
 	if err != nil {
