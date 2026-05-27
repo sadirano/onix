@@ -2,9 +2,9 @@ name: Lint
 
 on:
   push:
-    branches: [ main, master, refactor/onix-rework ]
+    branches: [ main, refactor/onix-rework ]
   pull_request:
-    branches: [ main, master, refactor/onix-rework ]
+    branches: [ main, refactor/onix-rework ]
 
 permissions:
   contents: read
