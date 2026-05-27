@@ -13,16 +13,9 @@ Pointers to the documentation kept in this directory.
 
 ## For contributors
 
-- **[MODULE_PATTERN.md](./MODULE_PATTERN.md)** — the standard pattern for
-  creating an Onix module (plugin).
 - Repo-root **[CONTRIBUTING.md](../CONTRIBUTING.md)** — how to get patches
   in.
-- Repo-root **[ROADMAP.md](../ROADMAP.md)** — the living "Road to 10/10"
-  list of project work.
-
-## Design notes & working plans
-
-In-flight specs and working plans live under [`design/`](./design/).
-They're transient: once the work lands, the doc is deleted, archived, or
-merged into one of the permanent docs above. The directory is currently
-empty.
+- Repo-root **[ROADMAP.md](../ROADMAP.md)** — parked-feature list with
+  explicit triggers (Onix is in maintenance mode).
+- **[CI.md](./CI.md)** — how the hot-path benchmark gate works and how to
+  reproduce it locally.
