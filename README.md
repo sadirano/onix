@@ -156,8 +156,6 @@ This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in act
 
 **Note: macOS is NOT supported in this repository.** If you require macOS support, please feel free to create your own fork.
 
-An optional daemon mode for sub-millisecond resolution is tracked on the roadmap but not in this build. Existing plugins like `onix-search`, `onix-find`, `onix-timer`, and `onix-tts` work as-is — they read the same `ONIX_TARGET`/`ONIX_ALIAS`/`ONIX_MODULE_CONFIG` env vars the v1 onix exposed.
-
 ## Architecture
 
 Onix is designed for extreme performance on the hot path (`resolve`) while maintaining a clean, modular structure for management commands.
