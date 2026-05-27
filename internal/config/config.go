@@ -116,8 +116,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-
-
 func ValidActionName(s string) bool {
 	if s == "" {
 		return false

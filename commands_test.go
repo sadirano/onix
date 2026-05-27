@@ -229,7 +229,6 @@ func TestRunCmd(t *testing.T) {
 	})
 }
 
-
 func TestEditCmd_PropagatesEditorError(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()
@@ -263,7 +262,6 @@ func TestSyncCmd(t *testing.T) {
 		t.Errorf("expected re-source hint in output: %q", output)
 	}
 }
-
 
 // captureStdio runs fn with os.Stdout and os.Stderr redirected to pipes,
 // returning the captured output. We restore the originals before

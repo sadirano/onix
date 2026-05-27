@@ -45,8 +45,8 @@ func printJSON(w io.Writer, v any) error {
 // -----------------------------------------------------------------------------
 
 type AddCmd struct {
-	Alias   string `arg:"" help:"Alias name."`
-	Path    string `arg:"" optional:"" help:"Directory path (default: current working directory)."`
+	Alias string `arg:"" help:"Alias name."`
+	Path  string `arg:"" optional:"" help:"Directory path (default: current working directory)."`
 }
 
 func (c *AddCmd) Run(ctx context.Context, e *env) error {
@@ -426,7 +426,6 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 // exec — run a custom action declared in config.toml.
 //
 // Same argv shape as run: `onix <alias> -X <action> [-- extras...]`.
-
 
 // -----------------------------------------------------------------------------
 // sync — regenerate shell snippets and Windows wrappers.

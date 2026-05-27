@@ -75,8 +75,8 @@ var systemActionFlags = map[string]string{
 	"-I":           "init",
 	"--sync":       "sync",
 	"-S":           "sync",
-	"--version": "version",
-	"-v":        "version",
+	"--version":    "version",
+	"-v":           "version",
 }
 
 // printUsage writes the alias-flag grammar reference to stdout.

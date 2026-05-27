@@ -186,7 +186,6 @@ func TestRun_AliasActions(t *testing.T) {
 		}
 	})
 
-
 	t.Run("explore dispatch", func(t *testing.T) {
 		// On Windows --explore launches explorer.exe via Start, returns quickly.
 		// On Unix it tries xdg-open which may or may not be available.
