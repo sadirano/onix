@@ -68,7 +68,7 @@ jobs:
           sha256sum "onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" || true
 
       - name: Release
-        uses: softprops/action-gh-release@b4309336664669647698a813f5ef51888af4ad44  # v3.0.0
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             onix-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip
