@@ -266,12 +266,6 @@ func TestRun_AliasActions(t *testing.T) {
 		_, _, _ = runOnix("onix", "acme", "--rm", "definitely-not-there.txt", "--force")
 	})
 
-	t.Run("show dispatch", func(t *testing.T) {
-		// On Windows --show shells out to Get-ChildItem; we accept either
-		// outcome since we only need to land in the dispatch arm.
-		_, _, _ = runOnix("onix", "acme", "-s")
-	})
-
 	t.Run("grep dispatch hits LookPath check", func(t *testing.T) {
 		// rg/fzf may or may not be on PATH. Either way the dispatch arm is
 		// exercised, and the failure case (rg not found) is what we typically

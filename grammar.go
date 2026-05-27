@@ -59,8 +59,6 @@ var aliasActionFlags = map[string]string{
 	"--rm":      "remove",
 	"--edit":    "edit",
 	"-e":        "edit",
-	"--show":    "show",
-	"-s":        "show",
 	"--explore": "explore",
 	"-x":        "explore",
 	"--yank":    "yank",
@@ -88,8 +86,6 @@ var systemActionFlags = map[string]string{
 	"--rm":         "remove",
 	"--edit":       "edit",
 	"-e":           "edit",
-	"--show":       "show",
-	"-s":           "show",
 	"--contexts":   "contexts",
 	"-c":           "contexts",
 	"--init":       "init",
@@ -122,7 +118,6 @@ ALIAS ACTIONS:
   --resolve              print path (default for bare alias)
   --remove, -rm          remove the alias (or, with files, delete them)
   --edit, -e [files]     open dir or files in $EDITOR
-  --show, -s [files]     display dir/file contents (Get-Content / cat)
   --explore, -x          open in OS file manager
   --yank, -y             print path and copy to clipboard
   --grep, -g <query>     ripgrep + fzf in alias dir
@@ -135,7 +130,6 @@ SYSTEM VERBS:
   --list, -ls, -l        list aliases
   --list-names           one alias name per line (for tab completion)
   --edit, -e [files]     open ~/.onix or files within
-  --show, -s [files]     display ~/.onix or files within
   --remove, --rm [files] delete files in ~/.onix (use --force on load-bearing)
   --contexts, -c         list segment contexts
   --init, -I             create ~/.onix and install shell integration
@@ -203,8 +197,6 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string, std
 	case "edit":
 		// System-wide --edit: open ~/.onix (or specific files within).
 		return (&EditCmd{Files: rest}).Run(ctx, e)
-	case "show":
-		return (&ShowCmd{Args: rest}).Run(ctx, e)
 	case "remove":
 		files, force, recursive, err := parseRemoveArgs(rest)
 		if err != nil {
@@ -278,8 +270,6 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 		return (&RemoveCmd{Alias: alias, Files: files, Force: force, Recursive: recursive}).Run(ctx, e)
 	case "edit":
 		return (&EditCmd{Alias: alias, Files: actionArgs}).Run(ctx, e)
-	case "show":
-		return (&ShowCmd{Alias: alias, Args: actionArgs}).Run(ctx, e)
 	case "explore":
 		return (&ExploreCmd{Alias: alias}).Run(ctx, e)
 	case "yank":
