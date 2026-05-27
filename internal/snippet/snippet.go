@@ -342,20 +342,43 @@ func writeExploreWrapper(binDir, runName, name string) {
 //
 //	<onixExe> <alias> <flag> [extras...] [args...]
 //
-// where `extras` is whatever fixed positionals the flag needs (e.g. an
-// action name for --exec). The shim caps
-// passthrough at 8 trailing args (%2..%9), which fits every real-world
-// use of the wrappers — multi-arg invocations should call onix directly.
+// where `extras` is whatever fixed positionals the flag needs. The
+// passthrough walks all remaining args via shift/loop, re-quoting each
+// one, so there's no fixed cap and args containing spaces survive.
+//
+// Each arg is captured into _onix_arg via `set "var=%~1"` first, then
+// appended to the accumulator using only delayed expansion. Doing the
+// %~1 substitution outside outer quotes (as a one-step `set
+// "args=!args! "%~1""`) lets cmd see the substituted special chars
+// before redirection scanning — a value like `flag>=` would then be
+// parsed as a redirection. The two-step form keeps the literal `>` out
+// of the redirection-scanning pass entirely.
 func writeAliasFlagWrapper(binDir, exe, name, flag string, extras ...string) {
 	path := filepath.Join(binDir, name+".cmd")
 	extraStr := ""
 	if len(extras) > 0 {
 		extraStr = " " + strings.Join(extras, " ")
 	}
-	content := fmt.Sprintf(
-		"@echo off\r\n\"%s\" %%1 %s%s %%2 %%3 %%4 %%5 %%6 %%7 %%8 %%9\r\n",
-		exe, flag, extraStr,
-	)
+	content := fmt.Sprintf(`@echo off
+setlocal enabledelayedexpansion
+set "_onix_alias=%%~1"
+shift
+set "_onix_args="
+:_onix_loop
+if "%%~1"=="" goto _onix_run
+set "_onix_arg=%%~1"
+if defined _onix_args (
+  set "_onix_args=!_onix_args! "!_onix_arg!""
+) else (
+  set _onix_args="!_onix_arg!"
+)
+shift
+goto _onix_loop
+:_onix_run
+"%s" "!_onix_alias!" %s%s !_onix_args!
+endlocal
+`, exe, flag, extraStr)
+	content = strings.ReplaceAll(content, "\n", "\r\n")
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
