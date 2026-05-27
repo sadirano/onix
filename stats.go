@@ -19,11 +19,16 @@ import (
 
 // StatsCmd reports local navigation patterns from usage.log + aliases.toml.
 // All data is read from the user's onix home; nothing leaves the machine.
+//
+// --full and --top are orthogonal: --full controls which sections render
+// (top + cold + by-hour histogram, vs. just one of them), --top controls
+// how many entries appear in the top list. Passing --top 5 --full shows
+// 5 top entries plus cold + histogram.
 type StatsCmd struct {
 	Top   int    `help:"Number of top aliases to show." default:"10"`
 	Since string `help:"Only count activity within this duration (e.g. 7d, 24h)."`
 	Cold  bool   `help:"Show aliases not used in the window instead of top-used."`
-	Full  bool   `help:"Show the maximal dashboard (top + cold + by-hour histogram)."`
+	Full  bool   `help:"Show the maximal dashboard (top + cold + by-hour histogram). Use --top to control how many top entries."`
 }
 
 type aliasStat struct {
@@ -208,9 +213,6 @@ func buildReport(entries []usageEntry, now time.Time, since time.Duration, top i
 			return ranked[i].Name < ranked[j].Name
 		})
 		n := top
-		if full && n < len(ranked) {
-			n = 10
-		}
 		if n > len(ranked) {
 			n = len(ranked)
 		}
