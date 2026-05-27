@@ -62,6 +62,57 @@ Step "yank" {
     & $exe demo -y | Out-Null
 }
 
+# Remove paths: three flavours, each tested against a side-channel alias so
+# the rest of the smoke keeps `demo` intact.
+#   1. `<alias> --remove` (no file args) deletes the alias entry.
+#   2. `--remove <load-bearing>` without --force must refuse.
+#   3. `--remove <file> --force` deletes a non-load-bearing file from ~/.onix.
+Step "remove-alias" {
+    & $exe removeme $env:TEMP
+    if ($LASTEXITCODE -ne 0) { throw "could not add 'removeme' for remove test" }
+
+    & $exe removeme --remove
+    if ($LASTEXITCODE -ne 0) { throw "remove of alias 'removeme' failed" }
+
+    $names = & $exe --list-names
+    if ($names -contains 'removeme') {
+        throw "removeme still listed after --remove (got: $names)"
+    }
+}
+
+Step "remove-load-bearing-guard" {
+    # `aliases.toml` is in the load-bearing set; deleting it without --force
+    # must error rather than silently destroying the alias DB. We capture
+    # both stdout and stderr and assert the guard message is present.
+    $out = & $exe --remove aliases.toml 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        throw "--remove aliases.toml unexpectedly succeeded: $out"
+    }
+    $script:LASTEXITCODE = 0
+    $text = $out -join "`n"
+    if ($text -notmatch 'load-bearing') {
+        throw "expected 'load-bearing' refusal message; got: $text"
+    }
+    # aliases.toml must still exist after the rejected delete.
+    if (-not (Test-Path (Join-Path $env:ONIX_HOME 'aliases.toml'))) {
+        throw "aliases.toml was deleted despite the guard"
+    }
+}
+
+Step "remove-file-with-force" {
+    # Create a stray file inside ONIX_HOME and verify --force deletes it
+    # without prompting. Non-load-bearing name so the guard does not apply.
+    $stray = Join-Path $env:ONIX_HOME 'stray.txt'
+    Set-Content -Path $stray -Value 'temp'
+    if (-not (Test-Path $stray)) { throw "could not create stray.txt for test" }
+
+    & $exe --remove stray.txt --force
+    if ($LASTEXITCODE -ne 0) { throw "--remove --force stray.txt failed" }
+    if (Test-Path $stray) {
+        throw "stray.txt still present after --remove --force"
+    }
+}
+
 # M2 — custom actions. Write a tiny config.toml declaring an action that
 # runs `cmd.exe /c echo hi from <alias>`, regenerate the shell snippet, run
 # it via `onix <alias> -X <action>`, and verify the output contains the
@@ -116,20 +167,26 @@ Step "list-names" {
 # composed two-segment input, and the --no-prompt error path for an
 # undefined segment.
 Step "segments" {
+    # Entries in the global segments.toml must carry `scope = "global"` to
+    # be visible to all aliases — per-alias segments live in
+    # ~/.onix/segments.d/<alias>.toml or <alias>/.onix/segments.toml.
     $segs = Join-Path $env:ONIX_HOME 'segments.toml'
     @'
 version = 3
 
 [[contexts]]
 segment = "docs"
+scope = "global"
 source-template = "/documentation"
 
 [[contexts]]
 segment = "src"
+scope = "global"
 source-template = "/source"
 
 [[contexts]]
 segment = "tasks"
+scope = "global"
 source-template = "/tickets/${tasks}"
 '@ | Set-Content -Path $segs
 
