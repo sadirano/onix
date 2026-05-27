@@ -113,28 +113,9 @@ Templates own their separators — `"/foo"` appends as a directory, `"_${task}.m
 
 Lookups are case-insensitive. See [docs/SEGMENTS.md](docs/SEGMENTS.md) for the full grammar and traversal-guard rules.
 
-## Plugins
-
-External plugins extend onix beyond what custom actions can do. A plugin is its own Go binary, cloned from a GitHub repo, pinned to a commit, and dispatched against an alias the same way built-in actions are.
-
-```powershell
-onix plugin add sadirano/onix-tts --sha abc123def456   # install at a pinned SHA
-onix plugin add C:\path\to\local-checkout --unpinned   # local source for development
-onix plugin list                                       # show installed plugins + SHAs
-onix plugin update tts                                 # refetch and rebuild
-onix plugin update tts --sha <newhash>                 # bump the pin (re-confirms)
-onix plugin remove tts                                 # uninstall
-```
-
-Each install prompts before building — you see the repo URL, resolved SHA, commit message, and the wrapper names that will land in your shell. `--yes` skips the prompt for automation. `--unpinned` tracks the default branch (rebuilds may install new upstream code without re-prompting; use with caution).
-
-Plugin authors put an optional `onix.toml` in their repo declaring entry points; each entry becomes its own shell wrapper, with `ONIX_ENTRY=<name>` set when the plugin runs. The plugin receives the resolved path via `ONIX_TARGET`, the alias name via `ONIX_ALIAS`, the onix home via `ONIX_HOME`, and any `config = {…}` block from `plugins.toml` as JSON in `ONIX_MODULE_CONFIG`.
-
-Plugin wrappers participate in tab completion just like built-ins and custom actions.
-
 ## Tab completion
 
-Every command that takes an alias (`o`, `e`, `s`, `y`, `r`, `sg`, `ff`, plus your custom actions and plugins) supports tab-completion of alias names. The completer calls `onix --list-names` under the hood — a dedicated hot path that bypasses kong and go-toml for sub-millisecond Tab response.
+Every command that takes an alias (`o`, `e`, `s`, `y`, `r`, `sg`, `ff`, plus your custom actions) supports tab-completion of alias names. The completer calls `onix --list-names` under the hood — a dedicated hot path that bypasses TOML parsing for sub-millisecond Tab response.
 
 ## Commands
 
@@ -152,7 +133,7 @@ Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The include
 
 > **Prototype stage — no migration guarantees.** Onix has one real user (the author) and is in heavy active development. Config files, on-disk layouts, command grammar, and TOML schemas can and do change shape without migration paths, compat shims, or deprecation windows. If you're using onix and a change breaks your `~/.onix`, you're expected to rewrite the affected file by hand. This note will be removed once a stability commitment is in place.
 
-This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions (including the `sg` / `ff` search shortcuts backed by ripgrep + fzf and Everything / fd + fzf respectively), custom actions from `config.toml`, SHA-pinned external plugins from `plugins.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
+This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions (including the `sg` / `ff` search shortcuts backed by ripgrep + fzf and Everything / fd + fzf respectively), custom actions from `config.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
 
 **Note: macOS is NOT supported in this repository.** If you require macOS support, please feel free to create your own fork.
 
@@ -167,14 +148,12 @@ graph TD
     
     Commands --> Store[internal/store]
     Commands --> Config[internal/config]
-    Commands --> Plugins[internal/plugins]
     Commands --> Snippet[internal/snippet]
     
     FastPath --> Store
     FastPath --> Segments[internal/segments]
     
     Snippet --> Config
-    Snippet --> Plugins
 ```
 
 ### Core Packages
@@ -182,7 +161,6 @@ graph TD
 - **`internal/store`**: Manages `aliases.toml`, the primary database of name-to-path mappings. Includes atomic write logic and name validation.
 - **`internal/segments`**: Parses `@`-segment grammar, expands `${VAR}` templates, evaluates `source-template` / `source-exec` / `source-file` sources, and enforces the traversal guard on the resulting fragments before they join the alias path.
 - **`internal/config`**: Manages `config.toml`, where users define custom action wrappers with template substitution.
-- **`internal/plugins`**: Handles external plugin installation, verification (SHA pinning), and execution environment.
 - **`internal/snippet`**: Generates the PowerShell and Bash/Zsh glue code that integrates Onix into your shell.
 
 ## License

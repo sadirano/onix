@@ -97,19 +97,12 @@ test api             # runs: go test ./... in the api directory
 pr api 42            # runs: gh pr view 42 --web in the api directory
 ```
 
-## 6) Onboarding / Plugin Lifecycle
+## 6) Onboarding
 
 ```powershell
 onix --init                                  # set up ~/.onix and shell integration
 onix --doctor                                # health check
 onix --version                               # build info
-
-# Plugin management
-onix plugin add user/repo --sha <hash>       # pin to commit
-onix plugin add user/repo --unpinned         # track default branch
-onix plugin list
-onix plugin update <name>
-onix plugin remove <name>
 ```
 
 ## 7) Snippet Utilities

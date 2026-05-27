@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
-	"github.com/sadirano/onix/internal/plugins"
 )
 
 // PwshPath returns home/shell/onix.ps1.
@@ -187,14 +186,14 @@ fi
 `
 
 // WriteShellSnippet regenerates the host-platform shell snippet.
-func WriteShellSnippet(home string, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) error {
+func WriteShellSnippet(home string, shortcuts map[string]string, actions []config.Action) error {
 	if runtime.GOOS == "windows" {
-		return WritePwshShellSnippet(home, shortcuts, actions, plgs)
+		return WritePwshShellSnippet(home, shortcuts, actions)
 	}
-	return WriteBashShellSnippet(home, shortcuts, actions, plgs)
+	return WriteBashShellSnippet(home, shortcuts, actions)
 }
 
-func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) error {
+func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []config.Action) error {
 	path := PwshPath(home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -231,9 +230,8 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	b.WriteString("\n")
 
 	// On Windows, we also drop .cmd wrappers into ~/.onix/bin for each
-	// shortcut, custom action, and plugin entry. This makes them
-	// available via Windows Run (Win+R) or from cmd.exe without needing
-	// the PowerShell snippet.
+	// shortcut and custom action. This makes them available via Windows
+	// Run (Win+R) or from cmd.exe without needing the PowerShell snippet.
 	binDir := filepath.Join(home, "bin")
 	_ = os.MkdirAll(binDir, 0o755)
 
@@ -251,17 +249,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 		writeAliasFlagWrapper(binDir, exe, a.Name, "--exec", a.Name)
 	}
 
-	for _, p := range plgs {
-		writePluginFunction(&b, p.Name, p.Name, "")
-		writeAliasFlagWrapper(binDir, exe, p.Name, "--plugin", p.Name)
-
-		for _, e := range p.Entries {
-			writePluginFunction(&b, e.EffectiveCmd(), p.Name, e.Name)
-			writeAliasFlagWrapper(binDir, exe, e.EffectiveCmd(), "--plugin", p.Name+":"+e.Name)
-		}
-	}
-
-	writeCompleterRegistration(&b, s, actions, plgs)
+	writeCompleterRegistration(&b, s, actions)
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
@@ -373,7 +361,7 @@ func writeExploreWrapper(binDir, runName, name string) {
 //	<onixExe> <alias> <flag> [extras...] [args...]
 //
 // where `extras` is whatever fixed positionals the flag needs (e.g. an
-// action name for --exec, or a plugin spec for --plugin). The shim caps
+// action name for --exec). The shim caps
 // passthrough at 8 trailing args (%2..%9), which fits every real-world
 // use of the wrappers — multi-arg invocations should call onix directly.
 func writeAliasFlagWrapper(binDir, exe, name, flag string, extras ...string) {
@@ -389,7 +377,7 @@ func writeAliasFlagWrapper(binDir, exe, name, flag string, extras ...string) {
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
-func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) error {
+func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []config.Action) error {
 	path := BashPath(home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -427,29 +415,18 @@ func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []c
 		writeActionFunctionBash(&b, a)
 	}
 
-	for _, p := range plgs {
-		writePluginFunctionBash(&b, p.Name, p.Name, "")
-		for _, e := range p.Entries {
-			writePluginFunctionBash(&b, e.EffectiveCmd(), p.Name, e.Name)
-		}
-	}
-
-	writeCompleterRegistrationBash(&b, s, actions, plgs)
+	writeCompleterRegistrationBash(&b, s, actions)
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
-// RegenerateShellSnippet loads the current config + plugin state and writes a fresh snippet.
+// RegenerateShellSnippet loads the current config and writes a fresh snippet.
 func RegenerateShellSnippet(home string) error {
 	cfg, err := config.LoadConfig(home)
 	if err != nil {
 		return err
 	}
-	pf, err := plugins.LoadPlugins(home)
-	if err != nil {
-		return err
-	}
-	return WriteShellSnippet(home, cfg.Shortcuts, cfg.Actions, pf.Plugins)
+	return WriteShellSnippet(home, cfg.Shortcuts, cfg.Actions)
 }
 
 var OnixExeOverride string
@@ -484,38 +461,13 @@ func writeActionFunction(b *strings.Builder, a config.Action) {
 `, a.Name, a.Name)
 }
 
-func writePluginFunction(b *strings.Builder, wrapperName, pluginName, entryName string) {
-	// Encode entry in the --plugin spec as "<name>:<entry>" so generated
-	// wrappers stay one-liners. Plain "<name>" means no entry.
-	spec := pluginName
-	if entryName != "" {
-		spec = pluginName + ":" + entryName
-	}
-	fmt.Fprintf(b, `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --plugin %s @Rest
-}
-
-`, wrapperName, spec)
-}
-
-func writeCompleterRegistration(b *strings.Builder, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) {
-	names := make([]string, 0, 7+len(actions)+len(plgs))
+func writeCompleterRegistration(b *strings.Builder, shortcuts map[string]string, actions []config.Action) {
+	names := make([]string, 0, 7+len(actions))
 	for _, v := range shortcuts {
 		names = append(names, v)
 	}
 	for _, a := range actions {
 		names = append(names, a.Name)
-	}
-	for _, p := range plgs {
-		names = append(names, p.Name)
-		for _, e := range p.Entries {
-			names = append(names, e.EffectiveCmd())
-		}
 	}
 	slices.Sort(names)
 	fmt.Fprintf(b, "Register-ArgumentCompleter -CommandName %s -ParameterName Alias -ScriptBlock $onixAliasCompleter\n",
@@ -532,33 +484,13 @@ func writeActionFunctionBash(b *strings.Builder, a config.Action) {
 `, a.Name, a.Name)
 }
 
-func writePluginFunctionBash(b *strings.Builder, wrapperName, pluginName, entryName string) {
-	spec := pluginName
-	if entryName != "" {
-		spec = pluginName + ":" + entryName
-	}
-	fmt.Fprintf(b, `%s() {
-    local alias=$1
-    shift
-    "$ONIX_EXE" "$alias" --plugin %s "$@"
-}
-
-`, wrapperName, spec)
-}
-
-func writeCompleterRegistrationBash(b *strings.Builder, shortcuts map[string]string, actions []config.Action, plgs []plugins.Plugin) {
-	names := make([]string, 0, 7+len(actions)+len(plgs))
+func writeCompleterRegistrationBash(b *strings.Builder, shortcuts map[string]string, actions []config.Action) {
+	names := make([]string, 0, 7+len(actions))
 	for _, v := range shortcuts {
 		names = append(names, v)
 	}
 	for _, a := range actions {
 		names = append(names, a.Name)
-	}
-	for _, p := range plgs {
-		names = append(names, p.Name)
-		for _, e := range p.Entries {
-			names = append(names, e.EffectiveCmd())
-		}
 	}
 	slices.Sort(names)
 	fmt.Fprintf(b, `if [ -n "$BASH_VERSION" ]; then

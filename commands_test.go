@@ -337,39 +337,6 @@ args = ["/c", "echo", "hi"]
 	}
 }
 
-// TestSyncCmd_WithPlugins confirms the plugin-wrappers-listing branch fires
-// when plugins.toml is populated. Entries are flattened into the same list.
-func TestSyncCmd_WithPlugins(t *testing.T) {
-	home := t.TempDir()
-	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
-		t.Fatalf("init: %v", err)
-	}
-	pf := `[[plugins]]
-name = "probe"
-repo = "user/onix-probe"
-sha = "abc"
-
-  [[plugins.entries]]
-  name = "ping"
-`
-	if err := os.WriteFile(filepath.Join(home, "plugins.toml"), []byte(pf), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, stderr, err := captureStdio(func() error {
-		return (&SyncCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-	})
-	if err != nil {
-		t.Fatalf("SyncCmd.Run: %v", err)
-	}
-	if !strings.Contains(stderr, "plugin wrappers") {
-		t.Errorf("expected 'plugin wrappers' header in stderr: %q", stderr)
-	}
-	if !strings.Contains(stderr, "probe") || !strings.Contains(stderr, "ping") {
-		t.Errorf("expected probe and ping in plugin wrappers: %q", stderr)
-	}
-}
-
 // captureStdio runs fn with os.Stdout and os.Stderr redirected to pipes,
 // returning the captured output. We restore the originals before
 // returning so subsequent test logging still works.

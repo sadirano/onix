@@ -6,9 +6,7 @@ package main
 //
 // The alias is the subject (first positional); the verb is a flag. Commands
 // with no alias operate on the alias system as a whole; with an alias, the
-// flag acts on that alias. The `onix plugin ...` subcommand is the only
-// invocation that doesn't fit this shape — main.go routes it to kong
-// before calling the dispatcher.
+// flag acts on that alias.
 
 import (
 	"context"
@@ -60,8 +58,6 @@ var aliasActionFlags = map[string]string{
 	"-r":        "run",
 	"--exec":    "exec",
 	"-X":        "exec",
-	"--plugin":  "plugin",
-	"-p":        "plugin",
 }
 
 // systemActionFlags lists flags that operate on the alias system as a whole
@@ -87,9 +83,7 @@ var systemActionFlags = map[string]string{
 	"-v":           "version",
 }
 
-// printUsage writes the alias-flag grammar reference to stdout. It's
-// hand-rolled because kong's auto-generated help only covers the `plugin`
-// subtree — the alias-flag dispatcher owns everything else.
+// printUsage writes the alias-flag grammar reference to stdout.
 func printUsage(w io.Writer) {
 	const usage = `onix — fast directory alias resolver
 
@@ -98,7 +92,6 @@ USAGE:
   onix <alias> <path>                register or update an alias
   onix <alias> --<action> [args...]  run an action against an alias
   onix --<verb> [args...]            system-wide command
-  onix plugin <verb> ...             manage external plugins
 
 ALIAS ACTIONS:
   --resolve              print path (default for bare alias)
@@ -110,7 +103,6 @@ ALIAS ACTIONS:
   --find, -f <query>     fd / Everything + fzf in alias dir
   --run, -r <cmd...>     exec command in alias dir
   --exec, -X <name>      run a config.toml action
-  --plugin, -p <name>    run a plugin (use name:entry for entry-aware plugins)
 
 SYSTEM VERBS:
   --list, -ls, -l        list aliases
@@ -139,8 +131,7 @@ GLOBAL:
 }
 
 // dispatchNewGrammar parses argv under the alias-flag grammar and runs
-// the matching handler. Bare `onix` prints usage; --help is handled here
-// so kong (which only owns `plugin`) doesn't get involved.
+// the matching handler. Bare `onix` prints usage; --help is handled here.
 func dispatchNewGrammar(ctx context.Context, e *env, args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		printUsage(stdout)
@@ -266,20 +257,6 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 		}
 		// ExecCmd's argv shape is [actionName, alias, extras...].
 		return (&ExecCmd{Args: append([]string{actionArgs[0], alias}, actionArgs[1:]...)}).Run(ctx, e)
-	case "plugin":
-		if len(actionArgs) == 0 {
-			return fmt.Errorf("--plugin requires a plugin name")
-		}
-		// PluginExecCmd's argv shape is [pluginName, entryName, alias, extras...].
-		// We accept "<plugin>:<entry>" so generated wrappers can select an
-		// entry without a separate flag. Plain "<plugin>" means no entry.
-		spec := actionArgs[0]
-		name, entry := spec, ""
-		if i := strings.Index(spec, ":"); i >= 0 {
-			name = spec[:i]
-			entry = spec[i+1:]
-		}
-		return (&PluginExecCmd{Args: append([]string{name, entry, alias}, actionArgs[1:]...)}).Run(ctx, e)
 	}
 	return fmt.Errorf("unknown action %q", action)
 }

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sadirano/onix/internal/plugins"
 	"github.com/sadirano/onix/internal/snippet"
 )
 
@@ -48,7 +47,7 @@ func missingPinBody() string {
 func TestExtractSnippetPin(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := snippet.WriteShellSnippet(dir, nil, nil, nil); err != nil {
+		if err := snippet.WriteShellSnippet(dir, nil, nil); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 		pin := extractSnippetPin(dir)
@@ -96,7 +95,7 @@ func TestExtractSnippetPin(t *testing.T) {
 func TestCheckSnippetPin(t *testing.T) {
 	t.Run("ok when snippet is fresh", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := snippet.WriteShellSnippet(dir, nil, nil, nil); err != nil {
+		if err := snippet.WriteShellSnippet(dir, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 		r := checkSnippetPin(dir)
@@ -188,23 +187,6 @@ func TestCheckBashLikeProfile(t *testing.T) {
 			t.Errorf("status = %q (detail=%s), want ok", r.Status, r.Detail)
 		}
 	})
-}
-
-func TestShortSHA(t *testing.T) {
-	tests := []struct {
-		in, want string
-	}{
-		{"", ""},
-		{"abc", "abc"},
-		{"123456789012", "123456789012"},  // exactly 12, untouched
-		{"1234567890123", "123456789012"}, // 13 → 12
-		{"abcdef0123456789deadbeef", "abcdef012345"},
-	}
-	for _, tc := range tests {
-		if got := shortSHA(tc.in); got != tc.want {
-			t.Errorf("shortSHA(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
 }
 
 func TestExtractBashSnippetPin(t *testing.T) {
@@ -347,37 +329,6 @@ func TestDoctorCmd(t *testing.T) {
 	}
 }
 
-func TestCheckPluginsFile(t *testing.T) {
-	home := t.TempDir()
-
-	t.Run("missing", func(t *testing.T) {
-		r := checkPluginsFile(home)
-		if r.Status != "ok" || !strings.Contains(r.Detail, "absent") {
-			t.Errorf("got %+v, want ok/absent", r)
-		}
-	})
-
-	t.Run("empty", func(t *testing.T) {
-		if err := os.WriteFile(filepath.Join(home, "plugins.toml"), []byte("plugins = []\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		r := checkPluginsFile(home)
-		if r.Status != "ok" || !strings.Contains(r.Detail, "no plugins") {
-			t.Errorf("got %+v, want ok/no plugins", r)
-		}
-	})
-
-	t.Run("malformed", func(t *testing.T) {
-		if err := os.WriteFile(filepath.Join(home, "plugins.toml"), []byte("this is not toml\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		r := checkPluginsFile(home)
-		if r.Status != "err" {
-			t.Errorf("got status %q, want err", r.Status)
-		}
-	})
-}
-
 func TestCheckSegmentsFile(t *testing.T) {
 	home := t.TempDir()
 
@@ -399,53 +350,3 @@ func TestCheckSegmentsFile(t *testing.T) {
 	})
 }
 
-func TestCheckInstalledPlugins(t *testing.T) {
-	home := t.TempDir()
-
-	t.Run("no plugins", func(t *testing.T) {
-		results := checkInstalledPlugins(home)
-		if len(results) != 0 {
-			t.Errorf("got %d results, want 0", len(results))
-		}
-	})
-
-	t.Run("missing binary", func(t *testing.T) {
-		pf := &plugins.PluginsFile{
-			Plugins: []plugins.Plugin{
-				{Name: "tts", Repo: "user/repo", SHA: "abc"},
-			},
-		}
-		if err := plugins.SavePlugins(home, pf); err != nil {
-			t.Fatal(err)
-		}
-		results := checkInstalledPlugins(home)
-		if len(results) != 1 || results[0].Status != "err" {
-			t.Errorf("got %+v, want 1 err result", results)
-		}
-	})
-
-	t.Run("unpinned warning", func(t *testing.T) {
-		repo := "user/repo"
-		pf := &plugins.PluginsFile{
-			Plugins: []plugins.Plugin{
-				{Name: "tts", Repo: repo, Unpinned: true},
-			},
-		}
-		if err := plugins.SavePlugins(home, pf); err != nil {
-			t.Fatal(err)
-		}
-		// Stub the binary
-		binPath := plugins.BinaryPath(home, repo)
-		if err := os.MkdirAll(filepath.Dir(binPath), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(binPath, []byte("stub"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-
-		results := checkInstalledPlugins(home)
-		if len(results) != 1 || results[0].Status != "warn" {
-			t.Errorf("got %+v, want 1 warn result", results)
-		}
-	})
-}

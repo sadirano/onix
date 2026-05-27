@@ -389,83 +389,6 @@ case-insensitive.
 
 ---
 
-## Extending with Plugins
-
-onix separates concerns: the core binary handles alias resolution and dispatch, and
-capabilities are added as independent Go binaries installed from GitHub.
-
-For a detailed guide and template for creating your own plugins, see
-[MODULE_PATTERN.md](./MODULE_PATTERN.md).
-
-**Install a plugin:**
-```
-onix plugin add sadirano/onix-img --sha <commit>      # pin to a commit
-onix plugin add sadirano/onix-img --unpinned          # track default branch
-```
-
-That clones the repo, builds it, and registers a shell function (and a `.cmd`
-wrapper in `~/.onix/bin/`) for every entry point the plugin declares. Re-source
-your profile (or open a new shell) to use them.
-
-**What every plugin receives automatically** — no argument parsing needed in the
-plugin itself:
-```
-ONIX_TARGET         = C:\Users\dev\projects\client-work\acme\backend\api\v2
-ONIX_ALIAS          = acme
-ONIX_HOME           = C:\Users\dev\.onix
-ONIX_EDITOR         = nvim
-ONIX_MODULE         = img
-ONIX_MODULE_CONFIG  = {"default_subdir":"assets/screenshots/{today}"}
-ONIX_ENTRY          = <entry name, if the plugin declares multiple entry points>
-```
-
-A plugin is just a Go binary that reads `ONIX_TARGET` and acts on it. The directory
-resolution is already done before your plugin runs.
-
-**Plugin registry** lives in `~/.onix/plugins.toml`:
-```toml
-[[plugins]]
-name = "img"
-repo = "sadirano/onix-img"
-sha  = "abc123def456"             # required unless `unpinned = true`
-
-  [plugins.config]
-  default_subdir = "assets/screenshots/{today}"
-```
-
-### Example: `img` — clipboard image saver
-
-Save whatever is on your clipboard directly into a project, named and organised
-automatically.
-
-```
-img acme ui-auth-flow
-```
-
-What happens:
-1. onix resolves `acme` → `C:\Users\dev\projects\client-work\acme\backend\api\v2`
-2. The `img` plugin reads `ONIX_MODULE_CONFIG` for a `default_subdir` template.
-3. Variables in the path are expanded at runtime:
-   - `{today}` → `2026-04-06`
-   - `{time}`  → `14-30-25`
-4. The clipboard image is written to the resolved path as `ui-auth-flow.png`.
-
-**More examples:**
-```
-img acme dark-mode-toggle          # → acme\assets\screenshots\2026-04-06\dark-mode-toggle.png
-img mysite hero-banner             # → mysite\docs\images\hero-banner.png
-```
-
-**Plugin lifecycle:**
-```
-onix plugin list           # see installed plugins, their pinned SHA, and binary status
-onix plugin update         # refetch + rebuild every plugin
-onix plugin update img     # update one plugin
-onix plugin remove img     # uninstall and remove from plugins.toml
-```
-
----
-
 ## Environment Variables
 
 | Variable        | Effect                                                         |
@@ -485,7 +408,6 @@ r acme go test ./...            # run tests without leaving your current shell
 e acme README.md                # open a known file from anywhere
 ff acme migration               # fuzzy-find a filename, open it
 y acme                          # resolved path → print + clipboard
-img acme screenshot-name        # paste clipboard image into project
 
 # Sub-alias navigation (segments defined as [[contexts]] in segments.toml)
 s docs@sms                      # Explorer at <sms>/documentation

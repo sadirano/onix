@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
-	"os"
+	"context"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -80,35 +82,6 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("plugin ls empty", func(t *testing.T) {
-		// Create an empty config.toml so plugin ls doesn't fail on "no home"
-		_ = os.MkdirAll(tempHome, 0o755)
-		_ = os.WriteFile(filepath.Join(tempHome, "config.toml"), []byte("# onix config\n"), 0o644)
-
-		code, out, errOut := runOnix("onix", "plugin", "ls")
-		if code != 0 {
-			t.Errorf("expected exit 0, got %d", code)
-		}
-		output := out + errOut
-		if !strings.Contains(output, "no plugins installed") {
-			t.Errorf("output should say 'no plugins installed', got %q", output)
-		}
-	})
-
-	t.Run("plugin ls override home", func(t *testing.T) {
-		otherHome := t.TempDir()
-		_ = os.WriteFile(filepath.Join(otherHome, "config.toml"), []byte("# onix config\n"), 0o644)
-
-		code, out, errOut := runOnix("onix", "plugin", "ls", "--config-dir", otherHome)
-		if code != 0 {
-			t.Errorf("expected exit 0, got %d", code)
-		}
-		output := out + errOut
-		if !strings.Contains(output, "no plugins installed") {
-			t.Errorf("output should say 'no plugins installed', got %q", output)
-		}
-	})
-
 	// System-action verbs exercised through the dispatcher (covers
 	// dispatchSystem's switch arms).
 	t.Run("list verb", func(t *testing.T) {
@@ -165,7 +138,25 @@ func TestRun_AliasActions(t *testing.T) {
 	lookPath = func(name string) (string, error) {
 		return "C:/fake/" + name, nil
 	}
-	installFakeExec(t)
+
+	// Stub execCommand / execCommandContext so external-tool invocations
+	// (rg, fzf, xdg-open, ...) exit immediately rather than spawning real
+	// subprocesses that would block the test or fail with rc=non-zero
+	// noise. We use `cmd /c exit 0` on Windows and `true` elsewhere.
+	prevCmd := execCommand
+	prevCtx := execCommandContext
+	t.Cleanup(func() {
+		execCommand = prevCmd
+		execCommandContext = prevCtx
+	})
+	noopCmd := func() *exec.Cmd {
+		if runtime.GOOS == "windows" {
+			return exec.Command("cmd", "/c", "exit 0")
+		}
+		return exec.Command("true")
+	}
+	execCommand = func(string, ...string) *exec.Cmd { return noopCmd() }
+	execCommandContext = func(context.Context, string, ...string) *exec.Cmd { return noopCmd() }
 
 	runOnix := func(args ...string) (int, string, string) {
 		var outBuf, errBuf bytes.Buffer
@@ -215,29 +206,12 @@ func TestRun_AliasActions(t *testing.T) {
 		}
 	})
 
-	t.Run("--plugin requires plugin name", func(t *testing.T) {
-		code, _, errOut := runOnix("onix", "acme", "-p")
-		if code != 1 {
-			t.Errorf("expected exit 1, got %d", code)
-		}
-		if !strings.Contains(errOut, "--plugin requires") {
-			t.Errorf("expected plugin usage error, got %q", errOut)
-		}
-	})
-
-	// Verbs that need an unknown plugin/action to fail fast — exercises the
+	// Verbs that need an unknown action to fail fast — exercises the
 	// dispatcher's switch arm without spawning external tools.
 	t.Run("exec to unknown action errors", func(t *testing.T) {
 		code, _, _ := runOnix("onix", "acme", "-X", "nope")
 		if code != 1 {
 			t.Errorf("expected exit 1 for unknown action, got %d", code)
-		}
-	})
-
-	t.Run("plugin to unknown plugin errors", func(t *testing.T) {
-		code, _, _ := runOnix("onix", "acme", "-p", "nope")
-		if code != 1 {
-			t.Errorf("expected exit 1 for unknown plugin, got %d", code)
 		}
 	})
 

@@ -8,14 +8,13 @@ import (
 	"testing"
 
 	"github.com/sadirano/onix/internal/config"
-	"github.com/sadirano/onix/internal/plugins"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")
 
 func TestWritePwshShellSnippet_NoActions(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, err := os.ReadFile(PwshPath(dir))
@@ -31,35 +30,16 @@ func TestWritePwshShellSnippet_WithActions(t *testing.T) {
 		{Name: "test", Exec: "go", Args: []string{"test", "./..."}},
 		{Name: "pr", Exec: "gh", Args: []string{"pr", "view", "{extras}"}},
 	}
-	if err := WritePwshShellSnippet(dir, nil, actions, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, actions); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, _ := os.ReadFile(PwshPath(dir))
 	assertGolden(t, scrub(string(data), dir), "pwsh-with-actions.ps1.golden")
 }
 
-func TestWritePwshShellSnippet_WithPlugins(t *testing.T) {
-	dir := t.TempDir()
-	plgs := []plugins.Plugin{
-		{Name: "tts", Repo: "sadirano/onix-tts", SHA: "abc"},
-		{
-			Name: "timer", Repo: "sadirano/onix-timer", SHA: "def",
-			Entries: []plugins.PluginEntry{
-				{Name: "start", Cmd: "t-start"},
-				{Name: "stop"},
-			},
-		},
-	}
-	if err := WritePwshShellSnippet(dir, nil, nil, plgs); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	data, _ := os.ReadFile(PwshPath(dir))
-	assertGolden(t, scrub(string(data), dir), "pwsh-with-plugins.ps1.golden")
-}
-
 func TestWriteBashShellSnippet_NoActions(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteBashShellSnippet(dir, nil, nil, nil); err != nil {
+	if err := WriteBashShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, err := os.ReadFile(BashPath(dir))
@@ -75,35 +55,16 @@ func TestWriteBashShellSnippet_WithActions(t *testing.T) {
 		{Name: "test", Exec: "go", Args: []string{"test", "./..."}},
 		{Name: "pr", Exec: "gh", Args: []string{"pr", "view", "{extras}"}},
 	}
-	if err := WriteBashShellSnippet(dir, nil, actions, nil); err != nil {
+	if err := WriteBashShellSnippet(dir, nil, actions); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, _ := os.ReadFile(BashPath(dir))
 	assertGolden(t, scrub(string(data), dir), "bash-with-actions.sh.golden")
 }
 
-func TestWriteBashShellSnippet_WithPlugins(t *testing.T) {
-	dir := t.TempDir()
-	plgs := []plugins.Plugin{
-		{Name: "tts", Repo: "sadirano/onix-tts", SHA: "abc"},
-		{
-			Name: "timer", Repo: "sadirano/onix-timer", SHA: "def",
-			Entries: []plugins.PluginEntry{
-				{Name: "start", Cmd: "t-start"},
-				{Name: "stop"},
-			},
-		},
-	}
-	if err := WriteBashShellSnippet(dir, nil, nil, plgs); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	data, _ := os.ReadFile(BashPath(dir))
-	assertGolden(t, scrub(string(data), dir), "bash-with-plugins.sh.golden")
-}
-
 func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteShellSnippet(dir, nil, nil, nil); err != nil {
+	if err := WriteShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	pwshExists := fileExists(PwshPath(dir))
@@ -115,7 +76,7 @@ func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 
 func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	path := filepath.Join(dir, "bin", "o.cmd")
@@ -149,7 +110,7 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 
 func TestWritePwshShellSnippet_FindPreviewWrapper(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	path := filepath.Join(dir, "bin", FindPreviewWrapperName)
@@ -164,10 +125,6 @@ func TestWritePwshShellSnippet_FindPreviewWrapper(t *testing.T) {
 	if !strings.Contains(content, "dir /b") || !strings.Contains(content, "bat ") {
 		t.Errorf("preview wrapper missing dir/bat branches:\n%s", content)
 	}
-	// Regression: fzf prefixes substituted {} chars with ^ on Windows,
-	// quotes protect them from cmd's normal stripping. We strip via
-	// delayed expansion because the plain %p:^=% pattern collapses
-	// (cmd treats ^= as escaped =).
 	if !strings.Contains(content, "setlocal enabledelayedexpansion") {
 		t.Errorf("preview wrapper missing delayed expansion:\n%s", content)
 	}

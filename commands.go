@@ -14,7 +14,6 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/sadirano/onix/internal/config"
-	"github.com/sadirano/onix/internal/plugins"
 	"github.com/sadirano/onix/internal/resolver"
 	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/snippet"
@@ -142,7 +141,6 @@ var loadBearingOnixFiles = map[string]bool{
 	"aliases.toml":  true,
 	"config.toml":   true,
 	"segments.toml": true,
-	"plugins.toml":  true,
 }
 
 func (c *RemoveCmd) Run(ctx context.Context, e *env) error {
@@ -521,14 +519,7 @@ func (c *ExecCmd) Run(ctx context.Context, e *env) error {
 type SyncCmd struct{}
 
 func (c *SyncCmd) Run(ctx context.Context, e *env) error {
-	// Read both config.toml and plugins.toml first so we can list what
-	// the regenerated snippet covers; RegenerateShellSnippet does the
-	// actual file write.
 	cfg, err := config.LoadConfig(e.Home)
-	if err != nil {
-		return err
-	}
-	pf, err := plugins.LoadPlugins(e.Home)
 	if err != nil {
 		return err
 	}
@@ -546,18 +537,6 @@ func (c *SyncCmd) Run(ctx context.Context, e *env) error {
 			names = append(names, a.Name)
 		}
 		fmt.Fprintf(e.Stderr, "custom actions: %s\n", strings.Join(names, " "))
-	}
-	if len(pf.Plugins) > 0 {
-		names := make([]string, 0, len(pf.Plugins))
-		for _, p := range pf.Plugins {
-			names = append(names, p.Name)
-			for _, entry := range p.Entries {
-				// Renamed from `e` to avoid shadowing the outer env parameter.
-				// The inner loop only cares about the entry's wrapper name.
-				names = append(names, entry.EffectiveCmd())
-			}
-		}
-		fmt.Fprintf(e.Stderr, "plugin wrappers: %s\n", strings.Join(names, " "))
 	}
 	fmt.Fprintln(e.Stderr, "re-source $PROFILE (or restart PowerShell) to pick up changes")
 	return nil

@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
-	"github.com/sadirano/onix/internal/plugins"
 	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/snippet"
 	"github.com/sadirano/onix/internal/store"
@@ -39,13 +38,11 @@ func (c *DoctorCmd) Run(ctx context.Context, e *env) error {
 		checkAliasesFile(e.Home),
 		checkConfigFile(e.Home),
 		checkSegmentsFile(e.Home),
-		checkPluginsFile(e.Home),
 		checkShellSnippet(e.Home),
 		checkSnippetPin(e.Home),
 		checkOnExePath(e.Home),
 		checkEditor(),
 	}
-	checks = append(checks, checkInstalledPlugins(e.Home)...)
 	if runtime.GOOS == "windows" {
 		checks = append(checks, checkPowerShellProfile(e.Home))
 	} else {
@@ -124,79 +121,6 @@ func checkSegmentsFile(home string) checkResult {
 		return checkResult{"segments.toml", "ok", fmt.Sprintf("%s (no contexts)", p)}
 	}
 	return checkResult{"segments.toml", "ok", fmt.Sprintf("%d context(s)", len(sf.Contexts))}
-}
-
-// checkPluginsFile validates plugins.toml parses and reports the plugin
-// count. Like checkConfigFile, a missing file is fine (no plugins
-// declared). validation runs against the current config.toml actions so
-// collisions surface in doctor instead of waiting for the next install.
-func checkPluginsFile(home string) checkResult {
-	p := plugins.ConfigPath(home)
-	if _, err := os.Stat(p); err != nil {
-		if os.IsNotExist(err) {
-			return checkResult{"plugins.toml", "ok", "absent (no plugins installed)"}
-		}
-		return checkResult{"plugins.toml", "warn", fmt.Sprintf("%s: %v", p, err)}
-	}
-	pf, err := plugins.LoadPlugins(home)
-	if err != nil {
-		return checkResult{"plugins.toml", "err", err.Error()}
-	}
-	cfg, _ := config.LoadConfig(home)
-	var actions []config.Action
-	if cfg != nil {
-		actions = cfg.Actions
-	}
-	if err := plugins.ValidatePlugins(pf, actions); err != nil {
-		return checkResult{"plugins.toml", "err", err.Error()}
-	}
-	if len(pf.Plugins) == 0 {
-		return checkResult{"plugins.toml", "ok", fmt.Sprintf("%s (no plugins)", p)}
-	}
-	return checkResult{"plugins.toml", "ok", fmt.Sprintf("%d plugin(s)", len(pf.Plugins))}
-}
-
-// checkInstalledPlugins returns one checkResult per declared plugin:
-// confirms the binary exists and notes when a plugin is unpinned (which
-// means rebuilds can pick up upstream changes without re-prompting).
-// Returns nil when no plugins are declared so doctor doesn't pad the
-// output with empty entries.
-func checkInstalledPlugins(home string) []checkResult {
-	pf, err := plugins.LoadPlugins(home)
-	if err != nil || len(pf.Plugins) == 0 {
-		return nil
-	}
-	out := make([]checkResult, 0, len(pf.Plugins))
-	for _, p := range pf.Plugins {
-		label := "plugin:" + p.Name
-		bin := plugins.BinaryPath(home, p.Repo)
-		if _, err := os.Stat(bin); err != nil {
-			out = append(out, checkResult{
-				label, "err",
-				fmt.Sprintf("binary missing at %s — run: onix plugin update %s", bin, p.Name),
-			})
-			continue
-		}
-		if p.Unpinned {
-			out = append(out, checkResult{
-				label, "warn",
-				fmt.Sprintf("UNPINNED — `onix plugin update` rebuilds from default branch (binary: %s)", bin),
-			})
-			continue
-		}
-		out = append(out, checkResult{label, "ok", fmt.Sprintf("%s @ %s", bin, shortSHA(p.SHA))})
-	}
-	return out
-}
-
-// shortSHA truncates a commit SHA to 12 chars for display. Long enough
-// to be unambiguous in any reasonable repo, short enough to fit on a
-// single doctor line without wrapping.
-func shortSHA(s string) string {
-	if len(s) > 12 {
-		return s[:12]
-	}
-	return s
 }
 
 // checkConfigFile validates config.toml parses and reports how many

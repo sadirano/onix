@@ -20,20 +20,8 @@ import (
 	"os/signal"
 	"runtime"
 
-	"github.com/alecthomas/kong"
 	"github.com/sadirano/onix/internal/resolver"
 )
-
-// pluginCLI is the only kong subtree we keep. Plugin install/update/remove/list
-// have their own argv shape (positional repo, --sha, --unpinned, --yes ...)
-// that doesn't fit the alias-flag grammar, so they stay as a real subcommand.
-// Everything else is parsed by the alias-flag dispatcher in grammar.go.
-type pluginCLI struct {
-	Plugin PluginCmd `cmd:"" help:"Install and manage external plugins."`
-
-	ConfigDir string `name:"config-dir" env:"ONIX_HOME" help:"Override ~/.onix location."`
-	JSON      bool   `name:"json" help:"Output in JSON format."`
-}
 
 func main() {
 	os.Exit(run(os.Args, os.Stdin, os.Stdout, os.Stderr))
@@ -99,13 +87,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 		Stdin:  stdin,
 	}
 
-	// Plugin management is the only subcommand-shaped invocation. Route it
-	// to kong; everything else flows through the alias-flag dispatcher.
-	if len(processedArgs) >= 2 && processedArgs[1] == "plugin" {
-		return runPluginKong(sigCtx, e, processedArgs, stdout, stderr)
-	}
-
-	// Dispatch the alias-flag grammar.
 	t.mark("pre-dispatch")
 	if err := dispatchNewGrammar(sigCtx, e, processedArgs[1:], stdout, stderr); err != nil {
 		var cee *childExitError
@@ -119,58 +100,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 	}
 	t.mark("post-dispatch")
 
-	return 0
-}
-
-// runPluginKong runs kong against the plugin subtree only. Splitting this
-// out keeps main() small and makes it obvious that kong's scope is now
-// limited to plugin management.
-func runPluginKong(sigCtx context.Context, e *env, args []string, stdout, stderr io.Writer) int {
-	var cli pluginCLI
-	parser, err := kong.New(
-		&cli,
-		kong.Name("onix"),
-		kong.Description("Install and manage onix plugins."),
-		kong.UsageOnError(),
-		kong.ConfigureHelp(kong.HelpOptions{Compact: true}),
-		kong.Writers(stdout, stderr),
-	)
-	if err != nil {
-		fmt.Fprintf(stderr, "onix: %v\n", err)
-		return 1
-	}
-
-	ctx, err := parser.Parse(args[1:])
-	if err != nil {
-		// kong.UsageOnError() already printed the error to stderr
-		return 1
-	}
-
-	// Allow --config-dir to override the resolved home for this run.
-	if cli.ConfigDir != "" {
-		home, err := resolveHome(cli.ConfigDir)
-		if err != nil {
-			fmt.Fprintf(stderr, "onix: %v\n", err)
-			return 1
-		}
-		e.Home = home
-	}
-	if cli.JSON {
-		e.JSON = true
-	}
-	ctx.Bind(e)
-	ctx.BindTo(sigCtx, (*context.Context)(nil))
-
-	if err := ctx.Run(); err != nil {
-		var cee *childExitError
-		if errors.As(err, &cee) {
-			return cee.Code
-		}
-		if !errors.Is(err, resolver.ErrCancelled) {
-			fmt.Fprintf(stderr, "onix: %v\n", err)
-		}
-		return 1
-	}
 	return 0
 }
 
