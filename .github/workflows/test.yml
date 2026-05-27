@@ -54,7 +54,9 @@ jobs:
       - name: Bench (current)
         shell: bash
         run: |
-          go test -bench=BenchmarkHotPath_LookupOnly -benchmem -run=^$ ./... > bench_current.txt
+          # -count=3 keeps single-sample noise out of benchstat's significance
+          # filter (it reports "~" on count=1 and the gate then skips silently).
+          go test -bench=BenchmarkHotPath_LookupOnly -benchmem -count=3 -run=^$ ./... > bench_current.txt
           cat bench_current.txt
 
       - name: Bench (baseline from main)
@@ -63,7 +65,7 @@ jobs:
           git fetch origin main
           git worktree add --detach baseline origin/main
           cd baseline
-          go test -bench=BenchmarkHotPath_LookupOnly -benchmem -run=^$ ./... > ../bench_baseline.txt
+          go test -bench=BenchmarkHotPath_LookupOnly -benchmem -count=3 -run=^$ ./... > ../bench_baseline.txt
           cd ..
           rm -rf baseline
 
@@ -72,18 +74,21 @@ jobs:
         run: |
           go install golang.org/x/perf/cmd/benchstat@latest
           benchstat bench_baseline.txt bench_current.txt | tee benchstat.txt
-          # Extract the % change for HotPath_LookupOnly and gate on 20% slowdown
+          # Extract the % change for HotPath_LookupOnly and gate on 20% slowdown.
+          # awk-only (no `bc`): Git Bash on the windows-latest runner ships
+          # without `bc`, and awk handles both extraction and comparison.
           pct=$(benchstat bench_baseline.txt bench_current.txt 2>/dev/null | grep 'HotPath_LookupOnly' | head -1 | awk '{for(i=1;i<=NF;i++) if($i ~ /^[+-]?[0-9.]+%$/) print $i}' | head -1)
           if [ -z "$pct" ]; then
-            echo "Warning: could not extract percentage from benchstat; using lenient gate"
+            echo "::warning::could not extract percentage from benchstat; soft-pass (treat as no regression)"
             exit 0
           fi
           pct_num=$(echo "$pct" | tr -d '+%')
           threshold=20
-          if (( $(echo "$pct_num > $threshold" | bc -l) )); then
-            echo "❌ Regression: $pct > ${threshold}% threshold"
+          awk -v p="$pct_num" -v t="$threshold" 'BEGIN { exit (p+0 > t+0) ? 1 : 0 }'
+          if [ $? -ne 0 ]; then
+            echo "Regression: $pct > ${threshold}% threshold"
             exit 1
           else
-            echo "✓ OK: change $pct <= ${threshold}% threshold"
+            echo "OK: change $pct <= ${threshold}% threshold"
             exit 0
           fi
