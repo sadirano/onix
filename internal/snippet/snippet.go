@@ -25,21 +25,14 @@ const pwshO = `function global:%s {
     [CmdletBinding()]
     param(
         [Parameter(Position=0, Mandatory=$false)][string]$Alias,
-        [Parameter(Position=1, Mandatory=$false)][string]$Path
+        [Parameter(Position=1, Mandatory=$false, ValueFromRemainingArguments=$true)][string[]]$Path
     )
     if (-not $Alias) {
         & $global:onixExe --edit
         return
     }
 
-    if ($Path) {
-        # '%s foo C:\some\path' — register (or update) the alias and cd
-        # into it. The directory is auto-created by onix if it doesn't
-        # exist yet.
-        $resolved = & $global:onixExe $Alias $Path
-    } else {
-        $resolved = & $global:onixExe $Alias
-    }
+    $resolved = & $global:onixExe $Alias @Path
     if ($LASTEXITCODE -eq 0) {
         Set-Location -LiteralPath $resolved
     }
@@ -106,13 +99,7 @@ const bashO = `%s() {
         return
     fi
     local path
-    if [ -n "$2" ]; then
-        # '%s foo /some/path' — register (or update) the alias and cd into
-        # it. The directory is auto-created by onix if missing.
-        path=$("$ONIX_EXE" "$1" "$2")
-    else
-        path=$("$ONIX_EXE" "$1")
-    fi
+    path=$("$ONIX_EXE" "$@")
     if [ $? -eq 0 ]; then
         cd "$path"
     fi
@@ -219,7 +206,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 		}
 	}
 
-	fmt.Fprintf(&b, pwshO, s["o"], s["o"])
+	fmt.Fprintf(&b, pwshO, s["o"])
 	fmt.Fprintf(&b, pwshE, s["e"])
 	fmt.Fprintf(&b, pwshS, s["s"])
 	fmt.Fprintf(&b, pwshY, s["y"])
@@ -327,7 +314,7 @@ if "%%_onix_arg:~0,1%%"=="-" (
 set "_onix_arg="
 
 set "_onix_target="
-for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" %%~1 --no-prompt 2^>nul`+"`"+`) do set "_onix_target=%%%%i"
+for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" %%* 2^>nul`+"`"+`) do set "_onix_target=%%%%i"
 if not defined _onix_target (
   "%s" %%*
   exit /b
@@ -402,7 +389,7 @@ func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []c
 		}
 	}
 
-	fmt.Fprintf(&b, bashO, s["o"], s["o"])
+	fmt.Fprintf(&b, bashO, s["o"])
 	fmt.Fprintf(&b, bashE, s["e"])
 	fmt.Fprintf(&b, bashS, s["s"])
 	fmt.Fprintf(&b, bashY, s["y"])

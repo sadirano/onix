@@ -24,13 +24,7 @@ o() {
         return
     fi
     local path
-    if [ -n "$2" ]; then
-        # 'o foo /some/path' — register (or update) the alias and cd into
-        # it. The directory is auto-created by onix if missing.
-        path=$("$ONIX_EXE" "$1" "$2")
-    else
-        path=$("$ONIX_EXE" "$1")
-    fi
+    path=$("$ONIX_EXE" "$@")
     if [ $? -eq 0 ]; then
         cd "$path"
     fi

@@ -88,9 +88,6 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if !strings.Contains(content, "--edit") {
 		t.Errorf("o.cmd missing '--edit' for no-arg invocation:\n%s", content)
 	}
-	if !strings.Contains(content, "--no-prompt") {
-		t.Errorf("o.cmd missing '--no-prompt' lookup:\n%s", content)
-	}
 	if !strings.Contains(content, "if not defined _onix_target") {
 		t.Errorf("o.cmd missing subcommand passthrough fallback:\n%s", content)
 	}
