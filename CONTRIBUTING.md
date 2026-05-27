@@ -4,7 +4,7 @@ Thank you for your interest in contributing to Onix! This document provides guid
 
 ## Development Environment
 
-- **Go:** Version 1.23 or later.
+- **Go:** Version 1.26 or later (matches CI).
 - **PowerShell:** Required for Windows shell integration testing.
 - **Bash:** Required for Unix shell integration testing.
 
