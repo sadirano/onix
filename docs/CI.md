@@ -24,6 +24,4 @@ Interpretation
 - benchstat prints the % change vs baseline; positive % means slower. CI treats >20% slowdown as failure.
 - For stable signals, increase -count or use -benchtime; run on CI-equivalent hardware when possible.
 
-Updating the baseline
-
-If changes improve performance and you want to update the baseline, run the baseline collection against main (as above) and commit bench_baseline.txt to the repo or store it in CI artifacts as appropriate.
+There is no committed baseline file: CI always builds the baseline from origin/main on each run, and bench_*.txt / benchstat*.txt are gitignored.
