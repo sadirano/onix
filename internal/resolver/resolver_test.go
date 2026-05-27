@@ -8,12 +8,6 @@ import (
 	"github.com/sadirano/onix/internal/store"
 )
 
-// samePath returns true if a and b resolve to the same path, accounting
-// for case sensitivity and slash direction.
-func samePath(a, b string) bool {
-	return strings.EqualFold(filepath.ToSlash(a), filepath.ToSlash(b))
-}
-
 func TestResolve_Errors(t *testing.T) {
 	dir := t.TempDir()
 	_ = store.SaveStore(dir, &store.Store{Aliases: map[string]store.Alias{

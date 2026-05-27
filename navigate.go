@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -49,61 +48,6 @@ func readLine(prompt string, stderr io.Writer, reader *bufio.Reader) (string, bo
 		}
 		return strings.TrimSpace(r.line), true
 	}
-}
-
-// promptDestination asks the user for a target path for an unknown alias.
-// Returns "" if the user cancels (Ctrl+C or empty input).
-func promptDestination(aliasName string, stderr io.Writer, reader *bufio.Reader) string {
-	header := fmt.Sprintf("Destination for %q (Tab to edit)", aliasName)
-
-	if fzf, err := exec.LookPath("fzf"); err == nil {
-		query := ""
-		for {
-			cmd := execCommand(fzf, "--header", header, "--reverse", "--height", "20%", "--print-query", "--query", query, "--expect=tab")
-			cmd.Stderr = stderr
-			var stdout bytes.Buffer
-			cmd.Stdout = &stdout
-			cmd.Stdin = strings.NewReader("")
-			err := cmd.Run()
-			if err != nil {
-				if exitErr, ok := err.(*exec.ExitError); !ok || (exitErr.ExitCode() != 1 && exitErr.ExitCode() != 0) {
-					return ""
-				}
-			}
-
-			lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
-			if len(lines) < 2 {
-				return ""
-			}
-
-			key := lines[0]
-			currentQuery := lines[1]
-			selection := ""
-			if len(lines) > 2 {
-				selection = lines[2]
-			}
-
-			if key == "tab" {
-				if selection != "" {
-					query = selection
-				} else {
-					query = currentQuery
-				}
-				continue
-			}
-
-			if selection != "" {
-				return selection
-			}
-			return currentQuery
-		}
-	}
-
-	line, ok := readLine(header+": ", stderr, reader)
-	if !ok {
-		return ""
-	}
-	return line
 }
 
 // promptSegmentDefinition asks the user to define a [[contexts]] entry for
