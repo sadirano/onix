@@ -22,11 +22,8 @@ type Store struct {
 // is non-empty it takes precedence over Path. Resolution of multiple targets
 // is handled by the caller (typically an interactive fzf picker).
 type Alias struct {
-	Path        string   `toml:"path,omitempty"`
-	Paths       []string `toml:"paths,omitempty"`
-	Description string   `toml:"description,omitempty"`
-	Tags        []string `toml:"tags,omitempty"`
-	Owner       string   `toml:"owner,omitempty"`
+	Path  string   `toml:"path,omitempty"`
+	Paths []string `toml:"paths,omitempty"`
 }
 
 // AllPaths returns the effective set of paths for this alias.

@@ -11,8 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/sadirano/onix/internal/store"
 )
 
 // TestAddCmd_OutputContract locks the stdout/stderr split that the `o`
@@ -93,60 +91,6 @@ func TestAddCmd_RejectsInvalidName(t *testing.T) {
 		if err == nil {
 			t.Errorf("AddCmd with name %q should have errored", name)
 		}
-	}
-}
-
-func TestAddCmd_Metadata(t *testing.T) {
-	dir := t.TempDir()
-	home := filepath.Join(dir, "home")
-	target := filepath.Join(dir, "target")
-	if err := os.MkdirAll(home, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// 1. Initial add with metadata.
-	cmd1 := &AddCmd{
-		Alias:       "meta",
-		Path:        target,
-		Description: "A test project",
-		Owner:       "dev-team",
-		Tags:        []string{"work", "go"},
-	}
-	if err := cmd1.Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
-		t.Fatalf("Initial AddCmd failed: %v", err)
-	}
-
-	// Verify persistence.
-	s1, _ := store.LoadStore(home)
-	a1, ok := s1.Lookup("meta")
-	if !ok {
-		t.Fatal("alias 'meta' not found in store")
-	}
-	if a1.Description != "A test project" || a1.Owner != "dev-team" || len(a1.Tags) != 2 {
-		t.Errorf("Metadata not correctly saved: %+v", a1)
-	}
-
-	// 2. Update only metadata (merge behavior).
-	cmd2 := &AddCmd{
-		Alias: "meta",
-		Path:  target,
-		Owner: "ops-team",
-	}
-	if err := cmd2.Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}); err != nil {
-		t.Fatalf("Update AddCmd failed: %v", err)
-	}
-
-	// Verify merge.
-	s2, _ := store.LoadStore(home)
-	a2, _ := s2.Lookup("meta")
-	if a2.Owner != "ops-team" {
-		t.Errorf("Owner not updated, got %q", a2.Owner)
-	}
-	if a2.Description != "A test project" {
-		t.Errorf("Description lost during merge, got %q", a2.Description)
-	}
-	if len(a2.Tags) != 2 {
-		t.Errorf("Tags lost during merge, got %v", a2.Tags)
 	}
 }
 

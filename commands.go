@@ -46,12 +46,9 @@ func printJSON(w io.Writer, v any) error {
 // -----------------------------------------------------------------------------
 
 type AddCmd struct {
-	Alias       string   `arg:"" help:"Alias name."`
-	Path        string   `arg:"" optional:"" help:"Directory path (default: current working directory)."`
-	Description string   `help:"Human-readable description of the alias."`
-	Owner       string   `help:"The person or team responsible for this directory."`
-	Tags        []string `help:"Categorization labels (multiple flags)."`
-	AddPath     bool     `help:"Append path to the alias instead of replacing it (creates a multi-target alias)."`
+	Alias   string `arg:"" help:"Alias name."`
+	Path    string `arg:"" optional:"" help:"Directory path (default: current working directory)."`
+	AddPath bool   `help:"Append path to the alias instead of replacing it (creates a multi-target alias)."`
 }
 
 func (c *AddCmd) Run(ctx context.Context, e *env) error {
@@ -104,16 +101,6 @@ func (c *AddCmd) Run(ctx context.Context, e *env) error {
 		// Standard set: replace any existing path(s) with the new one.
 		alias.Path = filepath.ToSlash(abs)
 		alias.Paths = nil
-	}
-
-	if c.Description != "" {
-		alias.Description = c.Description
-	}
-	if c.Owner != "" {
-		alias.Owner = c.Owner
-	}
-	if len(c.Tags) > 0 {
-		alias.Tags = c.Tags
 	}
 
 	s.Set(c.Alias, alias)
@@ -272,22 +259,14 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 
 	if e.JSON {
 		type aliasInfo struct {
-			Name        string   `json:"name"`
-			Path        string   `json:"path"`
-			Description string   `json:"description,omitempty"`
-			Tags        []string `json:"tags,omitempty"`
-			Owner       string   `json:"owner,omitempty"`
+			Name  string   `json:"name"`
+			Path  string   `json:"path,omitempty"`
+			Paths []string `json:"paths,omitempty"`
 		}
 		out := make([]aliasInfo, 0, len(names))
 		for _, n := range names {
 			a, _ := s.Lookup(n)
-			out = append(out, aliasInfo{
-				Name:        n,
-				Path:        a.Path,
-				Description: a.Description,
-				Tags:        a.Tags,
-				Owner:       a.Owner,
-			})
+			out = append(out, aliasInfo{Name: n, Path: a.Path, Paths: a.Paths})
 		}
 		return printJSON(e.Stdout, out)
 	}
@@ -297,10 +276,18 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(e.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ALIAS\tPATH\tDESCRIPTION")
+	fmt.Fprintln(w, "ALIAS\tPATH")
 	for _, n := range names {
 		a, _ := s.Lookup(n)
-		fmt.Fprintf(w, "%s\t%s\t%s\n", n, a.Path, a.Description)
+		paths := a.AllPaths()
+		switch len(paths) {
+		case 0:
+			fmt.Fprintf(w, "%s\t(no path)\n", n)
+		case 1:
+			fmt.Fprintf(w, "%s\t%s\n", n, paths[0])
+		default:
+			fmt.Fprintf(w, "%s\t%s\n", n, strings.Join(paths, ", "))
+		}
 	}
 	return w.Flush()
 }

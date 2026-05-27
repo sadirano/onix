@@ -19,7 +19,7 @@ import (
 )
 
 // atoi is a thin wrapper that gives the dispatcher a uniform error message
-// for flags taking integer values (--top, future --head, --tail).
+// for flags taking integer values (--top, --since-days, ...).
 func atoi(s string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil {
@@ -108,8 +108,7 @@ func printUsage(w io.Writer) {
 
 USAGE:
   onix <alias>                       resolve to absolute path (hot path)
-  onix <alias> <path> [--description X] [--owner X] [--tags X]
-                                     register or update an alias
+  onix <alias> <path>                register or update an alias
   onix <alias> --<action> [args...]  run an action against an alias
   onix --<verb> [args...]            system-wide command
   onix plugin <verb> ...             manage external plugins
@@ -139,9 +138,6 @@ SYSTEM VERBS:
   --version, -v          print version
 
 ADD FLAGS:
-  --description, -d <text>
-  --owner, -o <name>
-  --tags, -t <tag>           (repeatable)
   --add-path                 append path to the alias (creates multi-target)
 
 REMOVE FLAGS:
@@ -322,37 +318,12 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 		return fastResolve(e.Home, alias, noPrompt, e.Stdout, e.Stderr, e.Stdin)
 	}
 
-	// Parse: <path> [--add-path] [--description X] [--owner X] [--tags X]...
+	// Parse: <path> [--add-path]
 	add := &AddCmd{Alias: alias}
-	for i := 0; i < len(cleaned); i++ {
-		a := cleaned[i]
+	for _, a := range cleaned {
 		switch {
 		case a == "--add-path":
 			add.AddPath = true
-		case a == "--description" || a == "-d":
-			if i+1 >= len(cleaned) {
-				return fmt.Errorf("--description requires a value")
-			}
-			add.Description = cleaned[i+1]
-			i++
-		case strings.HasPrefix(a, "--description="):
-			add.Description = strings.TrimPrefix(a, "--description=")
-		case a == "--owner" || a == "-o":
-			if i+1 >= len(cleaned) {
-				return fmt.Errorf("--owner requires a value")
-			}
-			add.Owner = cleaned[i+1]
-			i++
-		case strings.HasPrefix(a, "--owner="):
-			add.Owner = strings.TrimPrefix(a, "--owner=")
-		case a == "--tags" || a == "-t":
-			if i+1 >= len(cleaned) {
-				return fmt.Errorf("--tags requires a value")
-			}
-			add.Tags = append(add.Tags, cleaned[i+1])
-			i++
-		case strings.HasPrefix(a, "--tags="):
-			add.Tags = append(add.Tags, strings.TrimPrefix(a, "--tags="))
 		case startsWithDash(a):
 			return fmt.Errorf("unknown flag %q on add form", a)
 		default:
@@ -363,8 +334,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 		}
 	}
 	if add.Path == "" {
-		// Only metadata flags, no path — fall back to resolve (with prompt
-		// suppression already handled above).
+		// No path positional — fall back to resolve.
 		return fastResolve(e.Home, alias, noPrompt, e.Stdout, e.Stderr, e.Stdin)
 	}
 	return add.Run(ctx, e)

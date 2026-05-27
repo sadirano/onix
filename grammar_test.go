@@ -90,28 +90,6 @@ func TestDispatchAlias_BareResolvesAlias(t *testing.T) {
 	}
 }
 
-func TestDispatchAlias_AddWithMetadata(t *testing.T) {
-	home := newTestHome(t)
-	target := filepath.Join(t.TempDir(), "target")
-
-	// `onix foo <path> -d "desc" -o me -t a -t b` — full add form.
-	args := []string{"foo", target, "-d", "desc", "-o", "me", "-t", "a", "-t", "b"}
-	if _, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, args, os.Stdout, os.Stderr)
-	}); err != nil {
-		t.Fatalf("run: %v", err)
-	}
-
-	// Verify the store reflects all metadata fields.
-	a := mustLoadAlias(t, home, "foo")
-	if a.Description != "desc" || a.Owner != "me" {
-		t.Errorf("description/owner mismatch: %+v", a)
-	}
-	if len(a.Tags) != 2 || a.Tags[0] != "a" || a.Tags[1] != "b" {
-		t.Errorf("tags = %v, want [a b]", a.Tags)
-	}
-}
-
 func TestDispatchSystem_ListNamesFastPath(t *testing.T) {
 	home := newTestHome(t)
 	_, _, _ = captureStdio(func() error {
@@ -157,7 +135,7 @@ func TestDispatchAlias_RemoveAlias(t *testing.T) {
 	}
 
 	// Confirm alias is gone.
-	if _, ok := mustLoadAliasOK(t, home, "doomed"); ok {
+	if aliasExists(t, home, "doomed") {
 		t.Errorf("alias was not removed from store")
 	}
 }
@@ -226,80 +204,18 @@ func newTestHome(t *testing.T) string {
 	return h
 }
 
-func mustLoadAlias(t *testing.T, home, name string) storeAliasShim {
+// aliasExists reports whether the named alias is registered. Routed
+// through ListCmd's JSON output so the test stays independent of the
+// internal/store package shape.
+func aliasExists(t *testing.T, home, name string) bool {
 	t.Helper()
-	a, ok := mustLoadAliasOK(t, home, name)
-	if !ok {
-		t.Fatalf("alias %q not found", name)
-	}
-	return a
-}
-
-type storeAliasShim struct {
-	Description string
-	Owner       string
-	Tags        []string
-}
-
-func mustLoadAliasOK(t *testing.T, home, name string) (storeAliasShim, bool) {
-	t.Helper()
-	// Read aliases.toml via the existing ListCmd JSON path to keep the
-	// test independent of internal/store package shape.
 	stdout, _, err := captureStdio(func() error {
 		return (&ListCmd{}).Run(context.Background(), &env{Home: home, JSON: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	// Crude extraction — we don't need a full JSON parse for these
-	// asserts, just the fields we wrote.
-	want := `"name": "` + name + `"`
-	if !strings.Contains(stdout, want) {
-		return storeAliasShim{}, false
-	}
-	a := storeAliasShim{
-		Description: extractString(stdout, `"description": "`),
-		Owner:       extractString(stdout, `"owner": "`),
-	}
-	if tags := extractTagSlice(stdout); tags != nil {
-		a.Tags = tags
-	}
-	return a, true
-}
-
-func extractString(s, marker string) string {
-	i := strings.Index(s, marker)
-	if i < 0 {
-		return ""
-	}
-	rest := s[i+len(marker):]
-	end := strings.IndexByte(rest, '"')
-	if end < 0 {
-		return ""
-	}
-	return rest[:end]
-}
-
-func extractTagSlice(s string) []string {
-	const marker = `"tags": [`
-	i := strings.Index(s, marker)
-	if i < 0 {
-		return nil
-	}
-	rest := s[i+len(marker):]
-	end := strings.IndexByte(rest, ']')
-	if end < 0 {
-		return nil
-	}
-	tags := []string{}
-	for _, tok := range strings.Split(rest[:end], ",") {
-		tok = strings.TrimSpace(tok)
-		tok = strings.Trim(tok, `"`)
-		if tok != "" {
-			tags = append(tags, tok)
-		}
-	}
-	return tags
+	return strings.Contains(stdout, `"name": "`+name+`"`)
 }
 
 func contains(haystack []string, needle string) bool {
