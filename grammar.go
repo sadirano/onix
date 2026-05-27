@@ -75,9 +75,10 @@ var systemActionFlags = map[string]string{
 	"-c":           "contexts",
 	"--init":       "init",
 	"-I":           "init",
-	"--sync":       "sync",
-	"-S":           "sync",
-	"--doctor":     "doctor",
+	"--sync":        "sync",
+	"-S":            "sync",
+	"--doctor":      "doctor",
+
 	"-D":           "doctor",
 	"--version":    "version",
 	"-v":           "version",
@@ -89,7 +90,7 @@ func printUsage(w io.Writer) {
 
 USAGE:
   onix <alias>                       resolve to absolute path (hot path)
-  onix <alias> <path>                register or update an alias
+  onix <alias> <path>                register or update an alias (e.g. onix myproj .)
   onix <alias> --<action> [args...]  run an action against an alias
   onix --<verb> [args...]            system-wide command
 
@@ -125,7 +126,6 @@ REMOVE FLAGS:
 GLOBAL:
   --config-dir   ($ONIX_HOME) override ~/.onix path
   --json, -j                 machine-readable output
-  --no-prompt, -q            suppress destination prompts on unknown aliases
 `
 	fmt.Fprint(w, usage)
 }
@@ -232,7 +232,7 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 
 	switch action {
 	case "resolve":
-		return fastResolve(e.Home, alias, false, e.Stdout, e.Stderr, e.Stdin)
+		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	case "remove":
 		files, force, recursive, err := parseRemoveArgs(actionArgs)
 		if err != nil {
@@ -263,12 +263,9 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 
 // dispatchAliasAddOrResolve handles `onix <alias>` and `onix <alias> <path> [metadata...]`.
 func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest []string) error {
-	// Strip out --no-prompt so it can appear in either position.
-	noPrompt := false
 	cleaned := make([]string, 0, len(rest))
 	for _, a := range rest {
 		if a == "--no-prompt" || a == "-q" {
-			noPrompt = true
 			continue
 		}
 		cleaned = append(cleaned, a)
@@ -276,7 +273,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 
 	if len(cleaned) == 0 {
 		// Bare `onix <alias>` — hot-path resolve.
-		return fastResolve(e.Home, alias, noPrompt, e.Stdout, e.Stderr, e.Stdin)
+		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	}
 
 	// Parse: <path> [--add-path]
@@ -296,7 +293,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 	}
 	if add.Path == "" {
 		// No path positional — fall back to resolve.
-		return fastResolve(e.Home, alias, noPrompt, e.Stdout, e.Stderr, e.Stdin)
+		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	}
 	return add.Run(ctx, e)
 }

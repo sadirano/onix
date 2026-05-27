@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -16,28 +17,24 @@ import (
 // It uses the shared resolver which combines fast byte-scanning with
 // a slow-path fallback. Side effects like directory creation are
 // handled here at the command layer.
-func fastResolve(home, name string, noPrompt bool, stdout, stderr io.Writer, stdin io.Reader) error {
-	var prompter func(string) string
-	var selector func([]string) string
+func fastResolve(home, name string, stdout, stderr io.Writer, stdin io.Reader, t *timer) error {
 	var segPrompter resolver.SegmentPrompter
 
 	var multiSelector func(string, []string) string
 
+	// Use environment for NoPrompt
+	noPrompt := os.Getenv("ONIX_NO_PROMPT") == "1"
+
 	if !noPrompt {
-		prompter = func(name string) string {
-			return promptDestination(name, stderr, stdin)
-		}
-		selector = func(options []string) string {
-			return promptSelection(options, stderr, stdin)
-		}
+		reader := bufio.NewReader(stdin)
 		segPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
-			return promptSegmentDefinition(home, segmentName, inlineValue, stderr, stdin, aliasBase, aliasName)
+			return promptSegmentDefinition(home, segmentName, inlineValue, stderr, reader, aliasBase, aliasName)
 		}
 		multiSelector = func(alias string, paths []string) string {
-			return promptMultiTargetPath(alias, paths, stderr, stdin)
+			return promptMultiTargetPath(alias, paths, stderr, reader)
 		}
 	}
-	p, err := resolver.Resolve(home, name, prompter, selector, segPrompter, multiSelector)
+	p, err := resolver.Resolve(home, name, segPrompter, multiSelector, t)
 	if err != nil {
 		return err
 	}

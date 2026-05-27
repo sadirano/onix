@@ -80,11 +80,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 	}
 	t.mark("resolve-home")
 	e := &env{
-		Home:   home,
-		JSON:   hasFlag(processedArgs[1:], "--json", "-j"),
-		Stdout: stdout,
-		Stderr: stderr,
-		Stdin:  stdin,
+		Home:     home,
+		JSON:     hasFlag(processedArgs[1:], "--json", "-j"),
+		NoPrompt: hasFlag(processedArgs[1:], "--no-prompt", "-q"),
+		Stdout:   stdout,
+		Stderr:   stderr,
+		Stdin:    stdin,
+		Timer:    t,
 	}
 
 	t.mark("pre-dispatch")
@@ -127,9 +129,11 @@ func hasFlag(args []string, names ...string) bool {
 // Keep it small — anything that's really per-command belongs on that
 // command's struct as a flag.
 type env struct {
-	Home   string    // absolute path to the onix config directory (~/.onix by default)
-	JSON   bool      // whether to output JSON
-	Stdout io.Writer // captured for testing
-	Stderr io.Writer // captured for testing
-	Stdin  io.Reader // captured for testing
+	Home     string    // absolute path to the onix config directory (~/.onix by default)
+	JSON     bool      // whether to output JSON
+	NoPrompt bool      // suppress interactive prompts
+	Stdout   io.Writer // captured for testing
+	Stderr   io.Writer // captured for testing
+	Stdin    io.Reader // captured for testing
+	Timer    *timer    // checkpoint timer
 }

@@ -2,25 +2,26 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/sadirano/onix/internal/segments"
 )
 
-// readLine prints prompt and reads one line from stdin.
+// readLine prints prompt and reads one line from reader.
 // Returns ("", false) when the user cancels with Ctrl+C or a stream error occurs.
 //
 // The prompt is written to stderr so callers that capture stdout via $() in
 // bash or Tee-Object in PowerShell don't end up with the prompt text mixed
 // into their captured value.
-func readLine(prompt string, stderr io.Writer, stdin io.Reader) (string, bool) {
+func readLine(prompt string, stderr io.Writer, reader *bufio.Reader) (string, bool) {
 	fmt.Fprint(stderr, prompt)
 
 	sig := make(chan os.Signal, 1)
@@ -33,7 +34,7 @@ func readLine(prompt string, stderr io.Writer, stdin io.Reader) (string, bool) {
 	}
 	ch := make(chan result, 1)
 	go func() {
-		line, err := bufio.NewReader(stdin).ReadString('\n')
+		line, err := reader.ReadString('\n')
 		ch <- result{line, err}
 	}()
 
@@ -52,8 +53,54 @@ func readLine(prompt string, stderr io.Writer, stdin io.Reader) (string, bool) {
 
 // promptDestination asks the user for a target path for an unknown alias.
 // Returns "" if the user cancels (Ctrl+C or empty input).
-func promptDestination(aliasName string, stderr io.Writer, stdin io.Reader) string {
-	line, ok := readLine(fmt.Sprintf("Destination for %q: ", aliasName), stderr, stdin)
+func promptDestination(aliasName string, stderr io.Writer, reader *bufio.Reader) string {
+	header := fmt.Sprintf("Destination for %q (Tab to edit)", aliasName)
+
+	if fzf, err := exec.LookPath("fzf"); err == nil {
+		query := ""
+		for {
+			cmd := execCommand(fzf, "--header", header, "--reverse", "--height", "20%", "--print-query", "--query", query, "--expect=tab")
+			cmd.Stderr = stderr
+			var stdout bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stdin = strings.NewReader("")
+			err := cmd.Run()
+
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); !ok || (exitErr.ExitCode() != 1 && exitErr.ExitCode() != 0) {
+					return ""
+				}
+			}
+
+			lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+			if len(lines) < 2 {
+				return ""
+			}
+
+			key := lines[0]
+			currentQuery := lines[1]
+			selection := ""
+			if len(lines) > 2 {
+				selection = lines[2]
+			}
+
+			if key == "tab" {
+				if selection != "" {
+					query = selection
+				} else {
+					query = currentQuery
+				}
+				continue
+			}
+
+			if selection != "" {
+				return selection
+			}
+			return currentQuery
+		}
+	}
+
+	line, ok := readLine(header+": ", stderr, reader)
 	if !ok {
 		return ""
 	}
@@ -61,205 +108,74 @@ func promptDestination(aliasName string, stderr io.Writer, stdin io.Reader) stri
 }
 
 // promptSegmentDefinition asks the user to define a [[contexts]] entry for
-// a segment that wasn't found in segments.toml. On success it persists the
-// new context to disk and returns the saved ContextDef. Returns
-// (nil, nil) if the user cancels via Ctrl+C or an empty answer.
-//
-// The save step is unconditional once the user supplies a valid source —
-// the [Y/n] confirmation is "save / abort", not "save / skip".
-//
-// All prompts share a single bufio.Reader so each ReadString consumes
-// exactly one line — using the package-level readLine helper per prompt
-// creates a fresh reader each call, which would swallow buffered input.
-func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Writer, stdin io.Reader, aliasBase, aliasName string) (*segments.ContextDef, error) {
-	fmt.Fprintf(stderr, "segment %q is not defined.\n", segmentName)
+// a segment that wasn't found in segments.toml by opening their editor with
+// a template and instructions.
+func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Writer, reader *bufio.Reader, aliasBase, aliasName string) (*segments.ContextDef, error) {
+	ed := resolveEditor()
+	if ed == "" {
+		return nil, fmt.Errorf("no editor found: set $EDITOR or ensure one of nvim, vim, code, nano, notepad is on PATH")
+	}
+
+	filePath := segments.CentralPath(home, aliasName)
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		return nil, fmt.Errorf("create %s: %w", filepath.Dir(filePath), err)
+	}
+
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", filePath, err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n[[contexts]]\n")
+	sb.WriteString("segment = \"" + segmentName + "\"\n")
 	if inlineValue != "" {
-		fmt.Fprintf(stderr, "  (inline value: %s)\n", inlineValue)
+		sb.WriteString("# (Current inline value: " + inlineValue + ")\n")
 	}
-	fmt.Fprintln(stderr, "")
+	sb.WriteString("source-template = \"/" + "${" + segmentName + "}" + "\"\n")
 
-	reader := bufio.NewReader(stdin)
-	read := func(prompt string) (string, bool) {
-		fmt.Fprint(stderr, prompt)
-		line, err := reader.ReadString('\n')
-		if err != nil && line == "" {
-			return "", false
-		}
-		return strings.TrimSpace(line), true
+	if _, err := f.WriteString(sb.String()); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("write %s: %w", filePath, err)
 	}
+	f.Close()
 
-	kind, ok := pickSegmentSource(segmentName, stderr, reader)
-	if !ok || kind == "" {
-		return nil, nil
+	parts := strings.Fields(ed)
+	binary := parts[0]
+	args := parts[1:]
+
+	lowerEd := strings.ToLower(binary)
+	isVim := strings.Contains(lowerEd, "vim") || strings.Contains(lowerEd, "nvim")
+
+	if strings.Contains(lowerEd, "code") || strings.Contains(lowerEd, "nano") || isVim {
+		// Jump to the end of the file.
+		args = append(args, "+9999")
 	}
-
-	cd := &segments.ContextDef{Segment: segmentName}
-	switch kind {
-	case "template":
-		printTemplateSamples(segmentName, stderr)
-		v, ok := read("Template: ")
-		if !ok || v == "" {
-			return nil, nil
-		}
-		cd.SourceTemplate = v
-	case "exec":
-		v, ok := read("Exec (command + space-separated args): ")
-		if !ok || v == "" {
-			return nil, nil
-		}
-		cd.SourceExec = strings.Fields(v)
-	case "file":
-		v, ok := read("File path: ")
-		if !ok || v == "" {
-			return nil, nil
-		}
-		cd.SourceFile = v
-	default:
-		return nil, fmt.Errorf("segment prompt: unrecognised choice %q (expected template, exec, or file)", kind)
+	args = append(args, filePath)
+	cmd := execCommand(binary, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("editor %s: %w", ed, err)
 	}
 
-	// Ask where to save.
-	//   [1] global  — ~/.onix/segments.toml with scope = "global" (all aliases)
-	//   [2] local   — <alias>/.onix/segments.toml (only this alias's directory)
-	//   [3] central — ~/.onix/segments.d/<alias>.toml (only this alias, stored centrally)
-	for {
-		choice, ok := read("Save where? [1] global (scope=\"global\", all aliases) [2] local (<alias>/.onix/) [3] central (~/.onix/segments.d/<alias>.toml) [1/2/3] (or 'n' to cancel): ")
-		if !ok {
-			return nil, nil
-		}
-		if choice == "" || choice == "1" {
-			// global — must carry scope = "global" so LookupGlobalContext finds it.
-			cd.Scope = "global"
-			sf, err := segments.LoadSegments(home)
-			if err != nil {
-				return nil, fmt.Errorf("segment prompt: %w", err)
-			}
-			sf.Contexts = append(sf.Contexts, *cd)
-			if err := segments.SaveSegments(home, sf); err != nil {
-				return nil, fmt.Errorf("segment prompt: save: %w", err)
-			}
-			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q (global)\n", segmentName)
-			return cd, nil
-		}
-		if strings.EqualFold(choice, "n") || strings.EqualFold(choice, "no") {
-			// user declined save
-			return nil, nil
-		}
-		if choice == "2" {
-			// local
-			localPath := segments.LocalPath(aliasBase)
-			sf, err := segments.LoadSegmentsFile(localPath)
-			if err != nil {
-				return nil, fmt.Errorf("segment prompt: %w", err)
-			}
-			sf.Contexts = append(sf.Contexts, *cd)
-			if err := segments.SaveSegmentsFile(localPath, sf); err != nil {
-				return nil, fmt.Errorf("segment prompt: save local: %w", err)
-			}
-			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q (local)\n", segmentName)
-			return cd, nil
-		}
-		if choice == "3" {
-			// central
-			centralPath := segments.CentralPath(home, aliasName)
-			sf, err := segments.LoadSegmentsFile(centralPath)
-			if err != nil {
-				return nil, fmt.Errorf("segment prompt: %w", err)
-			}
-			sf.Contexts = append(sf.Contexts, *cd)
-			if err := segments.SaveSegmentsFile(centralPath, sf); err != nil {
-				return nil, fmt.Errorf("segment prompt: save central: %w", err)
-			}
-			fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q (central)\n", segmentName)
-			return cd, nil
-		}
-		fmt.Fprintln(stderr, "Invalid choice; please enter 1, 2, 3, or 'n' to cancel.")
+	sf, err := segments.LoadSegmentsFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("load segments: %w", err)
 	}
+
+	cd, ok := segments.LookupContext(sf, segmentName)
+	if !ok {
+		return nil, nil // User might have deleted it
+	}
+
+	fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q in %s\n", segmentName, filePath)
+	return cd, nil
 }
 
-// printTemplateSamples shows a few worked examples of source-template values
-// so the user has a starting point at the Template: prompt. The leading `/`
-// (or its absence) is the load-bearing detail — examples cover both the
-// directory case and the filename-suffix case.
-func printTemplateSamples(segmentName string, stderr io.Writer) {
-	ref := "${" + segmentName + "}"
-	samples := []struct{ tmpl, result string }{
-		{"/" + ref, "directory under the alias"},
-		{"/tickets/" + ref, "nested directory"},
-		{"/" + ref + "/notes", "deeper path"},
-		{"_" + ref + ".md", "no leading / — appends to the previous segment"},
-	}
-	fmt.Fprintln(stderr, "Samples:")
-	w := tabwriter.NewWriter(stderr, 0, 0, 2, ' ', 0)
-	for _, s := range samples {
-		fmt.Fprintf(w, "  %s\t%s\n", s.tmpl, s.result)
-	}
-	_ = w.Flush()
-	fmt.Fprintln(stderr, "")
-}
 
-// pickSegmentSource asks the user to choose the source kind for a new
-// segment context. Returns one of "template", "exec", "file", or "" on
-// cancel. ok=false means the input stream failed (treat as cancel).
-//
-// When fzf is on PATH it is used as the picker; otherwise a numbered prompt
-// reads from reader. The two paths produce the same set of return values so
-// promptSegmentDefinition can switch on the result either way.
-func pickSegmentSource(segmentName string, stderr io.Writer, reader *bufio.Reader) (string, bool) {
-	options := []struct {
-		kind  string
-		label string
-	}{
-		{"template", "template  formatted path, e.g. /${" + segmentName + "}, /tickets/${" + segmentName + "}/notes"},
-		{"exec", "exec      run a command, capture stdout"},
-		{"file", "file      read a file's contents"},
-	}
-
-	if fzf, err := exec.LookPath("fzf"); err == nil {
-		lines := make([]string, len(options))
-		for i, o := range options {
-			lines[i] = o.label
-		}
-		cmd := execCommand(fzf, "--header", "Pick a source for segment "+segmentName, "--reverse", "--height", "20%", "--no-sort")
-		cmd.Stderr = stderr
-		cmd.Stdin = strings.NewReader(strings.Join(lines, "\n"))
-		out, err := cmd.Output()
-		if err != nil {
-			return "", true
-		}
-		selected := strings.TrimSpace(string(out))
-		for _, o := range options {
-			if o.label == selected {
-				return o.kind, true
-			}
-		}
-		return "", true
-	}
-
-	fmt.Fprintln(stderr, "Pick a source:")
-	for i, o := range options {
-		fmt.Fprintf(stderr, "  [%d] %s\n", i+1, o.label)
-	}
-	fmt.Fprint(stderr, "> ")
-	line, err := reader.ReadString('\n')
-	if err != nil && line == "" {
-		return "", false
-	}
-	choice := strings.TrimSpace(line)
-	if choice == "" {
-		return "", true
-	}
-	for i, o := range options {
-		if choice == fmt.Sprintf("%d", i+1) {
-			return o.kind, true
-		}
-	}
-	return choice, true
-}
-
-// promptMultiTargetPath presents the path list for a multi-target alias and
-// returns the user's choice. Empty string means the user cancelled.
-func promptMultiTargetPath(alias string, paths []string, stderr io.Writer, stdin io.Reader) string {
+func promptMultiTargetPath(alias string, paths []string, stderr io.Writer, reader *bufio.Reader) string {
 	header := fmt.Sprintf("Multiple paths for %q — pick one:", alias)
 
 	if fzf, err := exec.LookPath("fzf"); err == nil {
@@ -277,7 +193,7 @@ func promptMultiTargetPath(alias string, paths []string, stderr io.Writer, stdin
 	for i, p := range paths {
 		fmt.Fprintf(stderr, "  %d) %s\n", i+1, p)
 	}
-	line, ok := readLine(fmt.Sprintf("Select [1-%d] or press Enter to cancel: ", len(paths)), stderr, stdin)
+	line, ok := readLine(fmt.Sprintf("Select [1-%d] or press Enter to cancel: ", len(paths)), stderr, reader)
 	if !ok || line == "" {
 		return ""
 	}
@@ -288,42 +204,3 @@ func promptMultiTargetPath(alias string, paths []string, stderr io.Writer, stdin
 	return paths[idx-1]
 }
 
-// promptSelection presents a list of options and returns the selected one.
-// It auto-detects 'fzf' and falls back to a numeric list.
-func promptSelection(options []string, stderr io.Writer, stdin io.Reader) string {
-	if len(options) == 0 {
-		return ""
-	}
-
-	// Try fzf first
-	if fzf, err := exec.LookPath("fzf"); err == nil {
-		cmd := execCommand(fzf, "--header", "Did you mean:", "--reverse", "--height", "20%")
-		cmd.Stderr = stderr
-		cmd.Stdin = strings.NewReader(strings.Join(options, "\n"))
-		out, err := cmd.Output()
-		if err == nil {
-			return strings.TrimSpace(string(out))
-		}
-		// If fzf was cancelled (exit code 130) or errored, we just return ""
-		// so the user can continue with the unknown alias error.
-		return ""
-	}
-
-	// Fallback to numeric prompt
-	fmt.Fprintln(stderr, "Did you mean:")
-	for i, opt := range options {
-		fmt.Fprintf(stderr, "  %d) %s\n", i+1, opt)
-	}
-
-	line, ok := readLine(fmt.Sprintf("Select [1-%d] or press Enter to cancel: ", len(options)), stderr, stdin)
-	if !ok || line == "" {
-		return ""
-	}
-
-	idx, err := strconv.Atoi(line)
-	if err != nil || idx < 1 || idx > len(options) {
-		return ""
-	}
-
-	return options[idx-1]
-}

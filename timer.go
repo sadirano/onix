@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -13,6 +14,8 @@ type checkpoint struct {
 	name    string
 	elapsed time.Duration
 	delta   time.Duration
+	alloc   uint64 // heap bytes currently allocated
+	total   uint64 // cumulative heap bytes allocated
 }
 
 type timer struct {
@@ -31,15 +34,27 @@ func newTimer() *timer {
 	return t
 }
 
+func (t *timer) Mark(name string) {
+	if t == nil {
+		return
+	}
+	t.mark(name)
+}
+
 func (t *timer) mark(name string) {
-	if !t.enabled {
+	if t == nil || !t.enabled {
 		return
 	}
 	now := time.Now()
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
 	t.checkpoints = append(t.checkpoints, checkpoint{
 		name:    name,
 		elapsed: now.Sub(t.start),
 		delta:   now.Sub(t.last),
+		alloc:   m.Alloc,
+		total:   m.TotalAlloc,
 	})
 	t.last = now
 }
@@ -49,15 +64,24 @@ func (t *timer) report() {
 		return
 	}
 	total := time.Since(t.start)
-	fmt.Fprintln(os.Stderr, "\n[ONIX TIMING] ----------------------------------------")
-	fmt.Fprintf(os.Stderr, "  %-28s  %12s  %12s\n", "phase", "delta", "elapsed")
-	fmt.Fprintln(os.Stderr, "  "+strings.Repeat("-", 56))
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	fmt.Fprintln(os.Stderr, "\n[ONIX TIMING] -----------------------------------------------------------------------")
+	fmt.Fprintf(os.Stderr, "  %-24s  %10s  %10s  %10s  %10s\n", "phase", "delta", "elapsed", "heap", "total_alloc")
+	fmt.Fprintln(os.Stderr, "  "+strings.Repeat("-", 71))
 	for _, cp := range t.checkpoints {
-		fmt.Fprintf(os.Stderr, "  %-28s  %12s  %12s\n", cp.name, fmtDur(cp.delta), fmtDur(cp.elapsed))
+		fmt.Fprintf(os.Stderr, "  %-24s  %10s  %10s  %10s  %10s\n",
+			cp.name,
+			fmtDur(cp.delta),
+			fmtDur(cp.elapsed),
+			fmtBytes(cp.alloc),
+			fmtBytes(cp.total),
+		)
 	}
-	fmt.Fprintln(os.Stderr, "  "+strings.Repeat("-", 56))
-	fmt.Fprintf(os.Stderr, "  %-28s  %12s\n", "TOTAL", fmtDur(total))
-	fmt.Fprintln(os.Stderr, "[ONIX TIMING] ----------------------------------------")
+	fmt.Fprintln(os.Stderr, "  "+strings.Repeat("-", 71))
+	fmt.Fprintf(os.Stderr, "  %-24s  %10s  %10s  %10s  %10s\n", "TOTAL", fmtDur(total), "", "", fmtBytes(m.TotalAlloc))
+	fmt.Fprintln(os.Stderr, "[ONIX TIMING] -----------------------------------------------------------------------")
 }
 
 func fmtDur(d time.Duration) string {
@@ -65,10 +89,23 @@ func fmtDur(d time.Duration) string {
 	case d < time.Microsecond:
 		return fmt.Sprintf("%dns", d.Nanoseconds())
 	case d < time.Millisecond:
-		return fmt.Sprintf("%.2fµs", float64(d.Nanoseconds())/1e3)
+		return fmt.Sprintf("%.1fµs", float64(d.Nanoseconds())/1e3)
 	case d < time.Second:
-		return fmt.Sprintf("%.3fms", float64(d.Nanoseconds())/1e6)
+		return fmt.Sprintf("%.2fms", float64(d.Nanoseconds())/1e6)
 	default:
 		return fmt.Sprintf("%.3fs", d.Seconds())
 	}
+}
+
+func fmtBytes(b uint64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := uint64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }

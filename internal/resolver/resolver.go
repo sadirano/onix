@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/store"
 )
+
+// Timer is the interface for recording checkpoints.
+type Timer interface {
+	Mark(name string)
+}
 
 // ErrCancelled is returned by Resolve when the user cancels the interactive
 // destination prompt for an unknown alias.
@@ -52,12 +56,20 @@ type SegmentPrompter func(segmentName, inlineValue, aliasBase, aliasName string)
 //
 // Resolve does NOT create directories on disk. It returns a host-native path
 // (using filepath.FromSlash).
-func Resolve(home, name string, prompter func(string) string, selector func([]string) string, segmentPrompter SegmentPrompter, multiSelector func(string, []string) string) (string, error) {
-	if strings.Contains(name, "@") {
-		return resolveSegmented(home, name, segmentPrompter)
+func Resolve(home, name string, segmentPrompter SegmentPrompter, multiSelector func(string, []string) string, t Timer) (string, error) {
+	if t != nil {
+		t.Mark("resolve-start")
 	}
 
+	if strings.Contains(name, "@") {
+		return resolveSegmented(home, name, segmentPrompter, t)
+	}
+
+	// Hot path: Check disk aliases.
 	data, err := os.ReadFile(store.AliasesPath(home))
+	if t != nil {
+		t.Mark("alias-file-read")
+	}
 	if err == nil {
 		target := strings.ToLower(strings.TrimSpace(name))
 		if p, ok := ScanForAlias(data, target); ok {
@@ -76,81 +88,10 @@ func Resolve(home, name string, prompter func(string) string, selector func([]st
 	}
 	a, ok := s.Lookup(name)
 	if !ok {
-		// Try fuzzy matching before giving up or prompting for a new path.
-		if selector != nil {
-			names := s.Names()
-			candidates := make([]string, 0)
-			// Map distance -> names for sorting
-			type match struct {
-				name string
-				dist int
-			}
-			matches := make([]match, 0)
-
-			for _, n := range names {
-				d := ComputeDistance(strings.ToLower(name), strings.ToLower(n))
-				// Tight limit so close-looking-but-different names don't
-				// suggest each other. The old limit (3 for any 4+ char
-				// word) had "sync" matching "bin" — distance 3 is most of
-				// the word's length, not a typo. Allow 2 edits for names
-				// of length 4+ (covers single transpositions like
-				// "onxi" → "onix") and only 1 edit for shorter names.
-				shorter := len(name)
-				if len(n) < shorter {
-					shorter = len(n)
-				}
-				limit := 2
-				if shorter < 4 {
-					limit = 1
-				}
-				if d <= limit {
-					matches = append(matches, match{n, d})
-				}
-			}
-
-			if len(matches) > 0 {
-				// Sort by distance (descending)
-				sort.Slice(matches, func(i, j int) bool {
-					if matches[i].dist != matches[j].dist {
-						return matches[i].dist < matches[j].dist
-					}
-					return matches[i].name < matches[j].name
-				})
-				for _, m := range matches {
-					candidates = append(candidates, m.name)
-				}
-
-				selected := selector(candidates)
-				if selected != "" {
-					// Recursively resolve the selected alias (without prompter/selector
-					// to avoid loops, but since it's from s.Names() it must exist).
-					return Resolve(home, selected, nil, nil, nil, nil)
-				}
-			}
-		}
-
 		if err := store.ValidateAliasName(name); err != nil {
 			return "", err
 		}
-		if prompter == nil {
-			return "", fmt.Errorf("unknown alias %q", name)
-		}
-		dest := prompter(name)
-		if dest == "" {
-			return "", ErrCancelled
-		}
-		abs, err := filepath.Abs(store.ExpandTilde(dest))
-		if err != nil {
-			return "", fmt.Errorf("absolutise %q: %w", dest, err)
-		}
-		a = store.Alias{Path: filepath.ToSlash(abs)}
-		s.Set(name, a)
-		if err := store.SaveStore(home, s); err != nil {
-			return "", err
-		}
-		// Side effect: print registration message to stderr.
-		fmt.Fprintf(os.Stderr, "registered %s -> %s\n", strings.ToLower(name), abs)
-		return abs, nil
+		return "", fmt.Errorf("unknown alias %q", name)
 	}
 
 	// Multi-target: when the alias holds multiple paths, ask the user to pick.
@@ -173,13 +114,19 @@ func Resolve(home, name string, prompter func(string) string, selector func([]st
 	}
 }
 
-func resolveSegmented(home, input string, prompter SegmentPrompter) (string, error) {
+func resolveSegmented(home, input string, prompter SegmentPrompter, t Timer) (string, error) {
 	segs, alias := segments.ParseSegmentedAlias(input)
+	if t != nil {
+		t.Mark("parse-segmented")
+	}
 	if len(segs) == 0 || alias == "" {
 		return "", fmt.Errorf("invalid segmented alias %q (usage: <seg>@[<seg>@...]<alias>)", input)
 	}
 
 	s, err := store.LoadStore(home)
+	if t != nil {
+		t.Mark("load-store")
+	}
 	if err != nil {
 		return "", err
 	}
@@ -189,15 +136,21 @@ func resolveSegmented(home, input string, prompter SegmentPrompter) (string, err
 	}
 
 	sfGlobal, err := segments.LoadSegments(home)
+	if t != nil {
+		t.Mark("load-global-segments")
+	}
 	if err != nil {
 		return "", err
 	}
 	// Try to load a per-alias segments file first. Missing files are fine.
 	aliasSegmentsPath := segments.LocalPath(a.Path)
 	sfLocal, _ := segments.LoadSegmentsFile(aliasSegmentsPath)
-	// Try central store for this alias under ~/.onix/segments.d/<alias>.toml
+	// Try central store for this alias under ~/.onix/segments/<alias>.toml
 	centralPath := segments.CentralPath(home, alias)
 	sfCentral, _ := segments.LoadSegmentsFile(centralPath)
+	if t != nil {
+		t.Mark("load-local-central-segments")
+	}
 
 	target := strings.TrimRight(a.Path, "/")
 	for i := len(segs) - 1; i >= 0; i-- {

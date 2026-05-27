@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -546,36 +547,22 @@ func (c *SyncCmd) Run(ctx context.Context, e *env) error {
 // shared helpers
 // -----------------------------------------------------------------------------
 
-// resolveAliasPath is the common prefix for every action that operates on
-// the resolved directory. It uses the shared resolver to find the path
-// and then ensures the directory exists on disk.
 func resolveAliasPath(e *env, name string) (string, error) {
-	return resolveAliasPathOpt(e, name, false)
-}
-
-func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
-	var prompter func(string) string
-	var selector func([]string) string
 	var segPrompter resolver.SegmentPrompter
 
 	var multiSelector func(string, []string) string
 
-	if !noPrompt {
-		prompter = func(name string) string {
-			return promptDestination(name, e.Stderr, e.Stdin)
-		}
-		selector = func(options []string) string {
-			return promptSelection(options, e.Stderr, e.Stdin)
-		}
+	if !e.NoPrompt {
+		reader := bufio.NewReader(e.Stdin)
 		segPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
-			return promptSegmentDefinition(e.Home, segmentName, inlineValue, e.Stderr, e.Stdin, aliasBase, aliasName)
+			return promptSegmentDefinition(e.Home, segmentName, inlineValue, e.Stderr, reader, aliasBase, aliasName)
 		}
 		multiSelector = func(alias string, paths []string) string {
-			return promptMultiTargetPath(alias, paths, e.Stderr, e.Stdin)
+			return promptMultiTargetPath(alias, paths, e.Stderr, reader)
 		}
 	}
 
-	p, err := resolver.Resolve(e.Home, name, prompter, selector, segPrompter, multiSelector)
+	p, err := resolver.Resolve(e.Home, name, segPrompter, multiSelector, e.Timer)
 	if err != nil {
 		return "", err
 	}

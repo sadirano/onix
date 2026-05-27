@@ -85,7 +85,7 @@ func TestGrepCmd_FzfNotFound(t *testing.T) {
 // TestGrepCmd_UnknownAlias surfaces the resolve error before any tool check.
 func TestGrepCmd_UnknownAlias(t *testing.T) {
 	home := t.TempDir()
-	err := (&GrepCmd{Args: []string{"nope", "q"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	err := (&GrepCmd{Args: []string{"nope", "q"}}).Run(context.Background(), &env{Home: home, NoPrompt: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil {
 		t.Fatal("expected error for unknown alias")
 	}
@@ -93,7 +93,7 @@ func TestGrepCmd_UnknownAlias(t *testing.T) {
 
 func TestFindCmd_UnknownAlias(t *testing.T) {
 	home := t.TempDir()
-	err := (&FindCmd{Args: []string{"nope", "q"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	err := (&FindCmd{Args: []string{"nope", "q"}}).Run(context.Background(), &env{Home: home, NoPrompt: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil {
 		t.Fatal("expected error for unknown alias")
 	}
