@@ -52,12 +52,25 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 		return err
 	}
 
+	relaxed := false
+	if query != "" && !cfg.Grep.LiteralNonASCII {
+		if rewritten := relaxNonASCII(query); rewritten != query {
+			query = rewritten
+			relaxed = true
+		}
+	}
+
 	// rg output is file:line:text — fzf splits on `:`, so {1}=file and
 	// {2}=line in the preview command. No trailing "." so rg prints
 	// "src/foo.go:" rather than "./src/foo.go:". rgCmd.Stdin is set to
 	// the parent's tty below so rg falls back to "search cwd" instead
 	// of reading patterns from a nil stdin.
 	rgArgs := []string{"--smart-case", "--color=always", "--line-number", "--no-heading"}
+	if relaxed {
+		// --no-unicode makes `.` match raw bytes, which is what lets the
+		// relaxed query find accented chars stored in any encoding.
+		rgArgs = append(rgArgs, "--no-unicode")
+	}
 	for _, spec := range cfg.Grep.RgColorsOrDefault() {
 		rgArgs = append(rgArgs, "--colors", spec)
 	}
@@ -113,6 +126,27 @@ func (c *GrepCmd) Run(ctx context.Context, e *env) error {
 	}
 
 	return openSelectionsInEditor(ctx, target, lines, true)
+}
+
+// relaxNonASCII rewrites every non-ASCII rune in the query to the regex
+// "." so a UTF-8 query matches the same position in cp1252 (or any
+// other) encoding. Encoded as a single byte, accented chars don't match
+// their multi-byte UTF-8 form across encodings — "." accepts whatever
+// rg sees there.
+func relaxNonASCII(query string) string {
+	if !strings.ContainsFunc(query, func(r rune) bool { return r > 127 }) {
+		return query
+	}
+	var b strings.Builder
+	b.Grow(len(query))
+	for _, r := range query {
+		if r > 127 {
+			b.WriteByte('.')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // -----------------------------------------------------------------------------

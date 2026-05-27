@@ -21,11 +21,16 @@ type Config struct {
 // flags on top of FZF_DEFAULT_OPTS; leave it empty to let the theme
 // (or the user's env) speak for itself. RgColors is a list of rg's
 // --colors specs (e.g. "path:fg:blue") that get passed verbatim.
+// LiteralNonASCII keeps non-ASCII characters in the query verbatim;
+// otherwise they're rewritten to the regex "." so a UTF-8 query like
+// "café" still matches the same bytes in cp1252 files (and any other
+// encoding) at the cost of accepting one extra char in that position.
 type Grep struct {
-	PreviewWindow  string   `toml:"preview_window"`
-	PreviewCommand string   `toml:"preview_command"`
-	FzfColors      string   `toml:"fzf_colors"`
-	RgColors       []string `toml:"rg_colors"`
+	PreviewWindow   string   `toml:"preview_window"`
+	PreviewCommand  string   `toml:"preview_command"`
+	FzfColors       string   `toml:"fzf_colors"`
+	RgColors        []string `toml:"rg_colors"`
+	LiteralNonASCII bool     `toml:"literal_non_ascii"`
 }
 
 // Defaults for the [grep] section. The preview-window value scrolls

@@ -127,6 +127,25 @@ func TestOpenSelectionsInEditor_NoEditor(t *testing.T) {
 	}
 }
 
+func TestRelaxNonASCII(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"hello", "hello"},
+		{"café", "caf."},
+		{"áéíóú", "....."},
+		{"id > 10", "id > 10"},
+		{"\\d+", "\\d+"},
+		{"José da Silva", "Jos. da Silva"},
+	}
+	for _, tc := range cases {
+		if got := relaxNonASCII(tc.in); got != tc.want {
+			t.Errorf("relaxNonASCII(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 // TestFindPreviewCommand confirms the OS branches: Windows points fzf at
 // the onix-preview.cmd shim, POSIX uses an inline bat-or-ls fallback.
 func TestFindPreviewCommand(t *testing.T) {
