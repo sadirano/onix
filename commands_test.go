@@ -288,29 +288,6 @@ func TestEditCmd_PropagatesEditorError(t *testing.T) {
 	}
 }
 
-// TestFastResolve_RecordsUsage guards the resolve path against silently
-// regressing on frecency: every successful resolve must append to
-// usage.log so `onix --stats` and tab-completion ranking reflect reality.
-func TestFastResolve_RecordsUsage(t *testing.T) {
-	home := t.TempDir()
-	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-
-	if _, _, err := captureStdio(func() error {
-		return fastResolve(home, "acme", false, os.Stdout, os.Stderr, os.Stdin)
-	}); err != nil {
-		t.Fatalf("fastResolve: %v", err)
-	}
-
-	usage, err := os.ReadFile(filepath.Join(home, "usage.log"))
-	if err != nil {
-		t.Fatalf("usage.log not created by resolve: %v", err)
-	}
-	if !strings.Contains(string(usage), "acme") {
-		t.Errorf("usage.log does not contain the resolved alias: %q", usage)
-	}
-}
-
 func TestSyncCmd(t *testing.T) {
 	home := t.TempDir()
 	// init sets up the directory tree and writes a base snippet.

@@ -14,19 +14,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 )
-
-// atoi is a thin wrapper that gives the dispatcher a uniform error message
-// for flags taking integer values (--top, --since-days, ...).
-func atoi(s string) (int, error) {
-	n, err := strconv.Atoi(strings.TrimSpace(s))
-	if err != nil {
-		return 0, fmt.Errorf("expected integer, got %q", s)
-	}
-	return n, nil
-}
 
 // Multi-char short flags that aren't expressible as kong single-rune shorts.
 // These are rewritten to their long forms before any other parsing.
@@ -94,8 +83,6 @@ var systemActionFlags = map[string]string{
 	"-S":           "sync",
 	"--doctor":     "doctor",
 	"-D":           "doctor",
-	"--stats":      "stats",
-	"-T":           "stats",
 	"--version":    "version",
 	"-v":           "version",
 }
@@ -134,7 +121,6 @@ SYSTEM VERBS:
   --init, -I             create ~/.onix and install shell integration
   --sync, -S             regenerate shell snippets
   --doctor, -D           health checks
-  --stats, -T [...]      navigation report
   --version, -v          print version
 
 ADD FLAGS:
@@ -216,8 +202,6 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string, std
 		return (&SyncCmd{}).Run(ctx, e)
 	case "doctor":
 		return (&DoctorCmd{}).Run(ctx, e)
-	case "stats":
-		return runStatsFromArgs(ctx, e, rest)
 	case "version":
 		return (&VersionCmd{}).Run(ctx, e)
 	}
@@ -363,45 +347,3 @@ func parseRemoveArgs(args []string) (files []string, force, recursive bool, err 
 	return files, force, recursive, nil
 }
 
-// runStatsFromArgs parses `--stats [--full] [--cold] [--since 30d]` and runs
-// StatsCmd. Stats flags are forwarded literally so the surface matches the
-// old `onix stats` invocation.
-func runStatsFromArgs(ctx context.Context, e *env, args []string) error {
-	cmd := &StatsCmd{}
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "--full":
-			cmd.Full = true
-		case a == "--cold":
-			cmd.Cold = true
-		case a == "--since":
-			if i+1 >= len(args) {
-				return fmt.Errorf("--since requires a value")
-			}
-			cmd.Since = args[i+1]
-			i++
-		case strings.HasPrefix(a, "--since="):
-			cmd.Since = strings.TrimPrefix(a, "--since=")
-		case a == "--top":
-			if i+1 >= len(args) {
-				return fmt.Errorf("--top requires a value")
-			}
-			n, err := atoi(args[i+1])
-			if err != nil {
-				return err
-			}
-			cmd.Top = n
-			i++
-		case strings.HasPrefix(a, "--top="):
-			n, err := atoi(strings.TrimPrefix(a, "--top="))
-			if err != nil {
-				return err
-			}
-			cmd.Top = n
-		default:
-			return fmt.Errorf("unknown stats flag %q", a)
-		}
-	}
-	return cmd.Run(ctx, e)
-}

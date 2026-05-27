@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strings"
 
 	"github.com/sadirano/onix/internal/resolver"
 	"github.com/sadirano/onix/internal/segments"
@@ -46,16 +45,13 @@ func fastResolve(home, name string, noPrompt bool, stdout, stderr io.Writer, std
 		return fmt.Errorf("create directory %q: %w", p, err)
 	}
 
-	// Record usage for frecency ranking.
-	_ = store.RecordUsage(home, name)
-
 	fmt.Fprintln(stdout, p)
 	return nil
 }
 
 // fastListNames prints alias names from aliases.toml, one per line, in
-// frecency order (with alphabetical fallback). Used by the PowerShell
-// tab-completer ($onixAliasCompleter) which fires every Tab press.
+// alphabetical order. Used by the PowerShell tab-completer
+// ($onixAliasCompleter) which fires every Tab press.
 func fastListNames(home string, stdout io.Writer) error {
 	data, err := os.ReadFile(store.AliasesPath(home))
 	if err != nil {
@@ -76,16 +72,7 @@ func fastListNames(home string, stdout io.Writer) error {
 		}
 		names = append(names, string(line[1:end]))
 	}
-
-	scores := store.GetFrecencyScores(home)
-	sort.Slice(names, func(i, j int) bool {
-		sI := scores[strings.ToLower(names[i])]
-		sJ := scores[strings.ToLower(names[j])]
-		if sI != sJ {
-			return sI > sJ
-		}
-		return names[i] < names[j]
-	})
+	sort.Strings(names)
 
 	for _, n := range names {
 		fmt.Fprintln(stdout, n)

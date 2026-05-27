@@ -143,7 +143,6 @@ var loadBearingOnixFiles = map[string]bool{
 	"config.toml":   true,
 	"segments.toml": true,
 	"plugins.toml":  true,
-	"usage.log":     true,
 }
 
 func (c *RemoveCmd) Run(ctx context.Context, e *env) error {
@@ -604,10 +603,6 @@ func resolveAliasPathOpt(e *env, name string, noPrompt bool) (string, error) {
 	if err := os.MkdirAll(p, 0o755); err != nil {
 		return "", fmt.Errorf("create directory %q: %w", p, err)
 	}
-	// Record usage for frecency on every successful resolve, regardless of
-	// which command triggered it (resolve/edit/yank/run/exec/...). Mirrors
-	// the equivalent call in fastResolve so both code paths agree.
-	_ = store.RecordUsage(e.Home, name)
 	return p, nil
 }
 

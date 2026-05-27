@@ -140,18 +140,6 @@ func TestRun(t *testing.T) {
 			t.Errorf("--contexts exit %d", code)
 		}
 	})
-	t.Run("stats verb on empty home", func(t *testing.T) {
-		// Need a writable home with no usage.log — the stats command should
-		// still run cleanly.
-		statsHome := t.TempDir()
-		t.Setenv("ONIX_HOME", statsHome)
-		code, _, _ := runOnix("onix", "--stats")
-		if code != 0 {
-			t.Errorf("--stats exit %d", code)
-		}
-		// Restore.
-		t.Setenv("ONIX_HOME", tempHome)
-	})
 }
 
 // TestRun_AliasActions drives dispatchAlias's per-action switch arms via

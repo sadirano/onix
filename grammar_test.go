@@ -227,63 +227,6 @@ func contains(haystack []string, needle string) bool {
 	return false
 }
 
-func TestAtoi(t *testing.T) {
-	tests := []struct {
-		in      string
-		want    int
-		wantErr bool
-	}{
-		{"42", 42, false},
-		{" 42 ", 42, false},
-		{"-7", -7, false},
-		{"abc", 0, true},
-		{"", 0, true},
-	}
-	for _, tt := range tests {
-		got, err := atoi(tt.in)
-		if (err != nil) != tt.wantErr {
-			t.Errorf("atoi(%q) err = %v, wantErr %v", tt.in, err, tt.wantErr)
-		}
-		if got != tt.want {
-			t.Errorf("atoi(%q) = %v, want %v", tt.in, got, tt.want)
-		}
-		if tt.wantErr && err != nil && !strings.Contains(err.Error(), tt.in) {
-			t.Errorf("error message %q should contain input %q", err.Error(), tt.in)
-		}
-	}
-}
-
-func TestRunStatsFromArgs(t *testing.T) {
-	home := newTestHome(t)
-	e := &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
-	ctx := context.Background()
-
-	tests := []struct {
-		name    string
-		args    []string
-		wantErr bool
-	}{
-		{"flags", []string{"--full", "--cold"}, false},
-		{"since space", []string{"--since", "30d"}, false},
-		{"since equals", []string{"--since=30d"}, false},
-		{"since missing value", []string{"--since"}, true},
-		{"top space", []string{"--top", "5"}, false},
-		{"top equals", []string{"--top=5"}, false},
-		{"top missing value", []string{"--top"}, true},
-		{"top bad value", []string{"--top", "abc"}, true},
-		{"unknown flag", []string{"--bogus"}, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := runStatsFromArgs(ctx, e, tt.args)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("runStatsFromArgs() err = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
 func TestDispatchSystem(t *testing.T) {
 	home := newTestHome(t)
 	e := &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}
