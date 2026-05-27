@@ -20,7 +20,7 @@ import (
 // ~/.onix/segments.toml file. Set scope = "global" to make the entry
 // available to all aliases (the old implicit behaviour). Without it, the
 // entry is ignored during global lookup — it must be in a per-alias file
-// (~/.onix/segments.d/<alias>.toml or <alias>/.onix/segments.toml) to
+// (~/.onix/segments/<alias>.toml or <alias>/.onix/segments.toml) to
 // take effect.
 type ContextDef struct {
 	Segment        string            `toml:"segment"`
@@ -91,10 +91,10 @@ func LocalPath(aliasBase string) string {
 }
 
 // CentralPath returns the central per-alias segments file path under the
-// onix home. Files live in ~/.onix/segments.d/<alias>.toml and are named by
+// onix home. Files live in ~/.onix/segments/<alias>.toml and are named by
 // the lowercase alias to avoid filesystem case quirks.
 func CentralPath(home, alias string) string {
-	return filepath.Join(home, "segments.d", strings.ToLower(alias)+".toml")
+	return filepath.Join(home, "segments", strings.ToLower(alias)+".toml")
 }
 
 // SaveSegmentsFile writes sf to the exact file path atomically. Parent

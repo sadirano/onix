@@ -169,7 +169,7 @@ Step "list-names" {
 Step "segments" {
     # Entries in the global segments.toml must carry `scope = "global"` to
     # be visible to all aliases — per-alias segments live in
-    # ~/.onix/segments.d/<alias>.toml or <alias>/.onix/segments.toml.
+    # ~/.onix/segments/<alias>.toml or <alias>/.onix/segments.toml.
     $segs = Join-Path $env:ONIX_HOME 'segments.toml'
     @'
 version = 3
