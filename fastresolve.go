@@ -66,7 +66,7 @@ func fastListNames(home string, stdout io.Writer) error {
 	}
 	names := make([]string, 0, 32)
 	for _, raw := range bytes.Split(data, []byte{'\n'}) {
-		line := trimLine(raw)
+		line := resolver.TrimLine(raw)
 		if len(line) == 0 || line[0] != '[' {
 			continue
 		}
@@ -91,21 +91,4 @@ func fastListNames(home string, stdout io.Writer) error {
 		fmt.Fprintln(stdout, n)
 	}
 	return nil
-}
-
-// trimLine trims a single line of leading/trailing spaces, tabs, and the
-// trailing CR.
-func trimLine(line []byte) []byte {
-	for len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
-		line = line[1:]
-	}
-	for len(line) > 0 {
-		c := line[len(line)-1]
-		if c == ' ' || c == '\t' || c == '\r' {
-			line = line[:len(line)-1]
-			continue
-		}
-		break
-	}
-	return line
 }

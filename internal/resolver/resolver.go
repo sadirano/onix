@@ -299,7 +299,7 @@ func evalSegment(cd *segments.ContextDef, ps segments.ParsedSegment, aliasBase, 
 func ScanForAlias(data []byte, target string) (string, bool) {
 	lines := bytes.Split(data, []byte{'\n'})
 	for i := 0; i < len(lines); i++ {
-		line := trimLine(lines[i])
+		line := TrimLine(lines[i])
 		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
@@ -315,7 +315,7 @@ func ScanForAlias(data []byte, target string) (string, bool) {
 			continue
 		}
 		for j := i + 1; j < len(lines); j++ {
-			l := trimLine(lines[j])
+			l := TrimLine(lines[j])
 			if len(l) == 0 || l[0] == '#' {
 				continue
 			}
@@ -395,7 +395,10 @@ func parsePathLine(line []byte) (string, bool) {
 	return "", false
 }
 
-func trimLine(line []byte) []byte {
+// TrimLine trims a single line of leading/trailing spaces, tabs, and the
+// trailing CR. Exported so the fastresolve scanner in package main can
+// reuse the exact same byte-level trim.
+func TrimLine(line []byte) []byte {
 	for len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
 		line = line[1:]
 	}
