@@ -20,8 +20,6 @@ import (
 func fastResolve(home, name string, stdout, stderr io.Writer, stdin io.Reader, t *timer) error {
 	var segPrompter resolver.SegmentPrompter
 
-	var multiSelector func(string, []string) string
-
 	// Use environment for NoPrompt
 	noPrompt := os.Getenv("ONIX_NO_PROMPT") == "1"
 
@@ -30,11 +28,8 @@ func fastResolve(home, name string, stdout, stderr io.Writer, stdin io.Reader, t
 		segPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
 			return promptSegmentDefinition(home, segmentName, inlineValue, stderr, reader, aliasBase, aliasName)
 		}
-		multiSelector = func(alias string, paths []string) string {
-			return promptMultiTargetPath(alias, paths, stderr, reader)
-		}
 	}
-	p, err := resolver.Resolve(home, name, segPrompter, multiSelector, t)
+	p, err := resolver.Resolve(home, name, segPrompter, t)
 	if err != nil {
 		return err
 	}

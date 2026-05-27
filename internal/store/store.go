@@ -17,25 +17,8 @@ type Store struct {
 }
 
 // Alias is one alias entry.
-//
-// Single-target aliases use Path. Multi-target aliases use Paths; when Paths
-// is non-empty it takes precedence over Path. Resolution of multiple targets
-// is handled by the caller (typically an interactive fzf picker).
 type Alias struct {
-	Path  string   `toml:"path,omitempty"`
-	Paths []string `toml:"paths,omitempty"`
-}
-
-// AllPaths returns the effective set of paths for this alias.
-// Paths takes precedence over Path for multi-target aliases.
-func (a Alias) AllPaths() []string {
-	if len(a.Paths) > 0 {
-		return a.Paths
-	}
-	if a.Path != "" {
-		return []string{a.Path}
-	}
-	return nil
+	Path string `toml:"path,omitempty"`
 }
 
 // AliasesPath returns home/aliases.toml.

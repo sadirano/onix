@@ -6,15 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/sadirano/onix/internal/config"
 )
 
 var updateGolden = flag.Bool("update", false, "update golden files")
 
 func TestWritePwshShellSnippet_NoActions(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, err := os.ReadFile(PwshPath(dir))
@@ -24,22 +22,9 @@ func TestWritePwshShellSnippet_NoActions(t *testing.T) {
 	assertGolden(t, scrub(string(data), dir), "pwsh-no-actions.ps1.golden")
 }
 
-func TestWritePwshShellSnippet_WithActions(t *testing.T) {
-	dir := t.TempDir()
-	actions := []config.Action{
-		{Name: "test", Exec: "go", Args: []string{"test", "./..."}},
-		{Name: "pr", Exec: "gh", Args: []string{"pr", "view", "{extras}"}},
-	}
-	if err := WritePwshShellSnippet(dir, nil, actions); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	data, _ := os.ReadFile(PwshPath(dir))
-	assertGolden(t, scrub(string(data), dir), "pwsh-with-actions.ps1.golden")
-}
-
 func TestWriteBashShellSnippet_NoActions(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteBashShellSnippet(dir, nil, nil); err != nil {
+	if err := WriteBashShellSnippet(dir, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, err := os.ReadFile(BashPath(dir))
@@ -49,22 +34,9 @@ func TestWriteBashShellSnippet_NoActions(t *testing.T) {
 	assertGolden(t, scrub(string(data), dir), "bash-no-actions.sh.golden")
 }
 
-func TestWriteBashShellSnippet_WithActions(t *testing.T) {
-	dir := t.TempDir()
-	actions := []config.Action{
-		{Name: "test", Exec: "go", Args: []string{"test", "./..."}},
-		{Name: "pr", Exec: "gh", Args: []string{"pr", "view", "{extras}"}},
-	}
-	if err := WriteBashShellSnippet(dir, nil, actions); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	data, _ := os.ReadFile(BashPath(dir))
-	assertGolden(t, scrub(string(data), dir), "bash-with-actions.sh.golden")
-}
-
 func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteShellSnippet(dir, nil, nil); err != nil {
+	if err := WriteShellSnippet(dir, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	pwshExists := fileExists(PwshPath(dir))
@@ -76,7 +48,7 @@ func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 
 func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	path := filepath.Join(dir, "bin", "o.cmd")
@@ -107,7 +79,7 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 
 func TestWritePwshShellSnippet_FindPreviewWrapper(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	path := filepath.Join(dir, "bin", FindPreviewWrapperName)

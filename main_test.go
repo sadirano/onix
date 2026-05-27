@@ -96,17 +96,7 @@ func TestRun(t *testing.T) {
 			t.Errorf("--list-names exit %d", code)
 		}
 	})
-	t.Run("doctor verb (returns warnings, not errors, when home is clean)", func(t *testing.T) {
-		// Use the existing tempHome that was set up earlier in this test.
-		// doctor reports warnings about missing profile etc. but still exits 0
-		// unless something is genuinely broken.
-		code, _, _ := runOnix("onix", "--doctor")
-		// The home doesn't have a snippet/profile so this may exit non-zero.
-		// We only care that dispatching to it doesn't crash.
-		if code != 0 && code != 1 {
-			t.Errorf("--doctor exit %d, want 0 or 1", code)
-		}
-	})
+
 	t.Run("contexts verb", func(t *testing.T) {
 		code, _, _ := runOnix("onix", "--contexts")
 		if code != 0 {
@@ -196,24 +186,6 @@ func TestRun_AliasActions(t *testing.T) {
 		}
 	})
 
-	t.Run("--exec requires action name", func(t *testing.T) {
-		code, _, errOut := runOnix("onix", "acme", "-X")
-		if code != 1 {
-			t.Errorf("expected exit 1, got %d", code)
-		}
-		if !strings.Contains(errOut, "--exec requires") {
-			t.Errorf("expected exec usage error, got %q", errOut)
-		}
-	})
-
-	// Verbs that need an unknown action to fail fast — exercises the
-	// dispatcher's switch arm without spawning external tools.
-	t.Run("exec to unknown action errors", func(t *testing.T) {
-		code, _, _ := runOnix("onix", "acme", "-X", "nope")
-		if code != 1 {
-			t.Errorf("expected exit 1 for unknown action, got %d", code)
-		}
-	})
 
 	t.Run("explore dispatch", func(t *testing.T) {
 		// On Windows --explore launches explorer.exe via Start, returns quickly.

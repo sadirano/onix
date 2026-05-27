@@ -5,50 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/sadirano/onix/internal/segments"
 )
 
-// readLine prints prompt and reads one line from reader.
-// Returns ("", false) when the user cancels with Ctrl+C or a stream error occurs.
-//
-// The prompt is written to stderr so callers that capture stdout via $() in
-// bash or Tee-Object in PowerShell don't end up with the prompt text mixed
-// into their captured value.
-func readLine(prompt string, stderr io.Writer, reader *bufio.Reader) (string, bool) {
-	fmt.Fprint(stderr, prompt)
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	defer signal.Stop(sig)
-
-	type result struct {
-		line string
-		err  error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		line, err := reader.ReadString('\n')
-		ch <- result{line, err}
-	}()
-
-	select {
-	case <-sig:
-		fmt.Fprintln(stderr)
-		os.Exit(1)
-		return "", false
-	case r := <-ch:
-		if r.err != nil {
-			return "", false
-		}
-		return strings.TrimSpace(r.line), true
-	}
-}
 
 // promptSegmentDefinition asks the user to define a [[contexts]] entry for
 // a segment that wasn't found in segments.toml by opening their editor with
@@ -117,31 +80,4 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 	return cd, nil
 }
 
-func promptMultiTargetPath(alias string, paths []string, stderr io.Writer, reader *bufio.Reader) string {
-	header := fmt.Sprintf("Multiple paths for %q — pick one:", alias)
 
-	if fzf, err := exec.LookPath("fzf"); err == nil {
-		cmd := execCommand(fzf, "--header", header, "--reverse", "--height", "40%")
-		cmd.Stderr = stderr
-		cmd.Stdin = strings.NewReader(strings.Join(paths, "\n"))
-		out, err := cmd.Output()
-		if err == nil {
-			return strings.TrimSpace(string(out))
-		}
-		return ""
-	}
-
-	fmt.Fprintf(stderr, "%s\n", header)
-	for i, p := range paths {
-		fmt.Fprintf(stderr, "  %d) %s\n", i+1, p)
-	}
-	line, ok := readLine(fmt.Sprintf("Select [1-%d] or press Enter to cancel: ", len(paths)), stderr, reader)
-	if !ok || line == "" {
-		return ""
-	}
-	idx, err := strconv.Atoi(line)
-	if err != nil || idx < 1 || idx > len(paths) {
-		return ""
-	}
-	return paths[idx-1]
-}

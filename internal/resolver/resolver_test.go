@@ -15,14 +15,14 @@ func TestResolve_Errors(t *testing.T) {
 	}})
 
 	t.Run("unknown alias", func(t *testing.T) {
-		_, err := Resolve(dir, "nope", nil, nil, nil)
+		_, err := Resolve(dir, "nope", nil, nil)
 		if err == nil {
 			t.Error("expected error for unknown alias")
 		}
 	})
 
 	t.Run("invalid name", func(t *testing.T) {
-		_, err := Resolve(dir, "foo/bar", nil, nil, nil)
+		_, err := Resolve(dir, "foo/bar", nil, nil)
 		if err == nil {
 			t.Error("expected error for invalid alias name")
 		}
@@ -35,7 +35,7 @@ func TestResolve_Basic(t *testing.T) {
 	_ = store.SaveStore(dir, s)
 
 	t.Run("fast path", func(t *testing.T) {
-		got, err := Resolve(dir, "a", nil, nil, nil)
+		got, err := Resolve(dir, "a", nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func TestResolve_Basic(t *testing.T) {
 	})
 
 	t.Run("slow path", func(t *testing.T) {
-		got, err := Resolve(dir, "a", nil, nil, nil)
+		got, err := Resolve(dir, "a", nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -62,7 +62,7 @@ func TestResolve_Segmented_UnknownNoPrompt(t *testing.T) {
 	if err := store.SaveStore(dir, s); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Resolve(dir, "mystery@acme", nil, nil, nil)
+	_, err := Resolve(dir, "mystery@acme", nil, nil)
 	if err == nil {
 		t.Fatal("expected error for undefined segment")
 	}

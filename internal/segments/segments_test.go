@@ -3,7 +3,6 @@ package segments
 import (
 	"os"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -52,21 +51,12 @@ func TestParseSegmentedAlias(t *testing.T) {
 	}
 }
 
-// TestLoadSegments_AllSourceTypes confirms a single [[contexts]] entry per
-// source kind loads cleanly.
-func TestLoadSegments_AllSourceTypes(t *testing.T) {
+// TestLoadSegments_TemplateType confirms a template context entry loads cleanly.
+func TestLoadSegments_TemplateType(t *testing.T) {
 	dir := t.TempDir()
 	body := `[[contexts]]
 segment = "tasks"
 source-template = "/${tasks}"
-
-[[contexts]]
-segment = "branch"
-source-exec = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
-
-[[contexts]]
-segment = "current"
-source-file = "@home/state/current"
 `
 	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -75,44 +65,16 @@ source-file = "@home/state/current"
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if got, want := len(sf.Contexts), 3; got != want {
+	if got, want := len(sf.Contexts), 1; got != want {
 		t.Fatalf("contexts = %d, want %d", got, want)
 	}
 	if sf.Contexts[0].SourceTemplate != "/${tasks}" {
 		t.Errorf("template source missing: %+v", sf.Contexts[0])
 	}
-	if got := sf.Contexts[1].SourceExec; len(got) != 4 || got[0] != "git" {
-		t.Errorf("exec source missing: %+v", sf.Contexts[1])
-	}
-	if sf.Contexts[2].SourceFile != "@home/state/current" {
-		t.Errorf("file source missing: %+v", sf.Contexts[2])
-	}
-}
-
-// TestLoadSegments_MultipleSourcesError catches a context that declares
-// more than one source-* field. Error mentions the segment name.
-func TestLoadSegments_MultipleSourcesError(t *testing.T) {
-	dir := t.TempDir()
-	body := `[[contexts]]
-segment = "ambiguous"
-source-template = "/${ambiguous}"
-source-file = "@home/state/x"
-`
-	if err := os.WriteFile(Path(dir), []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err := LoadSegments(dir)
-	if err == nil {
-		t.Fatal("expected error for multiple sources, got nil")
-	}
-	if !strings.Contains(err.Error(), "ambiguous") {
-		t.Errorf("error should mention segment name, got: %v", err)
-	}
 }
 
 // TestLoadSegments_ContextWithoutSourceIsAllowed confirms a context with no
-// source-* field loads cleanly. Such a context contributes no path fragment;
-// its env map is still consulted during resolve-time variable lookup.
+// source-* field loads cleanly.
 func TestLoadSegments_ContextWithoutSourceIsAllowed(t *testing.T) {
 	dir := t.TempDir()
 	body := `[[contexts]]
@@ -133,7 +95,7 @@ env = { DEPLOY_ENV = "production" }
 	if cd.Env["DEPLOY_ENV"] != "production" {
 		t.Errorf("env not preserved: %+v", cd.Env)
 	}
-	if cd.SourceTemplate != "" || len(cd.SourceExec) != 0 || cd.SourceFile != "" {
+	if cd.SourceTemplate != "" {
 		t.Errorf("no source-* expected, got %+v", cd)
 	}
 }

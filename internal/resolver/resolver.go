@@ -49,14 +49,9 @@ type SegmentPrompter func(segmentName, inlineValue, aliasBase, aliasName string)
 // when a referenced segment has no [[contexts]] entry. Passing nil makes
 // unknown segments a hard error — used by --no-prompt callers.
 //
-// multiSelector is invoked when an alias resolves to multiple paths. It
-// receives the alias name and the path list; the chosen path is returned.
-// Returning "" is treated as ErrCancelled. Pass nil to silently pick the
-// first path (useful for non-interactive callers).
-//
 // Resolve does NOT create directories on disk. It returns a host-native path
 // (using filepath.FromSlash).
-func Resolve(home, name string, segmentPrompter SegmentPrompter, multiSelector func(string, []string) string, t Timer) (string, error) {
+func Resolve(home, name string, segmentPrompter SegmentPrompter, t Timer) (string, error) {
 	if t != nil {
 		t.Mark("resolve-start")
 	}
@@ -93,25 +88,10 @@ func Resolve(home, name string, segmentPrompter SegmentPrompter, multiSelector f
 		}
 		return "", fmt.Errorf("unknown alias %q", name)
 	}
-
-	// Multi-target: when the alias holds multiple paths, ask the user to pick.
-	all := a.AllPaths()
-	switch len(all) {
-	case 0:
+	if a.Path == "" {
 		return "", fmt.Errorf("alias %q has no path set", name)
-	case 1:
-		return filepath.FromSlash(all[0]), nil
-	default:
-		if multiSelector == nil {
-			// Non-interactive callers get the first path silently.
-			return filepath.FromSlash(all[0]), nil
-		}
-		chosen := multiSelector(name, all)
-		if chosen == "" {
-			return "", ErrCancelled
-		}
-		return filepath.FromSlash(chosen), nil
 	}
+	return filepath.FromSlash(a.Path), nil
 }
 
 func resolveSegmented(home, input string, prompter SegmentPrompter, t Timer) (string, error) {
@@ -232,19 +212,14 @@ func evalSegment(cd *segments.ContextDef, ps segments.ParsedSegment, aliasBase, 
 		return os.LookupEnv(name)
 	}
 
-	switch {
-	case cd.SourceTemplate != "":
+	if cd.SourceTemplate != "" {
 		return segments.EvalTemplateSource(cd.SourceTemplate, lookup)
-	case len(cd.SourceExec) > 0:
-		return segments.EvalExecSource(cd.SourceExec, aliasBase, lookup)
-	case cd.SourceFile != "":
-		return segments.EvalFileSource(cd.SourceFile, home, aliasBase, lookup)
 	}
 	if ps.HasValue {
 		// No source-* but an inline value was supplied — there's no
 		// template to interpret it. The user almost certainly wanted a
 		// source-* field; surface that.
-		return "", fmt.Errorf("segment %q: inline value %q has no source-template / source-exec / source-file to consume it", cd.Segment, ps.Value)
+		return "", fmt.Errorf("segment %q: inline value %q has no source-template to consume it", cd.Segment, ps.Value)
 	}
 	return "", nil
 }

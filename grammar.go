@@ -56,8 +56,6 @@ var aliasActionFlags = map[string]string{
 	"-f":        "find",
 	"--run":     "run",
 	"-r":        "run",
-	"--exec":    "exec",
-	"-X":        "exec",
 }
 
 // systemActionFlags lists flags that operate on the alias system as a whole
@@ -77,9 +75,6 @@ var systemActionFlags = map[string]string{
 	"-I":           "init",
 	"--sync":       "sync",
 	"-S":           "sync",
-	"--doctor":     "doctor",
-
-	"-D":        "doctor",
 	"--version": "version",
 	"-v":        "version",
 }
@@ -103,7 +98,6 @@ ALIAS ACTIONS:
   --grep, -g <query>     ripgrep + fzf in alias dir
   --find, -f <query>     fd / Everything + fzf in alias dir
   --run, -r <cmd...>     exec command in alias dir
-  --exec, -X <name>      run a config.toml action
 
 SYSTEM VERBS:
   --list, -ls, -l        list aliases
@@ -113,11 +107,9 @@ SYSTEM VERBS:
   --contexts, -c         list segment contexts
   --init, -I             create ~/.onix and install shell integration
   --sync, -S             regenerate shell snippets
-  --doctor, -D           health checks
   --version, -v          print version
 
 ADD FLAGS:
-  --add-path                 append path to the alias (creates multi-target)
 
 REMOVE FLAGS:
   --force, -F                skip confirm; bypass load-bearing file guard
@@ -191,8 +183,6 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string, std
 		return cmd.Run(ctx, e)
 	case "sync":
 		return (&SyncCmd{}).Run(ctx, e)
-	case "doctor":
-		return (&DoctorCmd{}).Run(ctx, e)
 	case "version":
 		return (&VersionCmd{}).Run(ctx, e)
 	}
@@ -251,12 +241,6 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 		return (&FindCmd{Args: append([]string{alias}, actionArgs...)}).Run(ctx, e)
 	case "run":
 		return (&RunCmd{Args: append([]string{alias}, actionArgs...)}).Run(ctx, e)
-	case "exec":
-		if len(actionArgs) == 0 {
-			return fmt.Errorf("--exec requires an action name")
-		}
-		// ExecCmd's argv shape is [actionName, alias, extras...].
-		return (&ExecCmd{Args: append([]string{actionArgs[0], alias}, actionArgs[1:]...)}).Run(ctx, e)
 	}
 	return fmt.Errorf("unknown action %q", action)
 }
@@ -276,12 +260,10 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	}
 
-	// Parse: <path> [--add-path]
+	// Parse: <path>
 	add := &AddCmd{Alias: alias}
 	for _, a := range cleaned {
 		switch {
-		case a == "--add-path":
-			add.AddPath = true
 		case startsWithDash(a):
 			return fmt.Errorf("unknown flag %q on add form", a)
 		default:

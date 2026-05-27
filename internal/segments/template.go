@@ -113,3 +113,15 @@ func splitPathSeps(s string) []string {
 	out = append(out, s[start:])
 	return out
 }
+
+// LookupFunc is the variable-resolution callback shared by all source
+// evaluators. Returns (value, true) for a bound name; (_, false) is an
+// unresolved-variable error inside ExpandTemplate.
+type LookupFunc func(name string) (string, bool)
+
+// EvalTemplateSource expands tmpl with lookup. The result is the raw
+// fragment — callers must run GuardFragment before joining it onto the
+// alias target.
+func EvalTemplateSource(tmpl string, lookup LookupFunc) (string, error) {
+	return ExpandTemplate(tmpl, "source-template", lookup)
+}

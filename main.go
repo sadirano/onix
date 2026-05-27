@@ -88,6 +88,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 		Stdin:    stdin,
 		Timer:    t,
 	}
+	if e.NoPrompt {
+		os.Setenv("ONIX_NO_PROMPT", "1")
+	}
 
 	t.mark("pre-dispatch")
 	if err := dispatchNewGrammar(sigCtx, e, processedArgs[1:], stdout, stderr); err != nil {

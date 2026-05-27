@@ -173,14 +173,14 @@ fi
 `
 
 // WriteShellSnippet regenerates the host-platform shell snippet.
-func WriteShellSnippet(home string, shortcuts map[string]string, actions []config.Action) error {
+func WriteShellSnippet(home string, shortcuts map[string]string) error {
 	if runtime.GOOS == "windows" {
-		return WritePwshShellSnippet(home, shortcuts, actions)
+		return WritePwshShellSnippet(home, shortcuts)
 	}
-	return WriteBashShellSnippet(home, shortcuts, actions)
+	return WriteBashShellSnippet(home, shortcuts)
 }
 
-func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []config.Action) error {
+func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
 	path := PwshPath(home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -231,12 +231,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, actions []c
 	writeAliasFlagWrapper(binDir, exe, s["sg"], "--grep")
 	writeAliasFlagWrapper(binDir, exe, s["ff"], "--find")
 
-	for _, a := range actions {
-		writeActionFunction(&b, a)
-		writeAliasFlagWrapper(binDir, exe, a.Name, "--exec", a.Name)
-	}
-
-	writeCompleterRegistration(&b, s, actions)
+	writeCompleterRegistration(&b, s)
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
@@ -364,7 +359,7 @@ func writeAliasFlagWrapper(binDir, exe, name, flag string, extras ...string) {
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
-func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []config.Action) error {
+func WriteBashShellSnippet(home string, shortcuts map[string]string) error {
 	path := BashPath(home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -398,11 +393,7 @@ func WriteBashShellSnippet(home string, shortcuts map[string]string, actions []c
 	fmt.Fprintf(&b, bashFF, s["ff"])
 	b.WriteString("\n")
 
-	for _, a := range actions {
-		writeActionFunctionBash(&b, a)
-	}
-
-	writeCompleterRegistrationBash(&b, s, actions)
+	writeCompleterRegistrationBash(&b, s)
 
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
@@ -413,7 +404,7 @@ func RegenerateShellSnippet(home string) error {
 	if err != nil {
 		return err
 	}
-	return WriteShellSnippet(home, cfg.Shortcuts, cfg.Actions)
+	return WriteShellSnippet(home, cfg.Shortcuts)
 }
 
 var OnixExeOverride string
@@ -435,49 +426,20 @@ func resolveOnixExe() (string, error) {
 	return abs, nil
 }
 
-func writeActionFunction(b *strings.Builder, a config.Action) {
-	fmt.Fprintf(b, `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --exec %s @Rest
-}
-
-`, a.Name, a.Name)
-}
-
-func writeCompleterRegistration(b *strings.Builder, shortcuts map[string]string, actions []config.Action) {
-	names := make([]string, 0, 7+len(actions))
+func writeCompleterRegistration(b *strings.Builder, shortcuts map[string]string) {
+	names := make([]string, 0, len(shortcuts))
 	for _, v := range shortcuts {
 		names = append(names, v)
-	}
-	for _, a := range actions {
-		names = append(names, a.Name)
 	}
 	slices.Sort(names)
 	fmt.Fprintf(b, "Register-ArgumentCompleter -CommandName %s -ParameterName Alias -ScriptBlock $onixAliasCompleter\n",
 		strings.Join(names, ","))
 }
 
-func writeActionFunctionBash(b *strings.Builder, a config.Action) {
-	fmt.Fprintf(b, `%s() {
-    local alias=$1
-    shift
-    "$ONIX_EXE" "$alias" --exec %s "$@"
-}
-
-`, a.Name, a.Name)
-}
-
-func writeCompleterRegistrationBash(b *strings.Builder, shortcuts map[string]string, actions []config.Action) {
-	names := make([]string, 0, 7+len(actions))
+func writeCompleterRegistrationBash(b *strings.Builder, shortcuts map[string]string) {
+	names := make([]string, 0, len(shortcuts))
 	for _, v := range shortcuts {
 		names = append(names, v)
-	}
-	for _, a := range actions {
-		names = append(names, a.Name)
 	}
 	slices.Sort(names)
 	fmt.Fprintf(b, `if [ -n "$BASH_VERSION" ]; then

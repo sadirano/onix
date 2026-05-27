@@ -229,52 +229,6 @@ func TestRunCmd(t *testing.T) {
 	})
 }
 
-func TestExecCmd(t *testing.T) {
-	home := t.TempDir()
-	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
-
-	bin, args := noopExec()
-	// Write config.toml declaring a 'noop' action that runs our no-op binary.
-	cfgBody := "[[actions]]\nname = \"noop\"\nexec = \"" + bin + "\"\nargs = ["
-	for i, a := range args {
-		if i > 0 {
-			cfgBody += ", "
-		}
-		cfgBody += "\"" + a + "\""
-	}
-	cfgBody += "]\n"
-	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfgBody), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Run("happy path", func(t *testing.T) {
-		_, _, err := captureStdio(func() error {
-			return (&ExecCmd{Args: []string{"noop", "acme"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
-		})
-		if err != nil {
-			t.Errorf("ExecCmd.Run: %v", err)
-		}
-	})
-
-	t.Run("rejects unknown action", func(t *testing.T) {
-		_, _, err := captureStdio(func() error {
-			return (&ExecCmd{Args: []string{"nope", "acme"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
-		})
-		if err == nil {
-			t.Error("ExecCmd with unknown action should error")
-		}
-	})
-
-	t.Run("rejects too few args", func(t *testing.T) {
-		_, _, err := captureStdio(func() error {
-			return (&ExecCmd{Args: []string{"noop"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
-		})
-		if err == nil {
-			t.Error("ExecCmd with only action should error")
-		}
-	})
-}
 
 func TestEditCmd_PropagatesEditorError(t *testing.T) {
 	home := t.TempDir()
@@ -310,32 +264,6 @@ func TestSyncCmd(t *testing.T) {
 	}
 }
 
-// TestSyncCmd_WithActions confirms the actions-listing branch fires when
-// config.toml declares custom actions.
-func TestSyncCmd_WithActions(t *testing.T) {
-	home := t.TempDir()
-	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true}); err != nil {
-		t.Fatalf("init: %v", err)
-	}
-	cfg := `[[actions]]
-name = "say"
-exec = "cmd.exe"
-args = ["/c", "echo", "hi"]
-`
-	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, stderr, err := captureStdio(func() error {
-		return (&SyncCmd{}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
-	})
-	if err != nil {
-		t.Fatalf("SyncCmd.Run: %v", err)
-	}
-	if !strings.Contains(stderr, "custom actions: say") {
-		t.Errorf("expected 'custom actions: say' in stderr: %q", stderr)
-	}
-}
 
 // captureStdio runs fn with os.Stdout and os.Stderr redirected to pipes,
 // returning the captured output. We restore the originals before

@@ -57,8 +57,6 @@ func TestSourceSummary(t *testing.T) {
 		want string
 	}{
 		{"template", segments.ContextDef{SourceTemplate: "/docs"}, "template=/docs"},
-		{"exec", segments.ContextDef{SourceExec: []string{"git", "rev-parse", "HEAD"}}, "exec=git rev-parse HEAD"},
-		{"file", segments.ContextDef{SourceFile: "@home/state/x"}, "file=@home/state/x"},
 		{"none", segments.ContextDef{}, "-"},
 	}
 	for _, tc := range cases {

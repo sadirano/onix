@@ -31,7 +31,7 @@ $tmp = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP "onix-smok
 $env:ONIX_HOME = $tmp.FullName
 Write-Host "ONIX_HOME = $env:ONIX_HOME"
 
-# 3. The smoke sequence: init (skip-profile), add, list, resolve, yank, doctor.
+# 3. The smoke sequence: init (skip-profile), add, list, resolve, yank.
 function Step($label, [scriptblock]$block) {
     Write-Host "--- $label"
     & $block
@@ -117,42 +117,7 @@ Step "remove-file-with-force" {
 # runs `cmd.exe /c echo hi from <alias>`, regenerate the shell snippet, run
 # it via `onix <alias> -X <action>`, and verify the output contains the
 # expected string.
-Step "custom-action" {
-    $cfg = Join-Path $env:ONIX_HOME 'config.toml'
-    @'
-[[actions]]
-name = "say"
-exec = "cmd.exe"
-args = ["/c", "echo", "hello", "from", "{alias}"]
-'@ | Set-Content -Path $cfg
 
-    & $exe --sync
-    if ($LASTEXITCODE -ne 0) { throw "--sync failed" }
-
-    $out = & $exe demo -X say
-    if ($LASTEXITCODE -ne 0) { throw "demo -X say failed" }
-    if ($out -notmatch 'hello from demo') {
-        throw "unexpected output: $out"
-    }
-    Write-Host "demo -X say -> $out"
-
-    # The regenerated snippet must reference the new action AND be pinned
-    # to the absolute path of the binary that generated it. Pinning is what
-    # prevents a stale onix on PATH from intercepting calls in dev shells.
-    $snippet = Get-Content (Join-Path $env:ONIX_HOME 'shell\onix.ps1') -Raw
-    if ($snippet -notmatch 'function global:say') {
-        throw "snippet missing 'function global:say'"
-    }
-    if ($snippet -notmatch 'Register-ArgumentCompleter.*-CommandName.*\bsay\b') {
-        throw "snippet missing completer registration for 'say'"
-    }
-    if ($snippet -notmatch [regex]::Escape('$global:onixExe')) {
-        throw "snippet missing `$global:onixExe pin"
-    }
-    if ($snippet -notmatch [regex]::Escape($exe)) {
-        throw "snippet not pinned to test binary $exe"
-    }
-}
 
 Step "list-names" {
     $names = & $exe --list-names
@@ -231,13 +196,7 @@ source-template = "/tickets/${tasks}"
     Write-Host "  mystery@demo    -> errored under --no-prompt (expected)"
 }
 
-Step "doctor" {
-    # doctor exits non-zero only when there's an actual error; warnings are fine
-    # because we deliberately skipped the $PROFILE step above.
-    & $exe --doctor
-    # Allow non-zero here because the smoke env has no real PROFILE sourced.
-    $script:LASTEXITCODE = 0
-}
+
 
 Step "version" {
     & $exe --version

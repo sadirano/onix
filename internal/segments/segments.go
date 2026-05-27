@@ -27,8 +27,6 @@ type ContextDef struct {
 	Scope          string            `toml:"scope,omitempty"`
 	Param          string            `toml:"param,omitempty"`
 	SourceTemplate string            `toml:"source-template,omitempty"`
-	SourceExec     []string          `toml:"source-exec,omitempty"`
-	SourceFile     string            `toml:"source-file,omitempty"`
 	Env            map[string]string `toml:"env,omitempty"`
 }
 
@@ -146,9 +144,6 @@ func LoadSegmentsFile(filePath string) (*SegmentsFile, error) {
 		if err := store.ValidateSegmentName(cd.Segment); err != nil {
 			return nil, fmt.Errorf("%s: context: %w", filePath, err)
 		}
-		if err := validateSources(cd); err != nil {
-			return nil, fmt.Errorf("%s: context %q: %w", filePath, cd.Segment, err)
-		}
 	}
 
 	return sf, nil
@@ -159,25 +154,7 @@ func LoadSegments(home string) (*SegmentsFile, error) {
 	return LoadSegmentsFile(Path(home))
 }
 
-// validateSources rejects a context that sets more than one source-* field.
-// Zero source-* fields is allowed: env-/exec-only contexts contribute no
-// path fragment.
-func validateSources(cd *ContextDef) error {
-	n := 0
-	if cd.SourceTemplate != "" {
-		n++
-	}
-	if len(cd.SourceExec) > 0 {
-		n++
-	}
-	if cd.SourceFile != "" {
-		n++
-	}
-	if n > 1 {
-		return errors.New("at most one of source-template, source-exec, source-file may be set")
-	}
-	return nil
-}
+
 
 // ParsedSegment is one segment token, possibly carrying an inline value
 // supplied via the `seg:value` syntax.

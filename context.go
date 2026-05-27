@@ -43,14 +43,8 @@ func (c *ContextListCmd) Run(ctx context.Context, e *env) error {
 }
 
 func sourceSummary(cd segments.ContextDef) string {
-	switch {
-	case cd.SourceTemplate != "":
+	if cd.SourceTemplate != "" {
 		return "template=" + cd.SourceTemplate
-	case len(cd.SourceExec) > 0:
-		return "exec=" + strings.Join(cd.SourceExec, " ")
-	case cd.SourceFile != "":
-		return "file=" + cd.SourceFile
-	default:
-		return "-"
 	}
+	return "-"
 }

@@ -105,14 +105,6 @@ func TestE2E_BasicFlow(t *testing.T) {
 			t.Errorf("list output missing 'demo': %q", out)
 		}
 	})
-
-	// 5. Doctor
-	t.Run("doctor", func(t *testing.T) {
-		out, _, _ := r.run("--doctor")
-		if !strings.Contains(out, home) {
-			t.Errorf("doctor output missing home %q: %q", home, out)
-		}
-	})
 }
 
 func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
