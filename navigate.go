@@ -65,7 +65,6 @@ func promptDestination(aliasName string, stderr io.Writer, reader *bufio.Reader)
 			cmd.Stdout = &stdout
 			cmd.Stdin = strings.NewReader("")
 			err := cmd.Run()
-
 			if err != nil {
 				if exitErr, ok := err.(*exec.ExitError); !ok || (exitErr.ExitCode() != 1 && exitErr.ExitCode() != 0) {
 					return ""
@@ -174,7 +173,6 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 	return cd, nil
 }
 
-
 func promptMultiTargetPath(alias string, paths []string, stderr io.Writer, reader *bufio.Reader) string {
 	header := fmt.Sprintf("Multiple paths for %q — pick one:", alias)
 
@@ -203,4 +201,3 @@ func promptMultiTargetPath(alias string, paths []string, stderr io.Writer, reade
 	}
 	return paths[idx-1]
 }
-

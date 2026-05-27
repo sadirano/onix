@@ -75,13 +75,13 @@ var systemActionFlags = map[string]string{
 	"-c":           "contexts",
 	"--init":       "init",
 	"-I":           "init",
-	"--sync":        "sync",
-	"-S":            "sync",
-	"--doctor":      "doctor",
+	"--sync":       "sync",
+	"-S":           "sync",
+	"--doctor":     "doctor",
 
-	"-D":           "doctor",
-	"--version":    "version",
-	"-v":           "version",
+	"-D":        "doctor",
+	"--version": "version",
+	"-v":        "version",
 }
 
 // printUsage writes the alias-flag grammar reference to stdout.
@@ -320,4 +320,3 @@ func parseRemoveArgs(args []string) (files []string, force, recursive bool, err 
 	}
 	return files, force, recursive, nil
 }
-

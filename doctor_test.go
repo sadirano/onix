@@ -349,4 +349,3 @@ func TestCheckSegmentsFile(t *testing.T) {
 		}
 	})
 }
-

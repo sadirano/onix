@@ -71,7 +71,8 @@ func (t *timer) report() {
 	fmt.Fprintf(os.Stderr, "  %-24s  %10s  %10s  %10s  %10s\n", "phase", "delta", "elapsed", "heap", "total_alloc")
 	fmt.Fprintln(os.Stderr, "  "+strings.Repeat("-", 71))
 	for _, cp := range t.checkpoints {
-		fmt.Fprintf(os.Stderr, "  %-24s  %10s  %10s  %10s  %10s\n",
+		fmt.Fprintf(
+			os.Stderr, "  %-24s  %10s  %10s  %10s  %10s\n",
 			cp.name,
 			fmtDur(cp.delta),
 			fmtDur(cp.elapsed),
