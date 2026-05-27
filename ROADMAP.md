@@ -25,12 +25,12 @@ not because it would be nice to have.
 These keep the bar where it is. They're not "items" to ship; they're
 standing obligations that any commit must respect.
 
-* Hot-path benchmark gate stays green (`BenchmarkHotPath_LookupOnly`
-  ≤ +20% vs `origin/main`).
 * `scripts/smoke.ps1` stays current as features land or change behavior
   (most recent example: per-alias segment scope required updating the
   smoke fixture to carry `scope = "global"`).
 * `go.mod` and CI Go versions stay aligned (currently `1.26`).
+* `go vet`, `govulncheck`, and `go test ./...` stay green in CI (the
+  remaining gates after the maintenance-mode trim).
 * Periodic ISSUES.md sweeps when something feels stale; close fast.
 
 ## Parked features

@@ -167,4 +167,4 @@ graph TD
 
 MIT.
 
-CI: See docs/CI.md for details about the hot-path benchmark gate (BenchmarkHotPath_LookupOnly), how to run benches locally, and the 20% slowdown threshold that the CI job enforces.
+CI: vet, govulncheck, full test suite, plus golangci-lint and gofumpt in the lint workflow. No coverage or bench gates — they were removed when the project entered maintenance mode.

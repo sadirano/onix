@@ -17,5 +17,3 @@ Pointers to the documentation kept in this directory.
   in.
 - Repo-root **[ROADMAP.md](../ROADMAP.md)** — parked-feature list with
   explicit triggers (Onix is in maintenance mode).
-- **[CI.md](./CI.md)** — how the hot-path benchmark gate works and how to
-  reproduce it locally.

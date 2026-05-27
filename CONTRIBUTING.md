@@ -1,52 +1,52 @@
 # Contributing to Onix
 
-Thank you for your interest in contributing to Onix! This document provides guidelines and instructions for contributing to the project.
+> Onix is in maintenance mode for a single user (the maintainer). See
+> [ROADMAP.md](./ROADMAP.md) for the parked-feature list. External
+> contributions are accepted but not actively solicited.
 
 ## Development Environment
 
 - **Go:** Version 1.26 or later (matches CI).
-- **PowerShell:** Required for Windows shell integration testing.
-- **Bash:** Required for Unix shell integration testing.
+- **PowerShell:** Required for Windows shell integration.
+- **Bash:** Required for Unix shell integration (used rarely in practice).
 
 ## Code Structure
 
-Onix follows a clean architecture with core logic separated from the CLI interface:
-
-- `internal/store`: Alias database management (`aliases.toml`).
-- `internal/segments`: Segment registry and resolution (`segments.toml`).
-- `internal/config`: Custom action configuration (`config.toml`).
-- `internal/plugins`: External plugin management (`plugins.toml`).
-- `internal/snippet`: Shell integration code generation.
-- `commands.go`: CLI command definitions (using `kong`).
-- `main.go`: Entry point and global configuration.
+- `internal/store`: alias database (`aliases.toml`).
+- `internal/segments`: `@`-segment registry and resolution (`segments.toml`).
+- `internal/config`: custom action configuration (`config.toml`).
+- `internal/snippet`: shell snippet + `.cmd` shim generation.
+- `internal/resolver`: shared alias-resolution helpers.
+- `commands.go`, `grammar.go`, `main.go`: CLI dispatch.
 
 ## Quality Standards
 
-We aim for a high quality bar (see [ROADMAP.md](./ROADMAP.md)):
+1. **Testing:** New features include unit tests; the heavy
+   `scripts/smoke.ps1` exercises end-to-end behaviour.
+2. **Verification:** `go vet ./...`, `govulncheck ./...`, and
+   `go test ./...` all pass — these are the CI gates.
+3. **Golden Files:** Shell integration tests use golden files. Run
+   `go test ./... -update` to refresh them after an intentional change.
 
-1. **Testing:** All new features must include unit tests and, where applicable, E2E tests in `e2e_test.go`.
-2. **Verification:** Run `go vet ./...` and `go test ./...` before submitting changes.
-3. **Benchmarks:** Performance is a feature. Ensure `BenchmarkHotPath_LookupOnly` and `BenchmarkHotPath_LoadAndLookup` (and any other hot-path benchmarks) do not regress. CI fails on a >20% slowdown against the baseline; see `docs/CI.md`.
-4. **Golden Files:** Shell integration tests use golden files. Run `go test ./... -update` to update them if you intentionally change the generated code.
+There is no coverage or benchmark gate in CI; both were dropped when the
+project entered maintenance mode. The `BenchmarkHotPath_*` benchmarks
+in `bench_test.go` are kept as a measurement tool you can run locally
+if you want to check that a change didn't tank the resolve hot path.
 
 ## Submitting Changes
 
-1. **Format:** Use `go fmt` to ensure consistent code style.
-2. **Lint:** We use `golangci-lint` (or similar) to catch common issues.
-3. **Commits:** Prefer descriptive commit messages following conventional commits if possible.
+1. **Format:** `go fmt ./...` (CI also runs `gofumpt` in the lint
+   workflow).
+2. **Lint:** `golangci-lint run` if you have it; CI runs it in the lint
+   workflow.
+3. **Commits:** descriptive messages; no `Co-Authored-By` trailers.
 
-## Troubleshooting Common Issues
+## Troubleshooting
 
 ### "The term 'onix' is not recognized"
-This usually means the shell integration hasn't been sourced or the pinned binary has moved.
+Shell integration is not sourced or the pinned binary has moved.
 - Run `onix --init` to regenerate the snippet and update your profile.
-- Run `onix --doctor` to check the status of your installation.
+- Run `onix --doctor` to check the installation.
 
 ### "unknown alias"
-- Run `onix --list` to see your registered aliases.
-- Ensure you are using the correct case (though lookup is generally case-insensitive).
-
-### Plugin build failures
-- Ensure you have a working Go toolchain.
-- Check `onix --doctor` for missing plugin binaries.
-- Run `onix plugin update <name>` to re-clone and rebuild.
+- `onix --list` to see registered aliases (lookup is case-insensitive).
