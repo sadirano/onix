@@ -40,6 +40,9 @@ func main() {
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int) {
+	t := newTimer()
+	defer t.report()
+
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -79,6 +82,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 	// -rm -> --remove) so the dispatcher only has to deal with canonical
 	// long forms. Single-rune shorts pass through.
 	processedArgs := append([]string{args[0]}, preprocessArgs(args[1:])...)
+	t.mark("preprocess")
 
 	// Resolve onix home up front. Every code path needs it.
 	home, err := resolveHome(os.Getenv("ONIX_HOME"))
@@ -86,6 +90,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 		fmt.Fprintf(stderr, "onix: %v\n", err)
 		return 1
 	}
+	t.mark("resolve-home")
 	e := &env{
 		Home:   home,
 		JSON:   hasFlag(processedArgs[1:], "--json", "-j"),
@@ -101,6 +106,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 	}
 
 	// Dispatch the alias-flag grammar.
+	t.mark("pre-dispatch")
 	if err := dispatchNewGrammar(sigCtx, e, processedArgs[1:], stdout, stderr); err != nil {
 		var cee *childExitError
 		if errors.As(err, &cee) {
@@ -111,6 +117,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 		}
 		return 1
 	}
+	t.mark("post-dispatch")
 
 	return 0
 }
