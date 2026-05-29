@@ -52,9 +52,11 @@ onix api --remove
 |---|---|---|
 | cd into alias | `onix api` (print path) + `o api` | `o api` |
 | Open Explorer | `onix api --explore` | `s api` |
+| Open a file with its default app | `onix api --explore report.pdf` | `s api report.pdf` |
 | Open editor in folder | `onix api --edit` | `e api` |
 | Open specific file(s) in editor | `onix api --edit README.md` | `e api README.md` |
 | Print resolved path | `onix api --yank` | `y api` |
+| Save clipboard into the dir, copy its path | `onix api --paste [name]` | `p api [name]` |
 | Run command in target dir | `onix api --run go test ./...` | `r api go test ./...` |
 | Search content (rg+fzf) | `onix api --grep handler` | `sg api handler` |
 | Find file by name (fd+fzf) | `onix api --find migration` | `ff api migration` |
@@ -76,32 +78,25 @@ ff api migration
 matched line. `ff` uses Everything (`es`) on Windows or `fd` on Linux, both with
 fzf. Configure the layout in `~/.onix/config.toml` under `[grep]`.
 
-## 5) Custom Actions
+## 5) Configuring shortcuts / search
 
-Declare shortcuts in `~/.onix/config.toml` and run `onix --sync` + `. $PROFILE`:
+`~/.onix/config.toml` has two optional sections. `[shortcuts]` renames the
+built-in command functions; `[grep]` tunes the `sg` search UI. Run `onix --sync`
++ `. $PROFILE` after editing to pick up renamed shortcuts.
 
 ```toml
-[[actions]]
-name = "test"
-exec = "go"
-args = ["test", "./..."]
+[shortcuts]
+s = "show"           # type `show api` instead of `s api`
 
-[[actions]]
-name = "pr"
-exec = "gh"
-args = ["pr", "view", "{extras}", "--web"]
-```
-
-```powershell
-test api             # runs: go test ./... in the api directory
-pr api 42            # runs: gh pr view 42 --web in the api directory
+[grep]
+preview_window = "right:50%"
 ```
 
 ## 6) Onboarding
 
 ```powershell
 onix --init                                  # set up ~/.onix and shell integration
-onix --doctor                                # health check
+onix --sync                                  # regenerate snippet + shims after moving the binary or editing config
 onix --version                               # build info
 ```
 
@@ -190,6 +185,7 @@ o demo                       # cd into it
 s demo                       # open in Explorer
 e demo                       # open in editor
 y demo                       # print + copy path
+p demo                       # save clipboard content into demo, copy the saved path
 ff demo README               # fuzzy-find a file
 r demo dir                   # run a command there
 onix --list                  # confirm alias is registered

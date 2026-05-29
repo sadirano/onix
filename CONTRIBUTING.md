@@ -14,7 +14,7 @@
 
 - `internal/store`: alias database (`aliases.toml`).
 - `internal/segments`: `@`-segment registry and resolution (`segments.toml`).
-- `internal/config`: custom action configuration (`config.toml`).
+- `internal/config`: shortcut renames and `sg` search tuning (`config.toml`).
 - `internal/snippet`: shell snippet + `.cmd` shim generation.
 - `internal/resolver`: shared alias-resolution helpers.
 - `commands.go`, `grammar.go`, `main.go`: CLI dispatch.
@@ -46,7 +46,7 @@ if you want to check that a change didn't tank the resolve hot path.
 ### "The term 'onix' is not recognized"
 Shell integration is not sourced or the pinned binary has moved.
 - Run `onix --init` to regenerate the snippet and update your profile.
-- Run `onix --doctor` to check the installation.
+- Run `onix --sync` if only the binary moved (regenerates the snippet without touching `$PROFILE`).
 
 ### "unknown alias"
 - `onix --list` to see registered aliases (lookup is case-insensitive).

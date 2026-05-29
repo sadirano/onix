@@ -25,7 +25,10 @@ o acme C:\Users\dev\projects\acme          # register + cd in one step (dir auto
 o                                          # no args: open aliases.toml in your editor
 e acme                                     # open it in your editor
 s acme                                     # open it in Explorer
+s acme report.pdf                          # open a file with its default app (PDF→viewer, .zip→archiver…)
 y acme                                     # print the path and copy to clipboard
+p acme                                     # save clipboard content into the alias dir, copy the saved path back
+p acme shot                                # …with a name (image→shot.png, text→shot.md)
 r acme go test ./...                       # run a command at that path
 onix --list                                # show every alias
 onix --edit                                # open ~/.onix in your editor
@@ -38,7 +41,11 @@ The `o` command changes the **current** shell's working directory — it does no
 - `o <alias> <path>` — register (or update) the alias to point at `<path>` and cd there. The directory is auto-created if it doesn't exist.
 - `o` (no args) — open `aliases.toml` in `$EDITOR`. Use `onix --list` if you want a tabular dump to stdout instead.
 
-Everything else (`e`, `s`, `y`, `r`) invokes `onix` directly, so those don't need shell integration to work.
+Everything else (`e`, `s`, `y`, `p`, `r`) invokes `onix` directly, so those don't need shell integration to work.
+
+`s <alias> <file>` opens a single file with its registered default application instead of the file manager — a PDF in your viewer, a `.zip` in your archiver, and so on. The file is resolved against the alias directory and opened by the OS handler (`explorer.exe` / `xdg-open`).
+
+`p <alias> [name]` saves the current clipboard contents into the alias directory and copies the saved file's absolute path back to the clipboard — handy for parking a screenshot and pasting its path into an agent. An image saves as `.png`, text as `.md`; an explicit extension on `<name>` is honoured, otherwise the default follows the clipboard content type. With no name it uses a timestamp, and a name collision auto-increments (`shot.png`, `shot-1.png`).
 
 ## Configuration
 
@@ -53,25 +60,27 @@ You can hand-edit the file (`onix --list` and resolve will pick up changes immed
 
 Editor is taken from `$EDITOR`, then `$VISUAL`, then the first of `nvim`, `vim`, `code`, `nano`, or `notepad` found on PATH. Override the onix home location with `$ONIX_HOME`.
 
-## Custom actions
+## Configuring shortcuts and search
 
-Declare your own shortcuts in `~/.onix/config.toml`. Each becomes a real PowerShell function that takes an alias and remaining args:
+`~/.onix/config.toml` holds two optional sections.
+
+`[shortcuts]` renames the built-in command functions. The keys are the built-in names (`o`, `e`, `s`, `y`, `p`, `r`, `sg`, `ff`); the value is the name you'd rather type:
 
 ```toml
-[[actions]]
-name = "test"
-exec = "go"
-args = ["test", "./..."]
-
-[[actions]]
-name = "pr"
-exec = "gh"
-args = ["pr", "view", "{extras}", "--web"]
+[shortcuts]
+s = "show"     # type `show acme` instead of `s acme`
+ff = "fzf"
 ```
 
-After editing, run `onix --sync` and `. $PROFILE` (or restart PowerShell). Then `test acme` runs `go test ./...` at the resolved acme path, and `pr acme 42` runs `gh pr view 42 --web`.
+`[grep]` tunes the `sg` search UI — the fzf preview window and command, fzf colors, ripgrep `--colors`, and whether non-ASCII query characters are matched literally:
 
-Template variables: `{target}` is the resolved path, `{alias}` is the alias name, `{extras}` is the rest of the args (variadic when used as a whole arg). Extras are appended automatically when `{extras}` isn't present in `args`.
+```toml
+[grep]
+preview_window = "right:50%"
+rg_colors = ["match:fg:yellow", "path:fg:cyan"]
+```
+
+After editing, run `onix --sync` and `. $PROFILE` (or restart PowerShell) to pick up renamed shortcuts.
 
 ## Sub-aliases (`@`-segments)
 
@@ -115,17 +124,17 @@ Lookups are case-insensitive. See [docs/SEGMENTS.md](docs/SEGMENTS.md) for the f
 
 ## Tab completion
 
-Every command that takes an alias (`o`, `e`, `s`, `y`, `r`, `sg`, `ff`, plus your custom actions) supports tab-completion of alias names. The completer calls `onix --list-names` under the hood — a dedicated hot path that bypasses TOML parsing for sub-millisecond Tab response.
+Every command that takes an alias (`o`, `e`, `s`, `y`, `p`, `r`, `sg`, `ff`) supports tab-completion of alias names. The completer calls `onix --list-names` under the hood — a dedicated hot path that bypasses TOML parsing for sub-millisecond Tab response.
 
 ## Commands
 
-`onix --init` initialises `~/.onix` and installs the PowerShell snippet (re-run any time; it's idempotent). `onix --doctor` reports any installation issues. `onix --version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.
+`onix --init` initialises `~/.onix` and installs the PowerShell snippet (re-run any time; it's idempotent). `onix --sync` regenerates the snippet and `.cmd` shims after you move the binary or edit `config.toml`. `onix --version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.
 
 ## Diagnostics
 
-If `onix --doctor` warns that your shell profile does not source the snippet, run `onix --init` again without `--skip-profile`. On Windows this updates `$PROFILE`; on Linux it appends a `[ -f ... ] && . ...` line to `.bashrc` and/or `.zshrc`.
+If your shell profile does not source the snippet, run `onix --init` again without `--skip-profile`. On Windows this updates `$PROFILE`; on Linux it appends a `[ -f ... ] && . ...` line to `.bashrc` and/or `.zshrc`.
 
-If `doctor` warns that `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin` (Linux) to PATH and restart your shell. Shortcuts (`o`, `e`, `s`, `y`, `r`, `sg`, `ff`) work without `onix` on PATH because the snippet pins the binary location at install time; `PATH` only matters when you type `onix` directly. Zsh tab completion additionally requires `compinit` to be loaded in `.zshrc` before sourcing the snippet — without it, completion silently skips registration rather than erroring.
+If `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin` (Linux) to PATH and restart your shell. Shortcuts (`o`, `e`, `s`, `y`, `p`, `r`, `sg`, `ff`) work without `onix` on PATH because the snippet pins the binary location at install time; `PATH` only matters when you type `onix` directly. Zsh tab completion additionally requires `compinit` to be loaded in `.zshrc` before sourcing the snippet — without it, completion silently skips registration rather than erroring.
 
 Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The included `scripts/smoke.ps1` does exactly that — it builds, runs every command against a throwaway home, and measures the hot path.
 
@@ -133,7 +142,7 @@ Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The include
 
 > **Prototype stage — no migration guarantees.** Onix has one real user (the author) and is in heavy active development. Config files, on-disk layouts, command grammar, and TOML schemas can and do change shape without migration paths, compat shims, or deprecation windows. If you're using onix and a change breaks your `~/.onix`, you're expected to rewrite the affected file by hand. This note will be removed once a stability commitment is in place.
 
-This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions (including the `sg` / `ff` search shortcuts backed by ripgrep + fzf and Everything / fd + fzf respectively), custom actions from `config.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
+This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions (including the `sg` / `ff` search shortcuts backed by ripgrep + fzf and Everything / fd + fzf respectively), optional `[shortcuts]` / `[grep]` tuning in `config.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
 
 **Note: macOS is NOT supported in this repository.** If you require macOS support, please feel free to create your own fork.
 
@@ -160,7 +169,7 @@ graph TD
 
 - **`internal/store`**: Manages `aliases.toml`, the primary database of name-to-path mappings. Includes atomic write logic and name validation.
 - **`internal/segments`**: Parses `@`-segment grammar, expands `${VAR}` templates, evaluates `source-template` / `source-exec` / `source-file` sources, and enforces the traversal guard on the resulting fragments before they join the alias path.
-- **`internal/config`**: Manages `config.toml`, where users define custom action wrappers with template substitution.
+- **`internal/config`**: Manages `config.toml` — the optional `[shortcuts]` map (rename built-in commands) and `[grep]` section (tune the `sg` search UI).
 - **`internal/snippet`**: Generates the PowerShell and Bash/Zsh glue code that integrates Onix into your shell.
 
 ## License
