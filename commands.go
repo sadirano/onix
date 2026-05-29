@@ -322,7 +322,14 @@ func (c *EditCmd) targetDir(e *env) (string, error) {
 }
 
 // -----------------------------------------------------------------------------
-// explore — open the OS file manager at the alias directory.
+// explore — open the OS file manager at the alias directory, or open a
+// specific file with its default application.
+//
+// With no file, opens the directory in the file manager. With a file, hands
+// it to the same OS opener (explorer.exe / xdg-open), which launches the
+// file's associated app — a PDF in the PDF viewer, a .zip in the archive
+// tool, and so on. The file is resolved to an absolute path first because
+// explorer.exe does not reliably resolve a relative path against the cwd.
 //
 // Windows uses explorer.exe directly (no cmd.exe wrapper, no /e flag — both
 // add startup overhead or hide bugs). Linux uses xdg-open. macOS is not
@@ -331,12 +338,23 @@ func (c *EditCmd) targetDir(e *env) (string, error) {
 
 type ExploreCmd struct {
 	Alias string `arg:"" help:"Alias name."`
+	File  string `arg:"" optional:"" help:"File to open with its default app (omit to open the directory)."`
 }
 
 func (c *ExploreCmd) Run(ctx context.Context, e *env) error {
-	target, err := resolveAliasPath(e, c.Alias)
+	dir, err := resolveAliasPath(e, c.Alias)
 	if err != nil {
 		return err
+	}
+	target := dir
+	if c.File != "" {
+		target = c.File
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(dir, target)
+		}
+		if _, err := os.Stat(target); err != nil {
+			return fmt.Errorf("open %q: %w", c.File, err)
+		}
 	}
 	return openInExplorer(target)
 }

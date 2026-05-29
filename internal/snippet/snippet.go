@@ -51,8 +51,11 @@ const pwshE = `function global:%s {
 
 const pwshS = `function global:%s {
     [CmdletBinding()]
-    param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe $Alias --explore
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe $Alias --explore @Rest
 }
 `
 
@@ -123,7 +126,11 @@ const bashE = `%s() {
 }
 `
 
-const bashS = `%s() { "$ONIX_EXE" "$1" --explore; }
+const bashS = `%s() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" "$alias" --explore "$@"
+}
 `
 
 const bashY = `%s() { "$ONIX_EXE" "$1" --yank; }
@@ -243,7 +250,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
 	writeOCmdWrapper(binDir, exe, s["r"], s["o"])
 	writeFindPreviewWrapper(binDir)
 	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
-	writeExploreWrapper(binDir, s["r"], s["s"])
+	writeExploreWrapper(binDir, exe, s["r"], s["s"])
 	writeAliasFlagWrapper(binDir, exe, s["y"], "--yank")
 	writeAliasFlagWrapper(binDir, exe, s["p"], "--paste")
 	writeAliasFlagWrapper(binDir, exe, s["r"], "--run")
@@ -333,15 +340,23 @@ set "_onix_arg="
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
-// writeExploreWrapper emits the explore shim. Instead of going through
-// onix --explore (which shells out to explorer.exe and inherits its
-// non-zero exit codes and awkward cwd handling), it delegates to the run
-// wrapper: resolve the alias's directory, cd there, and launch
-// `explorer .`. runName is the run shortcut's wrapper name, which lives
-// in the same bin dir and is therefore resolvable on PATH.
-func writeExploreWrapper(binDir, runName, name string) {
+// writeExploreWrapper emits the explore shim. With no file argument it
+// opens the alias directory by delegating to the run wrapper (resolve the
+// dir, cd there, launch `explorer .`) — this avoids explorer.exe's awkward
+// cwd handling for the bare-directory case and matches the navigate shims.
+// With a file argument it hands off to `onix --explore <file>`, which
+// resolves the file to an absolute path and opens it with its default app;
+// explorer.exe does not reliably resolve a relative path against the cwd,
+// so the run-wrapper trick can't be reused here. runName is the run
+// shortcut's wrapper name; exe is the onix binary.
+func writeExploreWrapper(binDir, exe, runName, name string) {
 	path := filepath.Join(binDir, name+".cmd")
-	content := fmt.Sprintf("@echo off\r\n%s %%* explorer .\r\n", runName)
+	content := fmt.Sprintf("@echo off\r\n"+
+		"if \"%%~2\"==\"\" (\r\n"+
+		"  %s %%1 explorer .\r\n"+
+		") else (\r\n"+
+		"  \"%s\" %%1 --explore \"%%~2\"\r\n"+
+		")\r\n", runName, exe)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 

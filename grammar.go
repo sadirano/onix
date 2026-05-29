@@ -95,7 +95,7 @@ ALIAS ACTIONS:
   --resolve              print path (default for bare alias)
   --remove, -rm          remove the alias (or, with files, delete them)
   --edit, -e [files]     open dir or files in $EDITOR
-  --explore, -x          open in OS file manager
+  --explore, -x [file]   open dir in file manager, or a file with its default app
   --yank, -y             print path and copy to clipboard
   --paste, -p [name]     save clipboard content to alias dir, copy its path
   --grep, -g <query>     ripgrep + fzf in alias dir
@@ -235,7 +235,14 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 	case "edit":
 		return (&EditCmd{Alias: alias, Files: actionArgs}).Run(ctx, e)
 	case "explore":
-		return (&ExploreCmd{Alias: alias}).Run(ctx, e)
+		if len(actionArgs) > 1 {
+			return fmt.Errorf("usage: onix <alias> --explore [file]")
+		}
+		file := ""
+		if len(actionArgs) == 1 {
+			file = actionArgs[0]
+		}
+		return (&ExploreCmd{Alias: alias, File: file}).Run(ctx, e)
 	case "yank":
 		return (&YankCmd{Alias: alias}).Run(ctx, e)
 	case "paste":
