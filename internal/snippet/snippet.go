@@ -63,6 +63,16 @@ const pwshY = `function global:%s {
 }
 `
 
+const pwshP = `function global:%s {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe $Alias --paste @Rest
+}
+`
+
 const pwshR = `function global:%s {
     [CmdletBinding()]
     param(
@@ -117,6 +127,13 @@ const bashS = `%s() { "$ONIX_EXE" "$1" --explore; }
 `
 
 const bashY = `%s() { "$ONIX_EXE" "$1" --yank; }
+`
+
+const bashP = `%s() {
+    local alias=$1
+    shift
+    "$ONIX_EXE" "$alias" --paste "$@"
+}
 `
 
 const bashR = `%s() {
@@ -210,6 +227,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
 	fmt.Fprintf(&b, pwshE, s["e"])
 	fmt.Fprintf(&b, pwshS, s["s"])
 	fmt.Fprintf(&b, pwshY, s["y"])
+	fmt.Fprintf(&b, pwshP, s["p"])
 	fmt.Fprintf(&b, pwshR, s["r"])
 	fmt.Fprintf(&b, pwshSG, s["sg"])
 	fmt.Fprintf(&b, pwshFF, s["ff"])
@@ -227,6 +245,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
 	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
 	writeExploreWrapper(binDir, s["r"], s["s"])
 	writeAliasFlagWrapper(binDir, exe, s["y"], "--yank")
+	writeAliasFlagWrapper(binDir, exe, s["p"], "--paste")
 	writeAliasFlagWrapper(binDir, exe, s["r"], "--run")
 	writeAliasFlagWrapper(binDir, exe, s["sg"], "--grep")
 	writeAliasFlagWrapper(binDir, exe, s["ff"], "--find")
@@ -403,6 +422,7 @@ func WriteBashShellSnippet(home string, shortcuts map[string]string) error {
 	fmt.Fprintf(&b, bashE, s["e"])
 	fmt.Fprintf(&b, bashS, s["s"])
 	fmt.Fprintf(&b, bashY, s["y"])
+	fmt.Fprintf(&b, bashP, s["p"])
 	fmt.Fprintf(&b, bashR, s["r"])
 	fmt.Fprintf(&b, bashSG, s["sg"])
 	fmt.Fprintf(&b, bashFF, s["ff"])

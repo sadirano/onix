@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,13 +12,16 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"text/tabwriter"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/sadirano/onix/internal/resolver"
 	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/snippet"
 	"github.com/sadirano/onix/internal/store"
+	gclip "golang.design/x/clipboard"
 )
 
 // childExitError is returned by RunCmd and ExecCmd when the child process
@@ -362,6 +366,108 @@ func (c *YankCmd) Run(ctx context.Context, e *env) error {
 		fmt.Fprintf(e.Stderr, "warning: clipboard copy failed: %v\n", err)
 	}
 	return nil
+}
+
+// -----------------------------------------------------------------------------
+// paste — save clipboard content into an alias dir, then copy the saved
+// file's path back to the clipboard.
+//
+// The round-trip exists so a screenshot (or copied text) can be parked in a
+// known location and the resulting path handed straight to an AI agent. The
+// path overwrites the clipboard image, which is non-destructive on Windows
+// because the image is still recoverable from clipboard history (Win+V).
+//
+// Content type drives the default extension: an image saves as .png, text as
+// .md. An explicit extension on the name is always honoured. With no name we
+// fall back to a timestamp. Collisions auto-increment (cool.png, cool-1.png).
+// -----------------------------------------------------------------------------
+
+type PasteCmd struct {
+	Alias string
+	Name  string
+}
+
+func (c *PasteCmd) Run(ctx context.Context, e *env) error {
+	target, err := resolveAliasPath(e, c.Alias)
+	if err != nil {
+		return err
+	}
+	data, defaultExt, err := readClipboardContent()
+	if err != nil {
+		return err
+	}
+	dest := uniquePath(filepath.Join(target, pasteFilename(c.Name, defaultExt)))
+	if err := os.WriteFile(dest, data, 0o644); err != nil {
+		return fmt.Errorf("write %q: %w", dest, err)
+	}
+	abs, err := filepath.Abs(dest)
+	if err != nil {
+		abs = dest
+	}
+	out := filepath.ToSlash(abs)
+	fmt.Fprintln(e.Stdout, out)
+	if err := copyToClipboard(out); err != nil {
+		// Non-fatal — the file is saved and the path is on stdout, so the
+		// user can still copy it manually.
+		fmt.Fprintf(e.Stderr, "warning: clipboard copy failed: %v\n", err)
+	}
+	return nil
+}
+
+// clipboardInitOnce guards golang.design/x/clipboard's one-time Init, which
+// opens the OS clipboard handle. We only pay for it when --paste actually
+// runs, never on the resolve hot path.
+var clipboardInitOnce struct {
+	sync.Once
+	err error
+}
+
+func readClipboardContent() (data []byte, defaultExt string, err error) {
+	clipboardInitOnce.Do(func() { clipboardInitOnce.err = gclip.Init() })
+	if clipboardInitOnce.err != nil {
+		return nil, "", fmt.Errorf("init clipboard: %w", clipboardInitOnce.err)
+	}
+	// Image wins when both are present (rare) — it's the harder content to
+	// re-grab, and the text remains recoverable from clipboard history.
+	if img := gclip.Read(gclip.FmtImage); len(img) > 0 {
+		return img, ".png", nil
+	}
+	if txt := gclip.Read(gclip.FmtText); len(txt) > 0 {
+		return txt, ".md", nil
+	}
+	return nil, "", errors.New("clipboard holds no image or text to paste")
+}
+
+// pasteFilename builds the destination filename. An explicit extension on the
+// name is honoured; otherwise defaultExt (from the clipboard content type) is
+// appended. An empty name falls back to a timestamp.
+func pasteFilename(name, defaultExt string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		// Colons are illegal in Windows filenames, so no time-of-day colons.
+		return time.Now().Format("2006-01-02_150405") + defaultExt
+	}
+	if filepath.Ext(name) != "" {
+		return name
+	}
+	return name + defaultExt
+}
+
+// uniquePath returns path unchanged if nothing is there, otherwise the first
+// free "<stem>-<n><ext>" variant so a repeated paste never clobbers an
+// earlier file.
+func uniquePath(path string) string {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return path
+	}
+	ext := filepath.Ext(path)
+	stem := strings.TrimSuffix(path, ext)
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("%s-%d%s", stem, i, ext)
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
+	}
 }
 
 // -----------------------------------------------------------------------------

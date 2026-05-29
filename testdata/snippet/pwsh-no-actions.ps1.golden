@@ -46,6 +46,14 @@ function global:y {
     param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
     & $global:onixExe $Alias --yank
 }
+function global:p {
+    [CmdletBinding()]
+    param(
+        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
+        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
+    )
+    & $global:onixExe $Alias --paste @Rest
+}
 function global:r {
     [CmdletBinding()]
     param(
@@ -72,4 +80,4 @@ function global:ff {
 }
 function global:q { exit }
 
-Register-ArgumentCompleter -CommandName e,ff,o,r,s,sg,y -ParameterName Alias -ScriptBlock $onixAliasCompleter
+Register-ArgumentCompleter -CommandName e,ff,o,p,r,s,sg,y -ParameterName Alias -ScriptBlock $onixAliasCompleter

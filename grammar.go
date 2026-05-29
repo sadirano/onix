@@ -50,6 +50,8 @@ var aliasActionFlags = map[string]string{
 	"-x":        "explore",
 	"--yank":    "yank",
 	"-y":        "yank",
+	"--paste":   "paste",
+	"-p":        "paste",
 	"--grep":    "grep",
 	"-g":        "grep",
 	"--find":    "find",
@@ -95,6 +97,7 @@ ALIAS ACTIONS:
   --edit, -e [files]     open dir or files in $EDITOR
   --explore, -x          open in OS file manager
   --yank, -y             print path and copy to clipboard
+  --paste, -p [name]     save clipboard content to alias dir, copy its path
   --grep, -g <query>     ripgrep + fzf in alias dir
   --find, -f <query>     fd / Everything + fzf in alias dir
   --run, -r <cmd...>     exec command in alias dir
@@ -235,6 +238,15 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 		return (&ExploreCmd{Alias: alias}).Run(ctx, e)
 	case "yank":
 		return (&YankCmd{Alias: alias}).Run(ctx, e)
+	case "paste":
+		if len(actionArgs) > 1 {
+			return fmt.Errorf("usage: onix <alias> --paste [name]")
+		}
+		name := ""
+		if len(actionArgs) == 1 {
+			name = actionArgs[0]
+		}
+		return (&PasteCmd{Alias: alias, Name: name}).Run(ctx, e)
 	case "grep":
 		return (&GrepCmd{Args: append([]string{alias}, actionArgs...)}).Run(ctx, e)
 	case "find":
