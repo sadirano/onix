@@ -22,24 +22,22 @@ const starterAliases = `# onix aliases — edit with care, prefer 'onix <name> <
 `
 
 // starterConfig is the placeholder config.toml written on first init.
-// Empty (just a comment + a worked example) so the file exists for the
-// user to extend, but no actions are declared yet — so the snippet has
-// only the built-in functions.
-const starterConfig = `# onix configuration — declare custom actions here.
-
-# After editing, run: onix --sync
+// Just commented examples so the file exists for the user to extend; with
+// nothing uncommented the snippet uses the default built-in shortcut names.
+const starterConfig = `# onix configuration.
 #
-# Example:
+# After editing, run: onix --sync  (then re-source $PROFILE)
 #
-#   [[actions]]
-#   name = "test"
-#   exec = "go"
-#   args = ["test", "./..."]
+# [shortcuts] renames the built-in command functions
+# (o, e, s, y, p, r, sg, ff):
 #
-#   [[actions]]
-#   name = "pr"
-#   exec = "gh"
-#   args = ["pr", "view", "{extras}", "--web"]
+#   [shortcuts]
+#   s = "show"
+#
+# [grep] tunes the sg search UI:
+#
+#   [grep]
+#   preview_window = "right:50%"
 `
 
 // InitCmd creates ~/.onix and installs PowerShell shell integration.
@@ -187,6 +185,6 @@ func sourceFromProfile(e *env, snippet string) error {
 		return fmt.Errorf("append to $PROFILE: %w", err)
 	}
 	fmt.Fprintf(e.Stderr, "updated $PROFILE: %s\n", profilePath)
-	fmt.Fprintln(e.Stderr, "restart PowerShell (or run: . $PROFILE) to activate o/e/s/y/r, sg/ff, and any custom actions")
+	fmt.Fprintln(e.Stderr, "restart PowerShell (or run: . $PROFILE) to activate o/e/s/y/p/r, sg/ff")
 	return nil
 }

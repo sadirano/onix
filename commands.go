@@ -540,10 +540,6 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 }
 
 // -----------------------------------------------------------------------------
-// exec — run a custom action declared in config.toml.
-//
-// Same argv shape as run: `onix <alias> -X <action> [-- extras...]`.
-
 // -----------------------------------------------------------------------------
 // sync — regenerate shell snippets and Windows wrappers.
 //

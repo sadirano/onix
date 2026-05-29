@@ -113,12 +113,6 @@ Step "remove-file-with-force" {
     }
 }
 
-# M2 — custom actions. Write a tiny config.toml declaring an action that
-# runs `cmd.exe /c echo hi from <alias>`, regenerate the shell snippet, run
-# it via `onix <alias> -X <action>`, and verify the output contains the
-# expected string.
-
-
 Step "list-names" {
     $names = & $exe --list-names
     if ($LASTEXITCODE -ne 0) { throw "list-names failed" }
