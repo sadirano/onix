@@ -404,7 +404,22 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	if len(argv) == 0 {
 		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
 	}
-	cmd := execCommandContext(ctx, argv[0], argv[1:]...)
+	exe := argv[0]
+	// On Windows, Go's exec.LookPath refuses to run executables found relative
+	// to the current directory (security policy added in Go 1.19). Since we
+	// want bare names like "run" to resolve inside the alias directory, probe
+	// target explicitly with the standard Windows executable extensions before
+	// falling back to PATH lookup.
+	if runtime.GOOS == "windows" && filepath.Base(exe) == exe {
+		for _, ext := range []string{".cmd", ".bat", ".exe", ".ps1"} {
+			candidate := filepath.Join(target, exe+ext)
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				exe = candidate
+				break
+			}
+		}
+	}
+	cmd := execCommandContext(ctx, exe, argv[1:]...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = e.Stdout
