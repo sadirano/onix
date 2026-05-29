@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/snippet"
 	"github.com/sadirano/onix/internal/store"
-	gclip "golang.design/x/clipboard"
 )
 
 // childExitError is returned by RunCmd and ExecCmd when the child process
@@ -432,29 +430,9 @@ func (c *PasteCmd) Run(ctx context.Context, e *env) error {
 	return nil
 }
 
-// clipboardInitOnce guards golang.design/x/clipboard's one-time Init, which
-// opens the OS clipboard handle. We only pay for it when --paste actually
-// runs, never on the resolve hot path.
-var clipboardInitOnce struct {
-	sync.Once
-	err error
-}
-
-func readClipboardContent() (data []byte, defaultExt string, err error) {
-	clipboardInitOnce.Do(func() { clipboardInitOnce.err = gclip.Init() })
-	if clipboardInitOnce.err != nil {
-		return nil, "", fmt.Errorf("init clipboard: %w", clipboardInitOnce.err)
-	}
-	// Image wins when both are present (rare) — it's the harder content to
-	// re-grab, and the text remains recoverable from clipboard history.
-	if img := gclip.Read(gclip.FmtImage); len(img) > 0 {
-		return img, ".png", nil
-	}
-	if txt := gclip.Read(gclip.FmtText); len(txt) > 0 {
-		return txt, ".md", nil
-	}
-	return nil, "", errors.New("clipboard holds no image or text to paste")
-}
+// readClipboardContent is implemented per-platform: clipboard_windows.go
+// reads images/text via golang.design/x/clipboard; the non-Windows build
+// returns an error because that library needs cgo + X11 on Linux.
 
 // pasteFilename builds the destination filename. An explicit extension on the
 // name is honoured; otherwise defaultExt (from the clipboard content type) is
