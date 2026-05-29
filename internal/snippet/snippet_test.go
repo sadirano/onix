@@ -60,20 +60,21 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if !strings.Contains(content, "--edit") {
 		t.Errorf("o.cmd missing '--edit' for no-arg invocation:\n%s", content)
 	}
-	if !strings.Contains(content, "if not defined _onix_target") {
-		t.Errorf("o.cmd missing subcommand passthrough fallback:\n%s", content)
+	// Navigation delegates to the run shortcut, which opens an interactive
+	// shell rooted at the alias target.
+	if !strings.Contains(content, "cmd /k") {
+		t.Errorf("o.cmd missing 'cmd /k' navigation via run shortcut:\n%s", content)
 	}
-	// Regression guard: a leading-dash first arg ('-v', '--doctor', ...)
-	// must bypass the alias-resolve attempt — otherwise its stdout is
-	// captured into _onix_target and fed to 'cd' as a bogus path.
+	// Regression guard: navigation must NOT capture onix's stdout. The
+	// 'for /f' capture redirected onix into a pipe, which hung the inline
+	// prompt when resolving a new segment.
+	if strings.Contains(content, "for /f") {
+		t.Errorf("o.cmd must not capture onix stdout via 'for /f':\n%s", content)
+	}
+	// Regression guard: a leading-dash first arg ('-v', '--version', ...)
+	// must bypass alias navigation and go straight to onix.
 	if !strings.Contains(content, `if "%_onix_arg:~0,1%"=="-"`) {
 		t.Errorf("o.cmd missing leading-dash bypass:\n%s", content)
-	}
-	// Regression guard: setlocal + cd reverts the working directory when
-	// the script exits, which would silently break `o`. The wrapper must
-	// not use setlocal.
-	if strings.Contains(content, "setlocal") {
-		t.Errorf("o.cmd must not use 'setlocal' — it would revert cd on script exit:\n%s", content)
 	}
 }
 

@@ -222,7 +222,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
 	binDir := filepath.Join(home, "bin")
 	_ = os.MkdirAll(binDir, 0o755)
 
-	writeOCmdWrapper(binDir, exe, s["o"])
+	writeOCmdWrapper(binDir, exe, s["r"], s["o"])
 	writeFindPreviewWrapper(binDir)
 	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
 	writeExploreWrapper(binDir, s["r"], s["s"])
@@ -272,34 +272,35 @@ if errorlevel 1 (
 	_ = os.WriteFile(filepath.Join(binDir, FindPreviewWrapperName), []byte(content), 0o644)
 }
 
-func writeOCmdWrapper(binDir, exe, name string) {
+func writeOCmdWrapper(binDir, exe, runName, name string) {
 	path := filepath.Join(binDir, name+".cmd")
-	// The 'o' wrapper mimics the PowerShell function's "no-args means
-	// aliases" behavior. For alias lookups it 'cd /d's into the target;
-	// anything else (subcommands, unknown names) is delegated to onix
-	// itself, which dispatches subcommands or prompts to register a new
-	// alias. Win+R invocations get a persistent shell via 'cmd /k'.
+	// With no argument the wrapper opens the config in the editor; a leading
+	// dash is a system verb handed straight to onix. Everything else is an
+	// alias to navigate to, which delegates to the run shortcut:
 	//
-	// NB: no setlocal. setlocal + cd reverts the working directory when
-	// the script exits, which would silently break the whole point of
-	// `o`. We use a unique variable name (_onix_target) to minimise
-	// collisions with whatever the user has in their shell.
+	//	<run> <args> cmd /k
 	//
-	// NB: %~1 is passed unquoted to the for /f backtick command. When
-	// the command starts with a quoted exe path AND contains another
-	// quoted token, for /f's usebackq tokenizer mis-parses the trailing
-	// quote and the inner command runs with corrupted args (silently —
-	// stdout capture returns nothing). Alias names are validated to
-	// contain no spaces or shell metachars, so quoting is unnecessary.
+	// resolves the alias and opens an interactive shell rooted at the target.
+	// Delegating to run keeps onix attached to the real console, so defining
+	// a new segment prompts inline — capturing onix's stdout to cd ourselves
+	// redirected it into a pipe and hung the prompt instead.
+	//
+	// Trade-off: navigation opens a nested shell at the target rather than
+	// moving the calling shell in place. A child process can't relocate its
+	// parent, which is the whole reason the capture existed; dropping it
+	// trades in-place cd for a nested shell — the desired result under Win+R.
+	//
+	// The run shortcut is a sibling .cmd on PATH, so it resolves by bare
+	// name. Invoking it without `call` transfers control for good, so the
+	// alias branch needs no trailing exit.
 	content := fmt.Sprintf(`@echo off
 if "%%~1"=="" (
   "%s" --edit
   exit /b
 )
 
-rem A leading dash means a system verb (-v, --version, --doctor, ...).
-rem Skip the alias-resolve attempt — onix's stdout would otherwise be
-rem captured and fed to 'cd' as a bogus path.
+:: A leading dash marks a system verb (-v, --version, ...). Hand it straight
+:: to onix rather than treating it as an alias to navigate to.
 set "_onix_arg=%%~1"
 if "%%_onix_arg:~0,1%%"=="-" (
   set "_onix_arg="
@@ -308,17 +309,8 @@ if "%%_onix_arg:~0,1%%"=="-" (
 )
 set "_onix_arg="
 
-set "_onix_target="
-for /f "usebackq delims=" %%%%i in (`+"`"+`"%s" %%* 2^>nul`+"`"+`) do set "_onix_target=%%%%i"
-if not defined _onix_target (
-  "%s" %%*
-  exit /b
-)
-
-cd /d "%%_onix_target%%"
-set "_onix_target="
-if %%0 == "%%~f0" cmd /k
-`, exe, exe, exe, exe)
+%s %%* cmd /k
+`, exe, exe, runName)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
