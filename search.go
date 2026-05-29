@@ -223,6 +223,7 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 		"--ansi",
 		"--multi",
 		"--preview", findPreviewCommand(e.Home),
+		"--preview-window", "up:40%:border-bottom",
 	}
 	fzfCmd := execCommandContext(ctx, "fzf", fzfArgs...)
 	fzfCmd.Dir = target
@@ -250,7 +251,60 @@ func (c *FindCmd) Run(ctx context.Context, e *env) error {
 		return nil
 	}
 
-	return openSelectionsInEditor(ctx, target, lines, false)
+	return openFindSelections(ctx, target, lines)
+}
+
+// defaultAppExts is the allowlist of file types `ff` opens with their OS
+// default application instead of the editor. It is deliberately a
+// whitelist, not a denylist of dangerous types: anything not listed —
+// source, configs, and crucially executables/scripts (.cmd, .exe, .ps1) —
+// falls through to the editor and never gets auto-launched. Grow it when a
+// view-only type you actually open is missing, not to chase every handler.
+var defaultAppExts = map[string]bool{
+	".pdf": true, ".doc": true, ".docx": true, ".xls": true, ".xlsx": true,
+	".ppt": true, ".pptx": true, ".odt": true, ".rtf": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".bmp": true,
+	".svg": true, ".webp": true,
+	".zip": true, ".7z": true, ".rar": true,
+	".mp4": true, ".mkv": true, ".mov": true, ".mp3": true, ".wav": true, ".avi": true,
+}
+
+// opensWithDefaultApp reports whether a selection should open with its OS
+// default app rather than the editor: a directory (open the folder) or an
+// allowlisted file extension.
+func opensWithDefaultApp(path string) bool {
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		return true
+	}
+	return defaultAppExts[strings.ToLower(filepath.Ext(path))]
+}
+
+// openFindSelections routes each fzf selection by type. Allowlisted files
+// and directories open with the OS handler (PDF→viewer, dir→Explorer) via
+// openInExplorer; everything else goes to $EDITOR. Each selection is routed
+// independently, so a mixed pick (a .pdf and a .go) opens each correctly and
+// nothing executable is ever launched. openInExplorer needs an absolute
+// path; the editor branch keeps the original (relative) selection because
+// openSelectionsInEditor runs the editor with cmd.Dir set to the alias dir.
+func openFindSelections(ctx context.Context, target string, selections []string) error {
+	var editorSel []string
+	for _, sel := range selections {
+		abs := sel
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(target, sel)
+		}
+		if opensWithDefaultApp(abs) {
+			if err := openInExplorer(abs); err != nil {
+				return err
+			}
+			continue
+		}
+		editorSel = append(editorSel, sel)
+	}
+	if len(editorSel) == 0 {
+		return nil
+	}
+	return openSelectionsInEditor(ctx, target, editorSel, false)
 }
 
 // findPreviewCommand returns the fzf --preview command for `ff`. It

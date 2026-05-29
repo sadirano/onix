@@ -127,6 +127,39 @@ func TestOpenSelectionsInEditor_NoEditor(t *testing.T) {
 	}
 }
 
+// TestOpensWithDefaultApp locks the ff routing decision: allowlisted
+// view-only types and directories open with the OS handler; source,
+// configs, and — crucially — executables/scripts fall through to the
+// editor so a found file is never auto-run.
+func TestOpensWithDefaultApp(t *testing.T) {
+	defaultApp := []string{"report.pdf", "Slides.PPTX", "photo.JPG", "bundle.zip", "clip.mp4"}
+	for _, p := range defaultApp {
+		if !opensWithDefaultApp(p) {
+			t.Errorf("expected %q to open with default app", p)
+		}
+	}
+
+	editor := []string{"main.go", "notes.md", "config.toml", "data.json", "noext"}
+	for _, p := range editor {
+		if opensWithDefaultApp(p) {
+			t.Errorf("expected %q to route to the editor", p)
+		}
+	}
+
+	// Safety guarantee: executables/scripts must never default-open.
+	executable := []string{"run.cmd", "tool.exe", "deploy.ps1", "setup.bat", "installer.msi", "x.scr"}
+	for _, p := range executable {
+		if opensWithDefaultApp(p) {
+			t.Errorf("SECURITY: %q must route to the editor, not auto-launch", p)
+		}
+	}
+
+	// A directory opens as a folder regardless of name.
+	if !opensWithDefaultApp(t.TempDir()) {
+		t.Error("expected a directory to open with the OS file manager")
+	}
+}
+
 func TestRelaxNonASCII(t *testing.T) {
 	cases := []struct {
 		in, want string

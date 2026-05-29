@@ -99,7 +99,7 @@ ALIAS ACTIONS:
   --yank, -y             print path and copy to clipboard
   --paste, -p [name]     save clipboard content to alias dir, copy its path
   --grep, -g <query>     ripgrep + fzf in alias dir
-  --find, -f <query>     fd / Everything + fzf in alias dir
+  --find, -f <query>     fuzzy-find a file (opens in editor; docs/media in default app)
   --run, -r <cmd...>     exec command in alias dir
 
 SYSTEM VERBS:

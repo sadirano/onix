@@ -59,7 +59,7 @@ onix api --remove
 | Save clipboard into the dir, copy its path | `onix api --paste [name]` | `p api [name]` |
 | Run command in target dir | `onix api --run go test ./...` | `r api go test ./...` |
 | Search content (rg+fzf) | `onix api --grep handler` | `sg api handler` |
-| Find file by name (fd+fzf) | `onix api --find migration` | `ff api migration` |
+| Find file by name (fd+fzf), open in editor or default app | `onix api --find migration` | `ff api migration` |
 
 To scope these to a subdirectory, use a segment: `e src@api`, `sg src@api router`,
 etc.
@@ -76,7 +76,11 @@ ff api migration
 
 `sg` calls ripgrep + fzf with a bat preview; results open in `$EDITOR` at the
 matched line. `ff` uses Everything (`es`) on Windows or `fd` on Linux, both with
-fzf. Configure the layout in `~/.onix/config.toml` under `[grep]`.
+fzf and a top preview. `ff` routes the picked file by type: documents, images,
+archives, and media open in their OS default app, a directory opens in the file
+manager, and everything else (source, configs, and — by design — scripts and
+executables) opens in `$EDITOR`. Configure the `sg` layout in
+`~/.onix/config.toml` under `[grep]`.
 
 ## 5) Configuring shortcuts / search
 
