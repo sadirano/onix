@@ -131,8 +131,6 @@ Step "segments" {
     # ~/.onix/segments/<alias>.toml or <alias>/.onix/segments.toml.
     $segs = Join-Path $env:ONIX_HOME 'segments.toml'
     @'
-version = 3
-
 [[contexts]]
 segment = "docs"
 scope = "global"

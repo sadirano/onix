@@ -1,18 +1,27 @@
 # onix
 
-Fast directory alias resolver for Windows PowerShell and Linux (Bash/Zsh). Type `o acme` from any prompt; your shell jumps to the project root. One TOML file holds every alias, one binary serves every command, and the hot path adds about 0.6 ms on top of the OS process-spawn floor.
+Fast directory alias resolver for Windows and Linux command line. Type `o acme` from any prompt; your shell jumps to the project root. One TOML file holds every alias, one binary serves every command, and the hot path adds about 0.6 ms on top of the OS process-spawn floor.
 
 ## Install
 
-```bash
-# On Windows (PowerShell)
-go install github.com/sadirano/onix@latest
-onix --init
+### Windows (Scoop)
 
-# On Linux (Bash/Zsh)
+```powershell
+scoop bucket add sadirano https://github.com/sadirano/bucket
+scoop install onix
+onix --init
+```
+
+### From source (Windows or Linux)
+
+```bash
 go install github.com/sadirano/onix@latest
 onix --init
 ```
+
+### Prebuilt binaries
+
+Each tagged release publishes a Windows `.zip` and Linux `.tar.gz` (amd64/arm64) on the [Releases](https://github.com/sadirano/onix/releases) page — download, unpack, put `onix` on your `PATH`, then run `onix --init`.
 
 `onix --init` creates `~/.onix/`, writes a shell snippet to `~/.onix/shell/`, and sources it from your shell profile (`$PROFILE` on Windows, `.bashrc`, `.zshrc`, or `.profile` on Unix-likes). Restart your shell (or source your profile) once and the short commands below are live.
 
@@ -30,6 +39,7 @@ y acme                                     # print the path and copy to clipboar
 p acme                                     # save clipboard content into the alias dir, copy the saved path back
 p acme shot                                # …with a name (image→shot.png, text→shot.md)
 r acme go test ./...                       # run a command at that path
+o docs@acme                                # jump to a sub-alias segment (see Sub-aliases below)
 onix --list                                # show every alias
 onix --edit                                # open ~/.onix in your editor
 onix acme --remove                         # forget the alias
@@ -84,7 +94,11 @@ After editing, run `onix --sync` and `. $PROFILE` (or restart PowerShell) to pic
 
 ## Sub-aliases (`@`-segments)
 
-Append subdirectory shortcuts to any alias with `@`. Each segment is defined as a `[[contexts]]` entry in `~/.onix/segments.toml`:
+Append subdirectory shortcuts to any alias with `@`. Each segment is defined as a `[[contexts]]` entry. A segment is resolved by searching three places, first match wins:
+
+1. **Per-alias, local:** `<alias-path>/.onix/segments.toml`
+2. **Per-alias, central:** `~/.onix/segments/<alias>.toml`
+3. **Global:** `~/.onix/segments.toml` — but only entries marked `scope = "global"` are visible here; unscoped entries in the global file are ignored.
 
 ```powershell
 o docs@acme              # cd into <acme-path>/documentation
@@ -94,33 +108,28 @@ o client:bob@projb       # multi-segment, innermost first
 ```
 
 ```toml
-# ~/.onix/segments.toml
-version = 3
-
+# ~/.onix/segments.toml — entries in the global file must opt in with scope = "global"
 [[contexts]]
 segment = "docs"
+scope = "global"
 source-template = "/documentation"   # leading `/` makes it a subdirectory
 
 [[contexts]]
 segment = "src"
+scope = "global"
 source-template = "/source"
 
 [[contexts]]
 segment = "tasks"
+scope = "global"
 source-template = "/tickets/${tasks}"   # ${tasks} binds to the inline value
 ```
 
-Three ways to resolve a segment — pick one per `[[contexts]]` entry:
+Per-alias files (`<alias-path>/.onix/segments.toml`, `~/.onix/segments/<alias>.toml`) need **no** `scope` — every entry there is implicitly scoped to that alias. Only the shared global file requires the opt-in.
 
-| Field | Behaviour |
-|-------|-----------|
-| `source-template` | A string with `${VAR}` references. Inline values bind under `${<segment>}` (or `${param}` if `param` is set). Falls back to the context's `env` map and then process env. |
-| `source-exec` | A command + args. Run in the alias base; trimmed stdout is the fragment. |
-| `source-file` | A path (supports `@home/...`, `@alias/...`, `~/...`, absolute). File contents are the fragment. |
+A segment resolves through its `source-template`: a string with `${VAR}` references. For each `${name}`, onix looks up, in order, (1) the segment's inline value (`seg:value`), bound under `${<segment>}` — or `${param}` if the context sets `param`; (2) the context's `env` map; (3) the process environment. Templates own their separators — `"/foo"` appends as a subdirectory, `"_${task}.md"` appends as a filename suffix. A context with no `source-template` contributes nothing to the path.
 
-Templates own their separators — `"/foo"` appends as a directory, `"_${task}.md"` appends as a filename suffix. Encountering an unknown segment triggers an interactive prompt that walks you through defining it and saves the new `[[contexts]]` entry to disk.
-
-Lookups are case-insensitive. See [docs/SEGMENTS.md](docs/SEGMENTS.md) for the full grammar and traversal-guard rules.
+Encountering an unknown segment opens your editor on the central per-alias file (`~/.onix/segments/<alias>.toml`) seeded with a `[[contexts]]` skeleton to fill in. Lookups are case-insensitive, and `onix --contexts` prints the contexts defined in the global `~/.onix/segments.toml`. See [docs/SEGMENTS.md](docs/SEGMENTS.md) for the traversal-guard rules.
 
 ## Tab completion
 
@@ -138,37 +147,14 @@ If `onix` is not on `PATH`, add `$env:USERPROFILE\go\bin` (Windows) or `~/go/bin
 
 Set `$env:ONIX_HOME` to a different directory for sandboxed testing. The included `scripts/smoke.ps1` does exactly that — it builds, runs every command against a throwaway home, and measures the hot path.
 
-## Status and scope
-
-> **Prototype stage — no migration guarantees.** Onix has one real user (the author) and is in heavy active development. Config files, on-disk layouts, command grammar, and TOML schemas can and do change shape without migration paths, compat shims, or deprecation windows. If you're using onix and a change breaks your `~/.onix`, you're expected to rewrite the affected file by hand. This note will be removed once a stability commitment is in place.
-
-This release covers Windows (PowerShell) and Linux (Bash/Zsh), with built-in actions (including the `sg` / `ff` search shortcuts backed by ripgrep + fzf and Everything / fd + fzf respectively), optional `[shortcuts]` / `[grep]` tuning in `config.toml`, `[[contexts]]`-driven sub-aliases from `segments.toml` (with template / exec / file source kinds and inline `seg:value` arguments), and cross-platform tab completion.
-
-**Note: macOS is NOT supported in this repository.** If you require macOS support, please feel free to create your own fork.
-
 ## Architecture
 
 Onix is designed for extreme performance on the hot path (`resolve`) while maintaining a clean, modular structure for management commands.
 
-```mermaid
-graph TD
-    CLI[CLI / main.go] --> Commands[commands.go]
-    CLI --> FastPath[fastresolve.go]
-    
-    Commands --> Store[internal/store]
-    Commands --> Config[internal/config]
-    Commands --> Snippet[internal/snippet]
-    
-    FastPath --> Store
-    FastPath --> Segments[internal/segments]
-    
-    Snippet --> Config
-```
-
 ### Core Packages
 
 - **`internal/store`**: Manages `aliases.toml`, the primary database of name-to-path mappings. Includes atomic write logic and name validation.
-- **`internal/segments`**: Parses `@`-segment grammar, expands `${VAR}` templates, evaluates `source-template` / `source-exec` / `source-file` sources, and enforces the traversal guard on the resulting fragments before they join the alias path.
+- **`internal/segments`**: Parses `@`-segment grammar, expands `${VAR}` templates, evaluates each context's `source-template`, and enforces the traversal guard on the resulting fragments before they join the alias path.
 - **`internal/config`**: Manages `config.toml` — the optional `[shortcuts]` map (rename built-in commands) and `[grep]` section (tune the `sg` search UI).
 - **`internal/snippet`**: Generates the PowerShell and Bash/Zsh glue code that integrates Onix into your shell.
 

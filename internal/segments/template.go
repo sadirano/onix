@@ -14,7 +14,7 @@ import (
 //   - lookup returns (_, false)    → unresolved-variable error, mentioning name.
 //
 // The where argument is included in the error message so callers can point
-// users at the offending field ("source-template", "source-exec[2]", etc.).
+// users at the offending field (e.g. "source-template").
 func ExpandTemplate(tmpl, where string, lookup func(name string) (string, bool)) (string, error) {
 	if !strings.Contains(tmpl, "${") {
 		return tmpl, nil

@@ -24,7 +24,7 @@ onix api --edit                  # open in editor
 onix api --edit README.md        # open specific file in editor
 ```
 
-To land in a subdirectory of an alias, define a segment in `~/.onix/segments.toml`
+To land in a subdirectory of an alias, define a segment (a `[[contexts]]` entry)
 and use `@`-syntax (`e src@api`). See section 9.
 
 ## 2) Alias Management
@@ -127,14 +127,17 @@ disable.
 
 ## 9) Sub-Alias Navigation
 
-Segments are defined as `[[contexts]]` entries in `~/.onix/segments.toml`.
-On first use of an undefined segment, an interactive prompt walks you through
-creating one.
+Segments are defined as `[[contexts]]` entries. They can live in a per-alias file
+(`<alias-path>/.onix/segments.toml` or `~/.onix/segments/<alias>.toml`) or in the
+global `~/.onix/segments.toml` — but global entries are only visible if marked
+`scope = "global"`. On first use of an undefined segment, onix opens your editor on
+the central per-alias file (`~/.onix/segments/<alias>.toml`) with a `[[contexts]]`
+skeleton to fill in.
 
 Static template:
 
 ```powershell
-# segments.toml:
+# ~/.onix/segments/sms.toml (per-alias — no scope needed):
 # [[contexts]]
 # segment = "docs"
 # source-template = "/documentation"
@@ -146,7 +149,7 @@ y src@sms        # print path of <sms>/source
 Inline value (`seg:value`):
 
 ```powershell
-# segments.toml:
+# ~/.onix/segments/acme.toml:
 # [[contexts]]
 # segment = "tasks"
 # source-template = "/tickets/${tasks}"
@@ -157,7 +160,7 @@ s tasks:432@acme         # <acme>/tickets/432
 Multi-segment composition:
 
 ```powershell
-# segments.toml:
+# ~/.onix/segments/projb.toml:
 # [[contexts]]
 # segment = "client"
 # source-template = "/${client}"
@@ -169,13 +172,10 @@ Multi-segment composition:
 e task:432@client:bob@projb     # opens <projb>/bob_432.md
 ```
 
-Source kinds (exactly one per `[[contexts]]`):
-
-| Field             | Behaviour |
-|-------------------|-----------|
-| `source-template` | `${VAR}` expansion; inline value → context env → process env. |
-| `source-exec`     | Run cmd in alias base; trimmed stdout is the fragment. |
-| `source-file`     | Read file (supports `@home/...`, `@alias/...`, `~/...`). |
+A context resolves through its `source-template`: a `${VAR}` string expanded in
+order inline value → context `env` → process env. Templates own their separators
+(lead with `/` for a directory). A context with no `source-template` contributes no
+path fragment.
 
 A `[[contexts]]` block may also carry `env = {...}`; those keys are consulted during
 resolve-time template variable lookup. They are **not** exported to the shell after

@@ -1,30 +1,11 @@
 # Segments — spec
 
-**Scope:** the `seg@seg@...@alias` syntax and `segments.toml` schema.
+**Scope:** the `seg@seg@...@alias` syntax and the `[[contexts]]` schema across
+the global and per-alias `segments.toml` files.
 
-This document is the authoritative description of how segments resolve.
-
----
-
-## Why this exists
-
-Today, `o test@play` silently resolves to `<play>/test` even when `test` is
-not a registered subdir anywhere. Combined with `fastResolve`'s
-unconditional `MkdirAll`, this means typos like `o tst@play` quietly create
-junk directories. `[[contexts]]` exists but is invisible to the resolver.
-There is no mechanism for a context to contribute to the path itself.
-
-The redesign:
-
-- Removes the silent literal-name fallback. Unknown segments prompt the user
-  to define them.
-- Makes `[[contexts]]` the single place a segment is defined, with new
-  fields that drive path resolution.
-- Adds inline values (`seg:value`) so callers can pass arguments through
-  the segment syntax — e.g. `o task:432@client:bob@projb` resolves an
-  arbitrary task/client combination without registering each one.
-- Hands separator control to the template author. Templates that start with
-  `/` are directory components; templates that don't are direct appendages.
+This document is the authoritative description of how segments resolve. It
+reflects the current implementation in `internal/segments` and
+`internal/resolver`.
 
 ---
 
@@ -35,13 +16,35 @@ Three concepts, kept distinct:
 | Concept   | What it is                                | Lives in                       |
 |-----------|-------------------------------------------|--------------------------------|
 | Alias     | A name bound to an absolute base path     | `aliases.toml`                 |
-| Segment   | A token between `@`s, always context-resolved | Parsed from CLI invocation |
-| Context   | The definition of how a segment resolves and what shell state it sets | `segments.toml` `[[contexts]]` |
+| Segment   | A token between `@`s, always context-resolved | Parsed from the CLI invocation |
+| Context   | The definition of how a segment resolves  | A `[[contexts]]` entry in a `segments.toml` (see below) |
 
-There is no longer any notion of a "static subdir map" in config. If you
-want to navigate to a literal subdirectory of an alias, type it: the alias
-form `o <alias> <path>` or just `o <alias>/sub/dir`. The `@` syntax is
-reserved for context-driven, dynamic, or parameterised resolution.
+There is no static "subdir map" in config. To navigate to a literal
+subdirectory of an alias, type it: `o <alias> <path>` or `o <alias>/sub/dir`.
+The `@` syntax is reserved for context-driven, dynamic, or parameterised
+resolution.
+
+---
+
+## Where contexts live
+
+A `[[contexts]]` entry can be defined in three places. For each segment they are
+consulted in this precedence order, and the first match wins:
+
+1. **Per-alias, local:** `<alias-path>/.onix/segments.toml` — travels with the
+   project directory.
+2. **Per-alias, central:** `~/.onix/segments/<alias>.toml` — kept under the onix
+   home, named by the lowercase alias.
+3. **Global:** `~/.onix/segments.toml` — shared across every alias, but **only**
+   entries carrying `scope = "global"` are visible here. An unscoped entry in the
+   global file is ignored during lookup.
+
+The `scope` gate exists so the shared global file does not leak segment names
+into every alias by accident. **Per-alias files (1 and 2) need no `scope`** —
+every entry in them is implicitly scoped to that one alias. Only the global
+file requires the opt-in.
+
+`onix --contexts` lists the contexts defined in the global `~/.onix/segments.toml`.
 
 ---
 
@@ -54,84 +57,78 @@ A segmented invocation has the shape:
 ```
 
 - Segments are separated by `@`. The rightmost token is the alias.
-- A segment may carry an inline value via colon: `seg:value`.
-- The empty inline value (`seg:`) is treated as "no inline value" — fall
-  back to the configured source.
-- Multiple `@`s with empty segments between them (`a@@b`) are an error —
-  matches today's `ParseSegmentedAlias` behaviour of dropping empty
-  segments via `strings.TrimSpace`.
+- A segment may carry an inline value via colon: `seg:value`. Only the first
+  `:` splits; `a:b:c` parses as name `a`, value `b:c`.
+- The empty inline value (`seg:`) is treated as "no inline value" — fall back to
+  the configured source.
+- Empty segments from consecutive `@`s (`a@@b`) are dropped (trimmed away).
 
-Innermost-to-outermost order is right-to-left: in `task:432@client:bob@projb`,
+Order is right-to-left, innermost first: in `task:432@client:bob@projb`,
 `projb` is the alias, `client` is the innermost segment, `task` is outermost.
-This matches today's `resolver.go:156` loop direction.
 
 ---
 
 ## Schema — `segments.toml`
 
 ```toml
-version = 3
-
 [[contexts]]
 segment = "client"             # required: the segment name
 
-# Optional: name to bind inline value under. Defaults to the segment name.
-# Lets templates use `${clientId}` while the CLI says `client:bob`.
+# Optional. In the GLOBAL ~/.onix/segments.toml an entry must set
+# scope = "global" to be visible. Ignored (harmless) in per-alias files.
+scope = "global"
+
+# Optional: name to bind the inline value under. Defaults to the segment name.
+# Lets a template use `${clientId}` while the CLI says `client:bob`.
 param = "clientId"
 
-# Resolution — exactly ONE of source-template / source-exec / source-file.
-# Omitted means resolution always requires an inline value (else hard error).
+# The path fragment, as a template. `${VAR}` references are expanded
+# (see "Variable resolution order"). Omitted → the context contributes no
+# path fragment (it can still supply env vars, below).
 source-template = "/${clientId}"
 
-# Optional env map: consulted only during resolve-time variable lookup
-# (see "Variable resolution order" below). Not exported to the shell.
-env  = { CLIENT_ID = "${clientId}" }
+# Optional env map: supplies ${VAR} values during resolve-time lookup. A value
+# here takes precedence over a same-named shell variable, and is used verbatim
+# (not re-expanded). Not exported to the shell after cd.
+env = { REGION = "us-east-1" }
 ```
 
-### Source types
+### The source field
 
-Exactly one of the following may be set on a context. Setting more than one
-is a hard error on load.
+`source-template` is the only source kind. It is a string with `${VAR}`
+references; after expansion the result is the path fragment.
 
-| Field             | Value type      | Semantics                                          |
-|-------------------|-----------------|----------------------------------------------------|
-| `source-template` | string          | Templated string. `${VAR}` references expanded.    |
-| `source-exec`     | array of string | Command + args. Cwd = alias base path. Trimmed stdout becomes the fragment. Each arg is template-expanded. |
-| `source-file`     | string          | Path to a file. Contents are read and trimmed. Path is template-expanded and supports the prefixes below. |
+> **Note:** earlier designs described `source-exec` (run a command, capture
+> stdout) and `source-file` (read a file's contents). **Neither is
+> implemented** — only `source-template` exists. To compute a fragment at
+> resolve time, populate a variable in the environment and reference it from a
+> template, or feed it through the context's `env` map.
 
-#### `source-file` path prefixes
-
-| Prefix             | Resolves to                              |
-|--------------------|------------------------------------------|
-| `/...` or `C:\...` | Absolute path (after `~` and `$ENV` expansion) |
-| `@alias/...`       | Relative to the current alias's base path |
-| `@home/...`        | Relative to onix home (`$ONIX_HOME` or `~/.onix`) |
-
-### Removed schema
-
-- `[subdirs]` (top-level): **removed**. Silently ignored on load. Users who
-  relied on this see the new unknown-segment prompt on first use.
-- `subdirs = {...}` (per-alias in `aliases.toml`): **removed**. Same
-  treatment.
+A context with no `segment` is invalid. A context with no `source-template`
+loads cleanly but contributes nothing to the path; if such a context is invoked
+*with* an inline value (`seg:value`), that is a hard error — there is no template
+to consume the value.
 
 ---
 
 ## Variable resolution order
 
-For any `${name}` reference inside a template, exec arg, or file path:
+For any `${name}` reference inside a `source-template`:
 
-1. **Segment-bound inline value.** If the current segment was invoked with
-   `seg:value`, `${<param>}` (default `${<segment>}`) is bound to `value`.
-2. **Context's static `env` map.** If the context declares
-   `env = { FOO = "..." }`, `${FOO}` reads from there.
-3. **Parent shell env.** Whatever was set in the calling process.
-4. **Unbound → hard error.** Resolution stops, the user sees the unresolved
-   variable name and where in the template it appeared.
+1. **Segment-bound inline value.** If the segment was invoked as `seg:value`,
+   `${<param>}` (default `${<segment>}`) is bound to `value`.
+2. **Context's static `env` map.** If the context declares `env = { FOO = "..." }`,
+   `${FOO}` reads from there. Because this is checked before the process
+   environment, a context `env` value **overrides** a same-named shell variable
+   (it is a pinned value, not a fallback), and is used verbatim — env values are
+   not themselves re-expanded.
+3. **Process environment.** Consulted only if the name was bound by neither of
+   the above.
+4. **Unbound → hard error.** Resolution stops and reports the unresolved
+   variable name.
 
-The context's static `env` is overlaid onto the shell env, not the other
-way around — so a context-declared `env` value beats a same-named shell
-env var during the resolve. The env map is **not** exported to the shell
-after cd; it exists solely to feed resolve-time variable lookup.
+The context's `env` is consulted only during resolve-time lookup; it is **not**
+exported to the shell after cd.
 
 ---
 
@@ -139,126 +136,82 @@ after cd; it exists solely to feed resolve-time variable lookup.
 
 Given `seg1[:v1]@seg2[:v2]@...@alias`:
 
-1. Look up the alias. If unknown → existing alias-not-found prompt /
-   fuzzy-match flow (unchanged from `resolver.go:46-133`).
-2. Strip any trailing `/` from the alias path. Call this `target`.
-3. For each segment, **innermost-first** (right-to-left in the segments
-   list):
-   - Find a `[[contexts]]` entry whose `segment` matches (case-insensitive).
-   - If no context exists → invoke the **unknown-segment prompt** (see
-     below). The prompt creates a context and saves it. Resume with the new
-     context.
-   - If context exists:
-     - If an inline value was given, bind `${<param>}` to it for this
-       segment's evaluation.
-     - If both `source-*` is set and an inline value was given: the inline
-       value drives the template via `${<param>}`; the configured
-       `source-*` evaluation still runs normally (so a `source-template`
-       can reference `${<param>}` and other vars).
-     - If no inline value and no `source-*` is set → hard error.
-   - Evaluate the source:
-     - `source-template`: expand `${VAR}` refs.
-     - `source-exec`: expand `${VAR}` in each arg, run command in alias
-       base dir, trim stdout. Non-zero exit → hard error including stderr.
-     - `source-file`: expand `${VAR}` in path, resolve prefix, read file,
-       trim. Missing/unreadable → hard error.
-   - The result is a **fragment**. Run the traversal guard on it (below).
-   - Append the fragment directly to `target` with **no auto-inserted
-     separator**. Templates own their separators.
-4. `MkdirAll target` (unchanged from today).
-5. Return `target`.
+1. Parse into the segments list and the alias. An empty alias or no segments is
+   an error.
+2. Look up the alias in `aliases.toml`. Unknown → hard error.
+3. Load the global file and the two per-alias files (any missing file is fine).
+4. Strip a trailing `/` from the alias path. Call this `target`.
+5. For each segment, **innermost-first** (right-to-left):
+   - Find a matching context, in precedence order: local → central → global
+     (`scope = "global"` only). Matching is case-insensitive; within a file the
+     first matching entry wins.
+   - If no context is found → invoke the **unknown-segment prompt** (below). With
+     `--no-prompt` / `-q` there is no prompt and this is a hard error.
+   - Evaluate `source-template` to a **fragment** (an empty result contributes
+     nothing and is skipped).
+   - Run the **traversal guard** on the fragment (below).
+   - Append the fragment to `target` with **no auto-inserted separator** —
+     templates own their separators.
+6. Return `target` (host-native, via `filepath.FromSlash`).
+
+`Resolve` does not create directories; whatever the resolved path feeds (a `cd`,
+an editor open, an Explorer launch) decides that — identical to a plain alias.
 
 ### Path joiner
 
-Replaces today's `resolver.go:155-159` `target + "/" + part` loop. New rule:
 `target` becomes `target + fragment`, verbatim. The template author chooses
-whether to lead with `/` (directory) or not (filename suffix).
-
-A common simple context will look like:
+whether to lead with `/` (directory) or not (filename suffix). A common context:
 
 ```toml
 [[contexts]]
 segment = "prod"
+scope = "global"
 source-template = "/prod"
 ```
 
-That `/` is **load-bearing**; without it the fragment appends directly,
-producing `<alias>prod` rather than `<alias>/prod`. There is no automatic
-lint or warning for this — explicit was preferred over magic.
+That leading `/` is **load-bearing**; without it the fragment appends directly,
+producing `<alias>prod` rather than `<alias>/prod`. There is no lint for this —
+explicit was preferred over magic.
 
 ### Traversal guard
 
 After each fragment is computed and before it joins `target`:
 
-- Split the fragment on `/` and `\`.
-- Reject any component that equals `..` → hard error
-  `segment '<name>' escaped its alias`.
-- Reject any fragment that begins with `/`, `\`, `~`, or a drive letter
-  pattern (`[A-Za-z]:`) **other than** the single leading `/` that the
-  template uses for path separation. (I.e., `/foo/bar` is fine — `/foo` is
-  the separator-bearing prefix, `bar` is the next component.)
 - Reject any fragment containing a null byte.
+- Split on `/` and `\`; reject any component equal to `..`.
+- Allow at most one leading `/` (the template's directory-separator prefix). A
+  second `/`, a leading `\`, a leading `~`, or a leading drive-letter pattern
+  (`[A-Za-z]:`) is rejected.
 
-The guard runs *after* template expansion, so a template like
-`${USER_INPUT}` that resolves to `../../etc/passwd` is caught.
+The guard runs *after* template expansion, so a template like `${USER_INPUT}`
+that resolves to `../../etc/passwd` is caught.
 
 ---
 
 ## Unknown-segment prompt
 
-When a segment has no `[[contexts]]` entry, fire an interactive prompt
-(skip if `--no-prompt` / `-q` is set; in that case → hard error).
+When a segment matches no context (and prompting is enabled), onix seeds the
+**central per-alias file** (`~/.onix/segments/<alias>.toml`) with a skeleton and
+opens it in your editor:
 
-```
-segment 'task' is not defined.
-[inline value: 432]                 # shown only if invoked as task:432
-
-Pick a source:
-  [1] template (e.g. /${task}, /tickets/${task}/notes)
-  [2] exec     (run a command, capture stdout)
-  [3] file     (read a file's contents)
-  [4] literal  (alias for template with no ${...} refs)
-
-> 1
-Template:
-> /tickets/${task}
-
-Save to segments.toml? [Y/n] y
-Saved [[contexts]] segment = "task", source-template = "/tickets/${task}"
+```toml
+[[contexts]]
+segment = "task"
+# (Current inline value: 432)        # shown only if invoked as task:432
+source-template = "/${task}"
 ```
 
-- The inline value (`432` above) is recalled in the banner but isn't itself
-  written to config — it's just the current invocation's value.
-- Selecting `[4] literal` is sugar for picking `template` with no `${...}`
-  refs. The stored field is still `source-template`.
-- The save step is implicit (the design picked "always save"); the `[Y/n]`
-  is shown only to allow cancel, not to allow declining the save.
-- After save, resolution resumes from step 3 with the new context.
+- The file is opened at its end (for editors that support `+<line>`), so you can
+  fill in or adjust the new block.
+- The inline value (`432` above) is recalled in a comment but is not itself
+  written to config — it is just the current invocation's value.
+- On save, onix reloads the file and resumes resolution with the new context. If
+  the block is gone (you deleted it / quit without saving), the invocation is
+  cancelled.
+- Needs an editor: `$EDITOR` → `$VISUAL` → first of `nvim`, `vim`, `code`,
+  `nano`, `notepad` on PATH.
 
-The prompt uses the same I/O surface as today's unknown-alias prompt
-(`promptDestination` in `fastresolve.go`).
-
----
-
-## Backward compatibility
-
-| Today                              | After                                       |
-|------------------------------------|---------------------------------------------|
-| `[subdirs]` in `segments.toml`     | Ignored on load. Silent — no warning.       |
-| `subdirs = {...}` in `aliases.toml`| Ignored on load. Silent.                    |
-| `[[contexts]]` with only `env`    | Loads cleanly; contributes nothing to the path. The env map is only consulted during resolve-time variable lookup. |
-| `o unknown@alias` (silent literal) | Prompt fires; user defines the segment.     |
-| Path joiner inserts `/` between segments | Joiner appends directly; templates control separators. |
-| `ResolveSegment` falls back to literal name | `ResolveSegment` errors / prompts.    |
-| `MkdirAll` always                  | Unchanged.                                  |
-
-Users with no segmented aliases see no behaviour change. Users with
-`subdirs` config will see the unknown-segment prompt on first use of each
-segment; defining them in `[[contexts]]` (typically with `source-template
-= "/<the-old-value>"`) restores the old behaviour.
-
-There is no automatic migration tool. The design picked "ignore" over
-"warn", "error", or "auto-convert".
+Because the prompt writes to a per-alias file, the new context needs no `scope`.
 
 ---
 
@@ -267,7 +220,7 @@ There is no automatic migration tool. The design picked "ignore" over
 ### Example 1 — inline value, simple
 
 ```toml
-# segments.toml
+# ~/.onix/segments/proja.toml   (per-alias — no scope needed)
 [[contexts]]
 segment = "tasks"
 source-template = "/${tasks}"
@@ -285,7 +238,7 @@ C:/proja/123
 ### Example 2 — inline values, filename composition
 
 ```toml
-# segments.toml
+# ~/.onix/segments/projb.toml
 [[contexts]]
 segment = "client"
 source-template = "/${client}"
@@ -301,100 +254,71 @@ path = "C:/projectb/"
 
 ```sh
 $ e task:432@client:bob@projb
-# resolves to: C:/projectb/bob_432.md
-# `e` (--edit) opens it in $EDITOR
+# resolves to: C:/projectb/bob_432.md  →  `e` (--edit) opens it in $EDITOR
 ```
 
 Trace:
 - `target = "C:/projectb"` (trailing `/` stripped)
-- innermost segment `client:bob` → template `/${client}` → `/bob` →
-  `target = "C:/projectb/bob"`
-- outermost segment `task:432` → template `_${task}.md` → `_432.md` →
-  `target = "C:/projectb/bob_432.md"`
+- innermost `client:bob` → `/${client}` → `/bob` → `target = "C:/projectb/bob"`
+- outermost `task:432` → `_${task}.md` → `_432.md` → `target = "C:/projectb/bob_432.md"`
 
-### Example 3 — `source-exec` capturing git branch
+### Example 3 — a shared global context
 
 ```toml
+# ~/.onix/segments.toml   (global — scope is required)
 [[contexts]]
-segment = "branch"
-source-exec = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+segment = "docs"
+scope = "global"
+source-template = "/documentation"
 ```
 
 ```sh
-$ o branch@code
-# runs `git rev-parse --abbrev-ref HEAD` in <code>'s base path
-# captures stdout (e.g. "feature/foo"), appends as-is — produces
-# <code>feature/foo (almost certainly NOT what you want)
+$ s docs@anyalias
+# Explorer at <anyalias>/documentation — works for every alias
 ```
 
-The author needs a leading `/` somewhere. Either wrap with a template
-context layer, or use a template directly:
+### Example 4 — pinned value via `env`
 
 ```toml
+# ~/.onix/segments/code.toml
 [[contexts]]
-segment = "branch"
-source-template = "/${BRANCH}"      # reads $BRANCH from shell env
-env = { BRANCH = "main" }           # default if unset
-
-# Or, if you must compute it at resolve time, source-exec + a wrapper
-# script that prepends '/':
-[[contexts]]
-segment = "branch"
-source-exec = ["pwsh", "-c", "'/' + (git rev-parse --abbrev-ref HEAD)"]
-```
-
-The leading-`/` discipline is the price of "templates own separators".
-
-### Example 4 — `source-file` with `@home` prefix
-
-```toml
-[[contexts]]
-segment = "task"
-source-file = "@home/state/current-task"
+segment = "logs"
+source-template = "/logs/${ENV}"
+env = { ENV = "dev" }     # binds ${ENV} during resolve; wins over any shell $ENV
 ```
 
 ```sh
-$ echo "TASK-9001" > ~/.onix/state/current-task
-$ o task@work
-# reads ~/.onix/state/current-task → "TASK-9001"
-# fragment = "TASK-9001" → appended directly (probably wants a /)
+$ o logs@code              # → <code>/logs/dev
+$ $env:ENV = "prod"; o logs@code   # still → <code>/logs/dev (env map overrides the shell)
 ```
+
+To vary the value per call instead, drop `env` and pass an inline value —
+`source-template = "/logs/${logs}"` with `o logs:prod@code`.
 
 ---
 
-## Out of scope (for now)
+## Out of scope (not implemented)
 
-- **Multi-source contexts** (try env → fall back to exec → fall back to
-  prompt). Rejected for simplicity; users compose fallbacks inside their
-  exec script.
-- **Auto-export of resolved values** as shell env vars. Opt-in: user adds
-  the var to the context's `env` map themselves.
-- **TTL caching** of exec/file results. Each resolve re-evaluates.
-- **Lint / warning** for templates that start with an alphanumeric char
-  (likely-missing leading `/`). Trusted to be explicit.
-- **`onix segment <verb>` CLI surface** for managing contexts (add, edit,
-  invalidate, list). Today the user edits `segments.toml` directly or uses
-  the unknown-segment prompt; a higher-level UX may follow later.
-- **`source-exec` per-context cwd override.** Default = alias base. If a
-  use case for shell-cwd-based exec emerges, add a `cwd = "shell" | "alias" | "home" | "<path>"` field then.
+- **`source-exec` / `source-file`.** Removed; only `source-template` resolves a
+  fragment. Compute values outside onix and pass them via the environment or the
+  context's `env` map.
+- **Auto-export of resolved values** as shell env vars. The `env` map feeds
+  resolve-time lookup only.
+- **Multi-source contexts / fallback chains.**
+- **A `onix segment <verb>` management CLI.** Edit the `segments.toml` files
+  directly, or let the unknown-segment prompt create the entry.
 
 ---
 
 ## Implementation pointers
 
-Where the work lands:
-
-| Concern                              | File / function                                    |
-|--------------------------------------|----------------------------------------------------|
-| Parse `seg:value` token              | `internal/segments/segments.go:101` `ParseSegmentedAlias` (extend to return inline values) |
-| Resolve segments                     | `internal/segments/segments.go:74` `ResolveSegment` (rewrite for context lookup + source eval) |
-| Path joiner                          | `internal/resolver/resolver.go:155-159` `resolveSegmented` (drop the `/` insert) |
-| Schema for sources                   | `internal/segments/segments.go:15-19` `ContextDef` (add `Param`, `SourceTemplate`, `SourceExec`, `SourceFile`) |
-| Schema loader (subdirs ignore, source mutex check) | `internal/segments/segments.go:37` `LoadSegments` |
-| Unknown-segment prompt               | new function alongside `promptDestination` in `fastresolve.go` |
-| `--no-prompt` propagation            | already plumbed via `fastResolve(..., noPrompt, ...)` — extend the same flag |
-| Traversal guard                      | new helper in `internal/segments` or `internal/resolver` |
-
-A separate implementation plan (which PRs in which order, with test
-strategy and benchmark coverage) will be drafted when this spec is signed
-off.
+| Concern                              | File / function                                       |
+|--------------------------------------|-------------------------------------------------------|
+| Parse `seg:value` tokens             | `internal/segments/segments.go` — `ParseSegmentedAlias`, `parseSegmentToken` |
+| Context schema                       | `internal/segments/segments.go` — `ContextDef`, `SegmentsFile` |
+| File locations / loaders             | `internal/segments/segments.go` — `Path`, `LocalPath`, `CentralPath`, `LoadSegmentsFile` |
+| Context lookup (+ global scope gate) | `internal/segments/segments.go` — `LookupContext`, `LookupGlobalContext` |
+| Resolve segments                     | `internal/resolver/resolver.go` — `resolveSegmented`, `evalSegment` |
+| Template expansion                   | `internal/segments/template.go` — `ExpandTemplate`, `EvalTemplateSource` |
+| Traversal guard                      | `internal/segments/template.go` — `GuardFragment` |
+| Unknown-segment prompt               | `navigate.go` — `promptSegmentDefinition` |

@@ -72,21 +72,27 @@ separate register step needed.
 
 Sub-alias navigation lets you jump into a specific subdirectory inside an alias
 without registering a new alias for every path combination you visit. Each
-`@`-separated segment is defined as a `[[contexts]]` entry in
-`~/.onix/segments.toml`.
+`@`-separated segment is defined as a `[[contexts]]` entry. A segment is resolved
+by searching three files, first match wins:
+
+1. **Per-alias, local:** `<alias-path>/.onix/segments.toml`
+2. **Per-alias, central:** `~/.onix/segments/<alias>.toml`
+3. **Global:** `~/.onix/segments.toml` — but only entries marked `scope = "global"`
+   are visible here. Unscoped entries in the global file are ignored; per-alias
+   files need no `scope`.
 
 ### Define a segment
 
 ```toml
-# ~/.onix/segments.toml
-version = 3
-
+# ~/.onix/segments.toml — global entries must opt in with scope = "global"
 [[contexts]]
 segment = "docs"
+scope = "global"
 source-template = "/documentation"   # the leading `/` makes it a directory
 
 [[contexts]]
 segment = "src"
+scope = "global"
 source-template = "/source"
 ```
 
@@ -95,11 +101,11 @@ s docs@sms       → Explorer at <sms>/documentation
 e src@sms        → editor at <sms>/source
 ```
 
-If you invoke a segment that isn't defined, onix opens an interactive prompt that
-walks you through creating the `[[contexts]]` entry and saves it for you. Segments
-without a `source-template` / `source-exec` / `source-file` field never contribute
-a path fragment — they can still set env vars consulted during resolve-time
-template expansion (see "Context env" below).
+If you invoke a segment that isn't defined, onix opens your editor on the central
+per-alias file (`~/.onix/segments/<alias>.toml`), seeded with a `[[contexts]]`
+skeleton to fill in. A segment whose context has no `source-template` never
+contributes a path fragment — it can still set env vars consulted during
+resolve-time template expansion (see "Context env" below).
 
 ### Inline values — `seg:value@alias`
 
@@ -140,39 +146,35 @@ source-template = "_${task}.md"   # no leading / — appends to the previous fra
 e task:432@client:bob@projb     → opens <projb>/bob_432.md in $EDITOR
 ```
 
-### Source kinds
+### Source
 
-Each `[[contexts]]` entry uses one of three source kinds. Mixing more than one is a
-load-time error.
-
-| Field | Behaviour |
-|-------|-----------|
-| `source-template` | A string with `${VAR}` references. Vars resolve in order: segment inline value → context's `env` map → process env → error. |
-| `source-exec`     | `["cmd", "arg", ...]`. Each arg is template-expanded, the command runs in the alias base directory, and trimmed stdout becomes the fragment. |
-| `source-file`     | A path. Accepts `@home/...`, `@alias/...`, `~/...`, or absolute. File contents (trimmed) are the fragment. |
+A `[[contexts]]` entry resolves through its `source-template`: a string with
+`${VAR}` references. For each `${name}`, onix resolves it in order — segment inline
+value → context's `env` map → process env → error. The expanded string is the path
+fragment, and templates own their separators (lead with `/` for a directory, omit
+it to append directly to the previous fragment).
 
 ```toml
 [[contexts]]
-segment = "branch"
-source-exec = ["pwsh", "-c", "'/' + (git rev-parse --abbrev-ref HEAD)"]
-
-[[contexts]]
-segment = "current"
-source-file = "@home/state/current-task"
+segment = "feature"
+source-template = "/features/${feature}"   # feature:login@api → <api>/features/login
 ```
 
 ### Context env
 
-A `[[contexts]]` entry may also declare an `env` map. These keys are
-consulted during resolve-time variable lookup (as a fallback after inline
-values, before process env). They are **not** exported to the shell after
-`cd` — if you want shell-side side effects, drive them yourself.
+A `[[contexts]]` entry may also declare an `env` map. These keys are consulted
+during resolve-time variable lookup, after the segment's inline value but
+**before** the process environment — so a context `env` value takes precedence
+over a same-named shell variable (it is a pinned value, not a fallback). The
+values are used verbatim and are **not** re-expanded. They are also **not**
+exported to the shell after `cd` — if you want shell-side side effects, drive
+them yourself.
 
 ```toml
 [[contexts]]
 segment = "branch"
 source-template = "/${BRANCH}"
-env = { BRANCH = "main" }    # default when $BRANCH is unset in the shell
+env = { BRANCH = "main" }    # binds ${BRANCH}=main during resolve, overriding any shell $BRANCH
 ```
 
 See [SEGMENTS.md](SEGMENTS.md) for the full grammar and traversal-guard rules.

@@ -13,8 +13,8 @@ import (
 
 // ContextDef is one [[contexts]] entry in segments.toml.
 //
-// Env is consulted during resolve-time variable lookup inside templates
-// and source-exec args; it is not exported to the shell after cd.
+// Env is consulted during resolve-time variable lookup inside the
+// source-template; it is not exported to the shell after cd.
 //
 // Scope controls visibility when the entry lives in the global
 // ~/.onix/segments.toml file. Set scope = "global" to make the entry
