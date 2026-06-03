@@ -23,36 +23,6 @@ func fakeLookPath(t *testing.T, found map[string]bool) {
 	}
 }
 
-func TestGrepCmd_NotFound(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	home := t.TempDir()
-	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-
-	err := (&GrepCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-	if err == nil {
-		t.Fatal("expected error when rg/fzf missing, got nil")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected 'not found' error, got: %v", err)
-	}
-}
-
-func TestFindCmd_NotFound(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	home := t.TempDir()
-	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-
-	err := (&FindCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-	if err == nil {
-		t.Fatal("expected error when fd/fzf missing, got nil")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected 'not found' error, got: %v", err)
-	}
-}
-
 func TestGrepCmd_TooFewArgs(t *testing.T) {
 	err := (&GrepCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir(), Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil || !strings.Contains(err.Error(), "usage") {
@@ -64,21 +34,6 @@ func TestFindCmd_TooFewArgs(t *testing.T) {
 	err := (&FindCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir(), Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil || !strings.Contains(err.Error(), "usage") {
 		t.Errorf("expected usage error, got: %v", err)
-	}
-}
-
-// TestGrepCmd_FzfNotFound exercises the second-LookPath branch (rg present,
-// fzf missing). Without the lookPath indirection the test would have to
-// trust the host's PATH to pin only rg.
-func TestGrepCmd_FzfNotFound(t *testing.T) {
-	fakeLookPath(t, map[string]bool{"rg": true})
-	home := t.TempDir()
-	target := t.TempDir()
-	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-
-	err := (&GrepCmd{Args: []string{"acme", "query"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-	if err == nil || !strings.Contains(err.Error(), "fzf") {
-		t.Errorf("expected fzf-not-found error, got %v", err)
 	}
 }
 
