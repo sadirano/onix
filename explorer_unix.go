@@ -20,3 +20,14 @@ func openInExplorer(target string) error {
 	}
 	return nil
 }
+
+// runCommandOutside starts the command in the background on non-Windows platforms.
+func runCommandOutside(dir string, exe string, args []string) error {
+	cmd := execCommand(exe, args...)
+	cmd.Dir = dir
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start %s: %w", exe, err)
+	}
+	return nil
+}
+

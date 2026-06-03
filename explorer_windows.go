@@ -21,3 +21,18 @@ func openInExplorer(target string) error {
 	// successful opens and we'd report a phantom failure. Fire and forget.
 	return nil
 }
+
+// runCommandOutside starts the command detached from the parent console and
+// running in a new console window on Windows.
+func runCommandOutside(dir string, exe string, args []string) error {
+	cmd := execCommand(exe, args...)
+	cmd.Dir = dir
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: 0x10, // CREATE_NEW_CONSOLE
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start %s: %w", exe, err)
+	}
+	return nil
+}
+

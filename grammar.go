@@ -225,7 +225,7 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 
 	switch action {
 	case "resolve":
-		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
+		return fastResolve(e.Home, alias, false, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	case "remove":
 		files, force, recursive, err := parseRemoveArgs(actionArgs)
 		if err != nil {
@@ -267,8 +267,13 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 // dispatchAliasAddOrResolve handles `onix <alias>` and `onix <alias> <path> [metadata...]`.
 func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest []string) error {
 	cleaned := make([]string, 0, len(rest))
+	save := false
 	for _, a := range rest {
 		if a == "--no-prompt" || a == "-q" {
+			continue
+		}
+		if a == "--save-last" {
+			save = true
 			continue
 		}
 		cleaned = append(cleaned, a)
@@ -276,7 +281,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 
 	if len(cleaned) == 0 {
 		// Bare `onix <alias>` — hot-path resolve.
-		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
+		return fastResolve(e.Home, alias, save, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	}
 
 	// Parse: <path>
@@ -294,7 +299,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 	}
 	if add.Path == "" {
 		// No path positional — fall back to resolve.
-		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
+		return fastResolve(e.Home, alias, save, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	}
 	return add.Run(ctx, e)
 }

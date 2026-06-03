@@ -210,6 +210,26 @@ func TestRunCmd(t *testing.T) {
 		}
 	})
 
+	t.Run("happy path with -o flag", func(t *testing.T) {
+		argv := append([]string{"acme", "-o", bin}, args...)
+		_, _, err := captureStdio(func() error {
+			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
+		})
+		if err != nil {
+			t.Errorf("RunCmd.Run with -o: %v", err)
+		}
+	})
+
+	t.Run("happy path with --outside flag", func(t *testing.T) {
+		argv := append([]string{"acme", "--outside", bin}, args...)
+		_, _, err := captureStdio(func() error {
+			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
+		})
+		if err != nil {
+			t.Errorf("RunCmd.Run with --outside: %v", err)
+		}
+	})
+
 	t.Run("rejects too few args", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
 			return (&RunCmd{Args: []string{"acme"}}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
@@ -350,7 +370,7 @@ func TestFastResolve_PrintsPath(t *testing.T) {
 	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
 
 	stdout, _, err := captureStdio(func() error {
-		return fastResolve(home, "acme", os.Stdout, os.Stderr, os.Stdin, nil)
+		return fastResolve(home, "acme", false, os.Stdout, os.Stderr, os.Stdin, nil)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -358,6 +378,40 @@ func TestFastResolve_PrintsPath(t *testing.T) {
 	if !samePath(strings.TrimSpace(stdout), target) {
 		t.Errorf("got %q, want %q", stdout, target)
 	}
+}
+
+func TestFastResolve_SaveFlag(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
+
+	t.Run("without save flag, .last should not exist", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return fastResolve(home, "acme", false, os.Stdout, os.Stderr, os.Stdin, nil)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(home, ".last")); err == nil {
+			t.Errorf(".last file exists but should not")
+		}
+	})
+
+	t.Run("with save flag, .last should contain the path", func(t *testing.T) {
+		_, _, err := captureStdio(func() error {
+			return fastResolve(home, "acme", true, os.Stdout, os.Stderr, os.Stdin, nil)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(home, ".last"))
+		if err != nil {
+			t.Fatalf("failed to read .last: %v", err)
+		}
+		if string(data) != target {
+			t.Errorf("got %q, want %q", data, target)
+		}
+	})
 }
 
 func TestYankCmd(t *testing.T) {

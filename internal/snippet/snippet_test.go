@@ -60,14 +60,18 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if !strings.Contains(content, "--edit") {
 		t.Errorf("o.cmd missing '--edit' for no-arg invocation:\n%s", content)
 	}
-	// Navigation delegates to the run shortcut, which opens an interactive
-	// shell rooted at the alias target.
+	// Navigation in Win+R mode delegates to the run shortcut with cmd /k.
 	if !strings.Contains(content, "cmd /k") {
 		t.Errorf("o.cmd missing 'cmd /k' navigation via run shortcut:\n%s", content)
 	}
+	// Normal inline navigation resolves the alias and uses pushd to change directories.
+	if !strings.Contains(content, "pushd ") || !strings.Contains(content, "ONIX_LAST") {
+		t.Errorf("o.cmd missing in-place pushd navigation:\n%s", content)
+	}
 	// Regression guard: navigation must NOT capture onix's stdout. The
 	// 'for /f' capture redirected onix into a pipe, which hung the inline
-	// prompt when resolving a new segment.
+	// prompt when resolving a new segment. We now write the resolved path to
+	// a state file instead.
 	if strings.Contains(content, "for /f") {
 		t.Errorf("o.cmd must not capture onix stdout via 'for /f':\n%s", content)
 	}
@@ -75,6 +79,10 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	// must bypass alias navigation and go straight to onix.
 	if !strings.Contains(content, `if "%_onix_arg:~0,1%"=="-"`) {
 		t.Errorf("o.cmd missing leading-dash bypass:\n%s", content)
+	}
+	// Verify that the Win+R launch check exists.
+	if !strings.Contains(content, `if "%~0"=="%~f0"`) {
+		t.Errorf("o.cmd missing Win+R launch check:\n%s", content)
 	}
 }
 

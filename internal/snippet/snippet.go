@@ -300,6 +300,7 @@ if errorlevel 1 (
 
 func writeOCmdWrapper(binDir, exe, runName, name string) {
 	path := filepath.Join(binDir, name+".cmd")
+	lastFile := filepath.Join(filepath.Dir(binDir), ".last")
 	// With no argument the wrapper opens the config in the editor; a leading
 	// dash is a system verb handed straight to onix. Everything else is an
 	// alias to navigate to, which delegates to the run shortcut:
@@ -335,8 +336,19 @@ if "%%_onix_arg:~0,1%%"=="-" (
 )
 set "_onix_arg="
 
-%s %%* cmd /k
-`, exe, exe, runName)
+:: Otherwise, resolve and navigate the current shell in-place.
+"%s" %%* --save-last >nul
+if errorlevel 1 exit /b
+
+set /p ONIX_LAST=<"%s"
+pushd "%%ONIX_LAST%%"
+
+:: If launched from Windows Run (Win+R) or double-clicked, %%0 will match %%~f0.
+:: In that case, add the -o flag so the command prompt runs detached and persists.
+if "%%~0"=="%%~f0" (
+  cmd /k
+)
+`, exe, exe, exe, lastFile)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 

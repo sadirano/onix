@@ -500,6 +500,11 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	// inserts one unconditionally. Strip it defensively so users get the
 	// same argv regardless of how they invoked us.
 	argv := c.Args[1:]
+	outside := false
+	if len(argv) > 0 && (argv[0] == "-o" || argv[0] == "--outside") {
+		outside = true
+		argv = argv[1:]
+	}
 	if len(argv) > 0 && argv[0] == "--" {
 		argv = argv[1:]
 	}
@@ -521,6 +526,9 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 			}
 		}
 	}
+	if outside {
+		return runCommandOutside(target, exe, argv[1:])
+	}
 	cmd := execCommandContext(ctx, exe, argv[1:]...)
 	cmd.Dir = target
 	cmd.Stdin = os.Stdin
@@ -538,6 +546,7 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	}
 	return nil
 }
+
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
