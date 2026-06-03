@@ -37,6 +37,13 @@ if [ -n "`$STAGED_GO_FILES" ]; then
             exit 1
         fi
     fi
+
+    # Run tests
+    echo "Running unit tests..."
+    if ! go test ./...; then
+        echo "Error: Unit tests failed. Please fix them before committing."
+        exit 1
+    fi
 fi
 
 exit 0
