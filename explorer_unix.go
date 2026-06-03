@@ -30,4 +30,3 @@ func runCommandOutside(dir string, exe string, args []string) error {
 	}
 	return nil
 }
-

@@ -547,7 +547,6 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	return nil
 }
 
-
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 // sync — regenerate shell snippets and Windows wrappers.
