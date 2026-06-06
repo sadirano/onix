@@ -15,8 +15,8 @@ import (
 	"strings"
 )
 
-// Multi-char short flags that aren't expressible as kong single-rune shorts.
-// These are rewritten to their long forms before any other parsing.
+// Multi-char short flags. These are rewritten to their long forms before
+// any other parsing so the dispatcher only sees canonical long flags.
 var multiCharShortRewrite = map[string]string{
 	"-ls": "--list",
 	"-rm": "--remove",
@@ -24,7 +24,7 @@ var multiCharShortRewrite = map[string]string{
 
 // preprocessArgs rewrites multi-char short flags (-ls, -rm) into their long
 // forms. Single-rune shorts (-l, -e, ...) and flags with values (-d "x") are
-// left alone — kong handles those natively.
+// left alone — the dispatcher handles those directly.
 func preprocessArgs(args []string) []string {
 	out := make([]string, len(args))
 	for i, a := range args {
@@ -100,7 +100,7 @@ ALIAS ACTIONS:
   --paste, -p [name]     save clipboard content to alias dir, copy its path
   --grep, -g <query>     ripgrep + fzf in alias dir
   --find, -f <query>     fuzzy-find a file (opens in editor; docs/media in default app)
-  --run, -r <cmd...>     exec command in alias dir
+  --run, -r <cmd...>     exec command in alias dir (prefix -o/--outside to run detached)
 
 SYSTEM VERBS:
   --list, -ls, -l        list aliases
@@ -112,15 +112,14 @@ SYSTEM VERBS:
   --sync, -S             regenerate shell snippets
   --version, -v          print version
 
-ADD FLAGS:
-
 REMOVE FLAGS:
-  --force, -F                skip confirm; bypass load-bearing file guard
-  --recursive, -R            delete directories recursively
+  --force, -F            skip confirm; bypass load-bearing file guard
+  --recursive, -R        delete directories recursively
 
 GLOBAL:
-  --config-dir   ($ONIX_HOME) override ~/.onix path
-  --json, -j                 machine-readable output
+  --json, -j             machine-readable output
+  --no-prompt, -q        suppress interactive prompts
+  $ONIX_HOME (env)       override the ~/.onix config directory
 `
 	fmt.Fprint(w, usage)
 }
@@ -225,7 +224,7 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 
 	switch action {
 	case "resolve":
-		return fastResolve(e.Home, alias, false, e.Stdout, e.Stderr, e.Stdin, e.Timer)
+		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	case "remove":
 		files, force, recursive, err := parseRemoveArgs(actionArgs)
 		if err != nil {
@@ -267,13 +266,8 @@ func dispatchAlias(ctx context.Context, e *env, alias string, rest []string) err
 // dispatchAliasAddOrResolve handles `onix <alias>` and `onix <alias> <path> [metadata...]`.
 func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest []string) error {
 	cleaned := make([]string, 0, len(rest))
-	save := false
 	for _, a := range rest {
 		if a == "--no-prompt" || a == "-q" {
-			continue
-		}
-		if a == "--save-last" {
-			save = true
 			continue
 		}
 		cleaned = append(cleaned, a)
@@ -281,7 +275,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 
 	if len(cleaned) == 0 {
 		// Bare `onix <alias>` — hot-path resolve.
-		return fastResolve(e.Home, alias, save, e.Stdout, e.Stderr, e.Stdin, e.Timer)
+		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	}
 
 	// Parse: <path>
@@ -299,7 +293,7 @@ func dispatchAliasAddOrResolve(ctx context.Context, e *env, alias string, rest [
 	}
 	if add.Path == "" {
 		// No path positional — fall back to resolve.
-		return fastResolve(e.Home, alias, save, e.Stdout, e.Stderr, e.Stdin, e.Timer)
+		return fastResolve(e.Home, alias, e.Stdout, e.Stderr, e.Stdin, e.Timer)
 	}
 	return add.Run(ctx, e)
 }

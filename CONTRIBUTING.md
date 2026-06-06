@@ -1,7 +1,6 @@
 # Contributing to Onix
 
-> Onix is in maintenance mode for a single user (the maintainer). See
-> [ROADMAP.md](./ROADMAP.md) for the parked-feature list. External
+> Onix is in maintenance mode for a single user (the maintainer). External
 > contributions are accepted but not actively solicited.
 
 ## Development Environment
@@ -40,6 +39,16 @@ if you want to check that a change didn't tank the resolve hot path.
 2. **Lint:** `golangci-lint run` if you have it; CI runs it in the lint
    workflow.
 3. **Commits:** descriptive messages; no `Co-Authored-By` trailers.
+
+## Git Hooks
+
+Run `scripts/install-hooks.ps1` to install two local hooks:
+
+- **pre-commit:** runs `gofumpt -l`, `govulncheck`, and `go test ./...` on
+  staged Go changes.
+- **pre-push:** runs the CodeRabbit CLI (`cr review`) as a blocking AI
+  review gate. Requires `cr` on PATH and an authenticated session
+  (`cr auth login`). Bypass a single push with `git push --no-verify`.
 
 ## Troubleshooting
 

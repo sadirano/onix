@@ -47,8 +47,8 @@ func printJSON(w io.Writer, v any) error {
 // -----------------------------------------------------------------------------
 
 type AddCmd struct {
-	Alias string `arg:"" help:"Alias name."`
-	Path  string `arg:"" optional:"" help:"Directory path (default: current working directory)."`
+	Alias string // alias name
+	Path  string // directory path (defaults to the current working directory)
 }
 
 func (c *AddCmd) Run(ctx context.Context, e *env) error {
@@ -103,16 +103,16 @@ func (c *AddCmd) Run(ctx context.Context, e *env) error {
 type RemoveCmd struct {
 	// Alias names either the alias to remove (when Files is empty) or the
 	// directory context for the listed Files. An empty Alias selects ~/.onix.
-	Alias string `arg:"" optional:"" help:"Alias name."`
+	Alias string
 
 	// Files lists paths to delete relative to the resolved directory.
 	// When non-empty the command acts as a deleter; when empty it removes
 	// the alias entry. Use --force to skip the confirm prompt and
 	// --recursive to remove directories.
-	Files []string `arg:"" optional:"" passthrough:"" help:"Files to delete (relative to the resolved directory)."`
+	Files []string
 
-	Force     bool `name:"force" short:"F" help:"Skip confirmation and bypass guards on load-bearing onix files."`
-	Recursive bool `name:"recursive" short:"R" help:"Recursively delete directories."`
+	Force     bool // skip confirmation and bypass guards on load-bearing onix files
+	Recursive bool // recursively delete directories
 }
 
 // loadBearingOnixFiles lists names that must not be deleted by accident.
@@ -277,13 +277,13 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 type EditCmd struct {
 	// Alias selects the directory the editor opens in. An empty Alias is the
 	// system-wide form and opens ~/.onix.
-	Alias string `arg:"" optional:"" help:"Alias name (omit for the onix config directory)."`
+	Alias string
 
 	// Files lists paths relative to the resolved directory. When empty the
 	// editor opens the directory itself ("."), matching how most editors
 	// treat a project. With files we pass them verbatim so editor-specific
 	// `+line` syntax keeps working when callers prepend it.
-	Files []string `arg:"" optional:"" passthrough:"" help:"Files (relative to the resolved directory)."`
+	Files []string
 }
 
 func (c *EditCmd) Run(ctx context.Context, e *env) error {
@@ -335,8 +335,8 @@ func (c *EditCmd) targetDir(e *env) (string, error) {
 // -----------------------------------------------------------------------------
 
 type ExploreCmd struct {
-	Alias string `arg:"" help:"Alias name."`
-	File  string `arg:"" optional:"" help:"File to open with its default app (omit to open the directory)."`
+	Alias string // alias name
+	File  string // file to open with its default app (omit to open the directory)
 }
 
 func (c *ExploreCmd) Run(ctx context.Context, e *env) error {
@@ -469,26 +469,23 @@ func uniquePath(path string) string {
 // -----------------------------------------------------------------------------
 // run — execute a command in the alias directory.
 //
-// `onix run acme -- go test ./...`
+// `onix acme --run go test ./...`
 //
-// kong's `Cmd []string \`arg:"" passthrough:""\`` semantics let us capture
-// everything after the `--` literally, which keeps quoting predictable.
-// We do NOT invoke a shell here — extras are exec'd as argv directly so
-// the user's quoting reaches the child process without a re-parse.
+// Everything after --run is captured verbatim as argv. We do NOT invoke a
+// shell here — extras are exec'd as argv directly so the user's quoting
+// reaches the child process without a re-parse.
 // -----------------------------------------------------------------------------
 
 // RunCmd uses a single positional slice (rather than separate Alias+Cmd
-// fields) because kong's passthrough mode requires exactly one positional
-// argument on the command. We split the alias off ourselves below — a tiny
-// bit of extra code in exchange for argv that passes through cleanly
-// regardless of what the user types after the alias.
+// fields) so the dispatcher can hand the whole "<alias> <cmd> [args...]" tail
+// through untouched; we split the alias off ourselves below.
 type RunCmd struct {
-	Args []string `arg:"" name:"args" help:"<alias> <cmd> [args...]"`
+	Args []string // <alias> <cmd> [args...]
 }
 
 func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	if len(c.Args) < 2 {
-		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
+		return fmt.Errorf("usage: onix <alias> --run <cmd> [args...]")
 	}
 	alias := c.Args[0]
 	target, err := resolveAliasPath(e, alias)
@@ -509,7 +506,7 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 		argv = argv[1:]
 	}
 	if len(argv) == 0 {
-		return fmt.Errorf("usage: onix run <alias> <cmd> [args...]")
+		return fmt.Errorf("usage: onix <alias> --run <cmd> [args...]")
 	}
 	exe := argv[0]
 	// On Windows, Go's exec.LookPath refuses to run executables found relative
@@ -547,7 +544,6 @@ func (c *RunCmd) Run(ctx context.Context, e *env) error {
 	return nil
 }
 
-// -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 // sync — regenerate shell snippets and Windows wrappers.
 //

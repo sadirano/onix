@@ -11,7 +11,7 @@ import (
 )
 
 // resolveHome returns the absolute path to the onix config directory.
-// Precedence: explicit override > ONIX_HOME env (handled by kong) > ~/.onix.
+// Precedence: explicit override (the $ONIX_HOME value passed by main) > ~/.onix.
 // We don't create the directory here — that's `onix init`'s job.
 func resolveHome(override string) (string, error) {
 	if v := strings.TrimSpace(override); v != "" {

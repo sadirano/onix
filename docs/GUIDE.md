@@ -19,7 +19,7 @@ into `~/.onix/bin/` so the same shortcuts work from cmd.exe and Win+R — you on
 need to add that directory to PATH if you use cmd.exe regularly.
 
 Restart PowerShell (or run `. $PROFILE`) once to activate `o`, `e`, `s`, `y`,
-`r`, `sg`, and `ff`. Run `onix --sync` any time you move the onix binary or change
+`p`, `r`, `sg`, and `ff`. Run `onix --sync` any time you move the onix binary or change
 `config.toml` to regenerate the snippet.
 
 ---
@@ -396,7 +396,7 @@ case-insensitive.
 | Variable        | Effect                                                         |
 |-----------------|----------------------------------------------------------------|
 | `ONIX_TIMING=1` | Print phase timings to stderr on every invocation              |
-| `ONIX_HOME`     | Override `~/.onix` location (also `--config-dir` on the CLI)  |
+| `ONIX_HOME`     | Override `~/.onix` location                                    |
 | `EDITOR`        | Preferred editor; fallback chain: nvim → vim → code → nano → notepad |
 
 ---

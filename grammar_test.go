@@ -16,7 +16,7 @@ func TestPreprocessArgs_MultiCharShorts(t *testing.T) {
 		{[]string{"-ls"}, []string{"--list"}},
 		{[]string{"-rm"}, []string{"--remove"}},
 		{[]string{"foo", "-rm", "bar"}, []string{"foo", "--remove", "bar"}},
-		// Single-rune shorts must NOT be rewritten — kong handles those.
+		// Single-rune shorts must NOT be rewritten — the dispatcher handles those.
 		{[]string{"-l"}, []string{"-l"}},
 		{[]string{"-r"}, []string{"-r"}},
 		// Long forms unchanged.
@@ -278,32 +278,5 @@ func TestPrintUsage(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "ALIAS ACTIONS:") {
 		t.Error("usage output missing 'ALIAS ACTIONS:' label")
-	}
-}
-
-func TestDispatchAlias_SaveLastFlag(t *testing.T) {
-	home := newTestHome(t)
-	target := filepath.Join(t.TempDir(), "target")
-	_ = os.MkdirAll(target, 0o755)
-	if _, _, err := captureStdio(func() error {
-		return (&AddCmd{Alias: "foo", Path: target}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Running `onix foo --save-last` should write target to home/.last
-	_, _, err := captureStdio(func() error {
-		return dispatchNewGrammar(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin}, []string{"foo", "--save-last"}, os.Stdout, os.Stderr)
-	})
-	if err != nil {
-		t.Fatalf("run with --save-last: %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(home, ".last"))
-	if err != nil {
-		t.Fatalf("failed to read .last: %v", err)
-	}
-	if string(data) != target {
-		t.Errorf("got %q, want %q", data, target)
 	}
 }

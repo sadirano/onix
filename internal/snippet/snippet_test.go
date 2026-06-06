@@ -60,9 +60,9 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if !strings.Contains(content, "--edit") {
 		t.Errorf("o.cmd missing '--edit' for no-arg invocation:\n%s", content)
 	}
-	// Navigation in Win+R mode delegates to the run shortcut with cmd /k.
+	// Win+R / double-click launches open a persistent prompt via cmd /k.
 	if !strings.Contains(content, "cmd /k") {
-		t.Errorf("o.cmd missing 'cmd /k' navigation via run shortcut:\n%s", content)
+		t.Errorf("o.cmd missing 'cmd /k' persistent prompt for Win+R launch:\n%s", content)
 	}
 	// Normal inline navigation resolves the alias and uses pushd to change directories.
 	if !strings.Contains(content, "pushd ") || !strings.Contains(content, "ONIX_LAST") {
@@ -77,12 +77,36 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	}
 	// Regression guard: a leading-dash first arg ('-v', '--version', ...)
 	// must bypass alias navigation and go straight to onix.
-	if !strings.Contains(content, `if "%_onix_arg:~0,1%"=="-"`) {
+	if !strings.Contains(content, `if "%_arg:~0,1%"=="-"`) {
 		t.Errorf("o.cmd missing leading-dash bypass:\n%s", content)
+	}
+	// An unknown alias (and not an @-segment) falls back to register.cmd.
+	if !strings.Contains(content, `call "%~dp0register.cmd"`) {
+		t.Errorf("o.cmd missing register.cmd fallback for unknown alias:\n%s", content)
 	}
 	// Verify that the Win+R launch check exists.
 	if !strings.Contains(content, `if "%~0"=="%~f0"`) {
 		t.Errorf("o.cmd missing Win+R launch check:\n%s", content)
+	}
+}
+
+func TestWritePwshShellSnippet_RegisterWrapper(t *testing.T) {
+	dir := t.TempDir()
+	if err := WritePwshShellSnippet(dir, nil); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	path := filepath.Join(dir, "bin", "register.cmd")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	content := string(data)
+	// The picker shells out to Everything (es) piped into fzf, then pushd +
+	// register the picked directory to the alias.
+	for _, want := range []string{"es ", "fzf", "pushd ", "ONIX_LAST"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("register.cmd missing %q:\n%s", want, content)
+		}
 	}
 }
 

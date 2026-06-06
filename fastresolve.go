@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/sadirano/onix/internal/resolver"
@@ -18,7 +17,7 @@ import (
 // It uses the shared resolver which combines fast byte-scanning with
 // a slow-path fallback. Side effects like directory creation are
 // handled here at the command layer.
-func fastResolve(home, name string, save bool, stdout, stderr io.Writer, stdin io.Reader, t *timer) error {
+func fastResolve(home, name string, stdout, stderr io.Writer, stdin io.Reader, t *timer) error {
 	var segPrompter resolver.SegmentPrompter
 
 	// Use environment for NoPrompt
@@ -36,12 +35,6 @@ func fastResolve(home, name string, save bool, stdout, stderr io.Writer, stdin i
 	}
 	if err := os.MkdirAll(p, 0o755); err != nil {
 		return fmt.Errorf("create directory %q: %w", p, err)
-	}
-
-	if save {
-		if err := os.WriteFile(filepath.Join(home, ".last"), []byte(p), 0o644); err != nil {
-			return fmt.Errorf("write .last: %w", err)
-		}
 	}
 
 	fmt.Fprintln(stdout, p)

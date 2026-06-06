@@ -14,6 +14,4 @@ Pointers to the documentation kept in this directory.
 ## For contributors
 
 - Repo-root **[CONTRIBUTING.md](../CONTRIBUTING.md)** — how to get patches
-  in.
-- Repo-root **[ROADMAP.md](../ROADMAP.md)** — parked-feature list with
-  explicit triggers (Onix is in maintenance mode).
+  in. Onix is in maintenance mode.

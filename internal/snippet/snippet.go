@@ -247,7 +247,8 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
 	binDir := filepath.Join(home, "bin")
 	_ = os.MkdirAll(binDir, 0o755)
 
-	writeOCmdWrapper(binDir, exe, s["r"], s["o"])
+	writeOCmdWrapper(binDir, exe, s["o"])
+	writeRegisterWrapper(binDir, exe)
 	writeFindPreviewWrapper(binDir)
 	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
 	writeExploreWrapper(binDir, exe, s["r"], s["s"])
@@ -298,57 +299,76 @@ if errorlevel 1 (
 	_ = os.WriteFile(filepath.Join(binDir, FindPreviewWrapperName), []byte(content), 0o644)
 }
 
-func writeOCmdWrapper(binDir, exe, runName, name string) {
+// writeOCmdWrapper emits the navigation shim used from cmd.exe and Win+R.
+// With no argument it opens the config editor; a leading dash is a system
+// verb handed straight to onix; anything else is an alias to navigate to.
+//
+// The resolved path is captured by redirecting onix's stdout into the
+// ~/.onix/.last file, which the wrapper then reads to pushd into. A child
+// process can't relocate its parent shell, so this is how the .cmd flow cds
+// the calling shell. An unknown alias (and not an @-segment) falls back to
+// register.cmd, the Everything + fzf directory picker.
+func writeOCmdWrapper(binDir, exe, name string) {
 	path := filepath.Join(binDir, name+".cmd")
-	lastFile := filepath.Join(filepath.Dir(binDir), ".last")
-	// With no argument the wrapper opens the config in the editor; a leading
-	// dash is a system verb handed straight to onix. Everything else is an
-	// alias to navigate to, which delegates to the run shortcut:
-	//
-	//	<run> <args> cmd /k
-	//
-	// resolves the alias and opens an interactive shell rooted at the target.
-	// Delegating to run keeps onix attached to the real console, so defining
-	// a new segment prompts inline — capturing onix's stdout to cd ourselves
-	// redirected it into a pipe and hung the prompt instead.
-	//
-	// Trade-off: navigation opens a nested shell at the target rather than
-	// moving the calling shell in place. A child process can't relocate its
-	// parent, which is the whole reason the capture existed; dropping it
-	// trades in-place cd for a nested shell — the desired result under Win+R.
-	//
-	// The run shortcut is a sibling .cmd on PATH, so it resolves by bare
-	// name. Invoking it without `call` transfers control for good, so the
-	// alias branch needs no trailing exit.
 	content := fmt.Sprintf(`@echo off
+:: onix navigation wrapper (generated; run 'onix --sync' to regenerate).
+:: Resolve an alias and cd the current shell into its directory; with no
+:: argument it opens the config editor instead.
+
+set "ONIX_EXE=%s"
+set "ONIX_LAST_FILE=%%~dp0\..\.last"
+
+:: No arguments: open the editor and stop.
 if "%%~1"=="" (
-  "%s" --edit
+  "%%ONIX_EXE%%" --edit
   exit /b
 )
 
-:: A leading dash marks a system verb (-v, --version, ...). Hand it straight
-:: to onix rather than treating it as an alias to navigate to.
-set "_onix_arg=%%~1"
-if "%%_onix_arg:~0,1%%"=="-" (
-  set "_onix_arg="
-  "%s" %%*
+:: A leading dash marks a system verb (-v, --version, ...). Pass it straight
+:: through to onix rather than treating it as a navigation alias.
+set "_arg=%%~1"
+if "%%_arg:~0,1%%"=="-" (
+  set "_arg="
+  "%%ONIX_EXE%%" %%*
   exit /b
 )
-set "_onix_arg="
+set "_arg="
 
-:: Otherwise, resolve and navigate the current shell in-place.
-"%s" %%* --save-last >nul
-if errorlevel 1 exit /b
+:: Resolve the alias and record the destination in .last. If it isn't known
+:: (and isn't an @-segment), fall back to the interactive picker.
+"%%ONIX_EXE%%" %%* > "%%ONIX_LAST_FILE%%" 2>nul
+if errorlevel 1 (
+  echo %%1 | findstr /c:"@" >nul
+  if errorlevel 1 call "%%~dp0register.cmd" %%1
+)
 
-set /p ONIX_LAST=<"%s"
+:: Navigate the current shell to the resolved directory.
+set /p ONIX_LAST=<"%%ONIX_LAST_FILE%%"
 pushd "%%ONIX_LAST%%"
 
-:: If launched from Windows Run (Win+R) or double-clicked, %%0 will match %%~f0.
-:: In that case, add the -o flag so the command prompt runs detached and persists.
-if "%%~0"=="%%~f0" (
-  cmd /k
-)
-`, exe, exe, exe, lastFile)
+:: When launched from Windows Run (Win+R) or by double-click, %%~0 equals the
+:: full path %%~f0. In that case open a persistent prompt so the window stays.
+if "%%~0"=="%%~f0" cmd /k
+`, exe)
+	_ = os.WriteFile(path, []byte(content), 0o644)
+}
+
+// writeRegisterWrapper emits register.cmd, the unknown-alias fallback the
+// navigation shim calls when an alias doesn't resolve. It picks a directory
+// with Everything (es) + fzf, cds there, and registers the alias to it.
+// Requires the Everything `es` CLI on PATH.
+func writeRegisterWrapper(binDir, exe string) {
+	path := filepath.Join(binDir, "register.cmd")
+	content := fmt.Sprintf(`@echo off
+:: onix unknown-alias picker (generated; run 'onix --sync' to regenerate).
+:: Pick a directory with Everything (es) + fzf, cd there, and register the
+:: alias so the next lookup resolves instantly. Needs the `+"`es`"+` CLI on PATH.
+set "ONIX_LAST_FILE=%%~dp0\..\.last"
+es %%1 /ad -n 100 | fzf > "%%ONIX_LAST_FILE%%"
+set /p ONIX_LAST=<"%%ONIX_LAST_FILE%%"
+pushd "%%ONIX_LAST%%"
+"%s" %%1 . > nul 2>&1
+`, exe)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 

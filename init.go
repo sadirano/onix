@@ -42,7 +42,7 @@ const starterConfig = `# onix configuration.
 
 // InitCmd creates ~/.onix and installs PowerShell shell integration.
 type InitCmd struct {
-	SkipProfile bool `help:"Don't modify the PowerShell $PROFILE." name:"skip-profile"`
+	SkipProfile bool // don't modify the PowerShell $PROFILE (--skip-profile)
 }
 
 func (c *InitCmd) Run(ctx context.Context, e *env) error {
@@ -131,6 +131,7 @@ func sourceFromBashLike(e *env, snippet string) error {
 
 	if len(updated) > 0 {
 		fmt.Fprintf(e.Stderr, "updated: %s\n", strings.Join(updated, ", "))
+		// p (paste) is omitted: clipboard read is Windows-only (see clipboard_other.go).
 		fmt.Fprintln(e.Stderr, "restart your shell (or source the updated file) to activate o/e/s/y/r and sg/ff")
 	} else if !found {
 		fmt.Fprintf(e.Stderr, "no .bashrc or .zshrc found — add this to your shell rc manually:\n  %s\n", sourceLine)
