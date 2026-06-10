@@ -342,9 +342,20 @@ if errorlevel 1 (
   if errorlevel 1 call "%%~dp0register.cmd" %%1
 )
 
-:: Navigate the current shell to the resolved directory.
+:: Navigate the current shell to the resolved directory. set /p leaves the
+:: variable UNCHANGED on an empty file, so clear it first: an empty .last means
+:: the resolve failed or the user cancelled the picker/segment editor, and we
+:: must not navigate or open a window — just bail without creating anything.
+set "ONIX_LAST="
 set /p ONIX_LAST=<"%%ONIX_LAST_FILE%%"
-pushd "%%ONIX_LAST%%"
+if not defined ONIX_LAST (
+  echo [o] nothing to navigate to ^(cancelled, or alias/segment not resolved^) 1>&2
+  exit /b 1
+)
+pushd "%%ONIX_LAST%%" || (
+  echo [o] cannot enter "%%ONIX_LAST%%" 1>&2
+  exit /b 1
+)
 
 :: When launched from Windows Run (Win+R) or by double-click, %%~0 equals the
 :: full path %%~f0. In that case open a persistent prompt so the window stays.
@@ -361,13 +372,20 @@ func writeRegisterWrapper(binDir, exe string) {
 	path := filepath.Join(binDir, "register.cmd")
 	content := fmt.Sprintf(`@echo off
 :: onix unknown-alias picker (generated; run 'onix --sync' to regenerate).
-:: Pick a directory with Everything (es) + fzf, cd there, and register the
-:: alias so the next lookup resolves instantly. Needs the `+"`es`"+` CLI on PATH.
+:: Pick a directory with Everything (es) + fzf and register the alias to it,
+:: writing the resolved path to .last for o.cmd to navigate into. Needs the
+:: `+"`es`"+` CLI on PATH. On cancel (empty pick) nothing is registered and we
+:: exit non-zero so o.cmd does not navigate or create anything.
 set "ONIX_LAST_FILE=%%~dp0\..\.last"
+where es >nul 2>&1 || (
+  echo [o] Everything 'es' CLI not found on PATH 1>&2
+  exit /b 1
+)
 es %%1 /ad -n 100 | fzf > "%%ONIX_LAST_FILE%%"
-set /p ONIX_LAST=<"%%ONIX_LAST_FILE%%"
-pushd "%%ONIX_LAST%%"
-"%s" %%1 . > nul 2>&1
+set "ONIX_PICK="
+set /p ONIX_PICK=<"%%ONIX_LAST_FILE%%"
+if not defined ONIX_PICK exit /b 1
+"%s" %%1 "%%ONIX_PICK%%" > "%%ONIX_LAST_FILE%%" 2>nul
 `, exe)
 	_ = os.WriteFile(path, []byte(content), 0o644)
 }

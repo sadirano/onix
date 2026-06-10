@@ -75,6 +75,11 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	if strings.Contains(content, "for /f") {
 		t.Errorf("o.cmd must not capture onix stdout via 'for /f':\n%s", content)
 	}
+	// Cancel-safety: an empty .last (resolve failed, or the picker/segment
+	// editor was cancelled) must not pushd or open a window — bail instead.
+	if !strings.Contains(content, "if not defined ONIX_LAST") {
+		t.Errorf("o.cmd missing empty-.last cancel guard:\n%s", content)
+	}
 	// Regression guard: a leading-dash first arg ('-v', '--version', ...)
 	// must bypass alias navigation and go straight to onix.
 	if !strings.Contains(content, `if "%_arg:~0,1%"=="-"`) {
@@ -101,12 +106,21 @@ func TestWritePwshShellSnippet_RegisterWrapper(t *testing.T) {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	content := string(data)
-	// The picker shells out to Everything (es) piped into fzf, then pushd +
-	// register the picked directory to the alias.
-	for _, want := range []string{"es ", "fzf", "pushd ", "ONIX_LAST"} {
+	// The picker shells out to Everything (es) piped into fzf and registers the
+	// picked directory to the alias, writing the resolved path to .last for
+	// o.cmd to navigate into (register.cmd itself no longer pushd's).
+	for _, want := range []string{"es ", "fzf", "ONIX_LAST"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("register.cmd missing %q:\n%s", want, content)
 		}
+	}
+	// Cancel-safety: a missing Everything CLI and an empty pick must both bail
+	// without registering anything.
+	if !strings.Contains(content, "where es") {
+		t.Errorf("register.cmd missing 'where es' guard for missing Everything:\n%s", content)
+	}
+	if !strings.Contains(content, "if not defined ONIX_PICK") {
+		t.Errorf("register.cmd missing empty-pick cancel guard:\n%s", content)
 	}
 }
 

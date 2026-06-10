@@ -56,10 +56,19 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 		args = append(args, "+9999")
 	}
 	args = append(args, filePath)
+
+	// Route the editor to the real console. This function is reached from the
+	// `o.cmd` flow, which runs `onix <alias> > .last 2>nul` — our stdout/stderr
+	// are redirected, so a terminal editor inheriting them would see a non-tty
+	// and fail to render. consoleIO falls back to the std handles when there's
+	// no console.
+	ttyIn, ttyOut, ttyClose := consoleIO()
+	defer ttyClose()
+
 	cmd := execCommand(binary, args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdin = ttyIn
+	cmd.Stdout = ttyOut
+	cmd.Stderr = ttyOut
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("editor %s: %w", ed, err)
 	}
