@@ -296,7 +296,19 @@ if errorlevel 1 (
   dir /b "!p!"
 )
 `
-	_ = os.WriteFile(filepath.Join(binDir, FindPreviewWrapperName), []byte(content), 0o644)
+	writeCmdFile(filepath.Join(binDir, FindPreviewWrapperName), content)
+}
+
+// writeCmdFile writes a generated batch file with CRLF line endings.
+// cmd.exe tracks its position in a batch file by byte offset assuming
+// CRLF: an LF-only file parses correctly only until a line straddles the
+// interpreter's read-block boundary, after which execution resumes
+// mid-line and the script degenerates into garbage ('et' for 'set',
+// comment lines executed as commands). Normalising here keeps the
+// templates readable with plain \n.
+func writeCmdFile(path, content string) {
+	content = strings.ReplaceAll(strings.ReplaceAll(content, "\r\n", "\n"), "\n", "\r\n")
+	_ = os.WriteFile(path, []byte(content), 0o644)
 }
 
 // writeOCmdWrapper emits the navigation shim used from cmd.exe and Win+R.
@@ -361,7 +373,7 @@ pushd "%%ONIX_LAST%%" || (
 :: full path %%~f0. In that case open a persistent prompt so the window stays.
 if "%%~0"=="%%~f0" cmd /k
 `, exe)
-	_ = os.WriteFile(path, []byte(content), 0o644)
+	writeCmdFile(path, content)
 }
 
 // writeRegisterWrapper emits register.cmd, the unknown-alias fallback the
@@ -387,7 +399,7 @@ set /p ONIX_PICK=<"%%ONIX_LAST_FILE%%"
 if not defined ONIX_PICK exit /b 1
 "%s" %%1 "%%ONIX_PICK%%" > "%%ONIX_LAST_FILE%%" 2>nul
 `, exe)
-	_ = os.WriteFile(path, []byte(content), 0o644)
+	writeCmdFile(path, content)
 }
 
 // writeExploreWrapper emits the explore shim. With no file argument it
@@ -407,7 +419,7 @@ func writeExploreWrapper(binDir, exe, runName, name string) {
 		") else (\r\n"+
 		"  \"%s\" %%1 --explore \"%%~2\"\r\n"+
 		")\r\n", runName, exe)
-	_ = os.WriteFile(path, []byte(content), 0o644)
+	writeCmdFile(path, content)
 }
 
 // writeAliasFlagWrapper emits a .cmd shim that translates
@@ -454,8 +466,7 @@ goto _onix_loop
 "%s" "!_onix_alias!" %s%s !_onix_args!
 endlocal
 `, exe, flag, extraStr)
-	content = strings.ReplaceAll(content, "\n", "\r\n")
-	_ = os.WriteFile(path, []byte(content), 0o644)
+	writeCmdFile(path, content)
 }
 
 func WriteBashShellSnippet(home string, shortcuts map[string]string) error {

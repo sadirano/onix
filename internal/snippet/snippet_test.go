@@ -95,6 +95,31 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	}
 }
 
+func TestWritePwshShellSnippet_CmdWrappersUseCRLF(t *testing.T) {
+	dir := t.TempDir()
+	if err := WritePwshShellSnippet(dir, nil); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, "bin", "*.cmd"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("globbing bin/*.cmd: matches=%d err=%v", len(matches), err)
+	}
+	for _, p := range matches {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("read %s: %v", p, err)
+		}
+		// cmd.exe needs CRLF: an LF-only batch file misparses once any line
+		// straddles the interpreter's read-block boundary (o.cmd crossed
+		// that threshold when the cancel guards were added). Every \n must
+		// be preceded by \r.
+		bare := strings.Count(string(data), "\n") - strings.Count(string(data), "\r\n")
+		if bare != 0 {
+			t.Errorf("%s has %d bare-LF line endings; generated .cmd files must be CRLF", filepath.Base(p), bare)
+		}
+	}
+}
+
 func TestWritePwshShellSnippet_RegisterWrapper(t *testing.T) {
 	dir := t.TempDir()
 	if err := WritePwshShellSnippet(dir, nil); err != nil {
