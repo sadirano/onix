@@ -210,8 +210,15 @@ func TestRunCmd(t *testing.T) {
 		}
 	})
 
+	// Detached (-o/--outside) children are not waited on, so their cwd must
+	// not live in a t.TempDir: on slow runners (Windows CI) the child can
+	// still hold the directory when the framework deletes it, failing
+	// cleanup with a sharing violation. Park detached runs in the system
+	// temp dir, which nothing removes.
+	_ = (&AddCmd{Alias: "acmeout", Path: os.TempDir()}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
+
 	t.Run("happy path with -o flag", func(t *testing.T) {
-		argv := append([]string{"acme", "-o", bin}, args...)
+		argv := append([]string{"acmeout", "-o", bin}, args...)
 		_, _, err := captureStdio(func() error {
 			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
 		})
@@ -221,7 +228,7 @@ func TestRunCmd(t *testing.T) {
 	})
 
 	t.Run("happy path with --outside flag", func(t *testing.T) {
-		argv := append([]string{"acme", "--outside", bin}, args...)
+		argv := append([]string{"acmeout", "--outside", bin}, args...)
 		_, _, err := captureStdio(func() error {
 			return (&RunCmd{Args: argv}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
 		})
