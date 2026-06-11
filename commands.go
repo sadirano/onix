@@ -561,6 +561,11 @@ func (c *SyncCmd) Run(ctx context.Context, e *env) error {
 	}
 	if runtime.GOOS == "windows" {
 		fmt.Fprintf(e.Stderr, "regenerated %s and wrappers in %s\n", snippet.PwshPath(e.Home), filepath.Join(e.Home, "bin"))
+		if p, ok, err := snippet.RefreshClinkLua(e.Home); err != nil {
+			fmt.Fprintf(e.Stderr, "warning: clink integration: %v\n", err)
+		} else if ok {
+			fmt.Fprintf(e.Stderr, "refreshed clink integration: %s\n", p)
+		}
 	} else {
 		fmt.Fprintf(e.Stderr, "regenerated %s\n", snippet.BashPath(e.Home))
 	}

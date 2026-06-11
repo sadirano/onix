@@ -135,6 +135,10 @@ Encountering an unknown segment opens your editor on the central per-alias file 
 
 Every command that takes an alias (`o`, `e`, `s`, `y`, `p`, `r`, `sg`, `ff`) supports tab-completion of alias names. The completer calls `onix --list-names` under the hood — a dedicated hot path that bypasses TOML parsing for sub-millisecond Tab response.
 
+## cmd.exe via clink
+
+With [clink](https://chrisant996.github.io/clink/) installed, plain cmd.exe gets the same treatment: `onix --init` drops an `onix.lua` into clink's profile directory (`%LOCALAPPDATA%\clink`) that prepends `~/.onix/bin` to each session's PATH (so the short commands work without global PATH edits) and tab-completes alias names for every shortcut. Scoop installs wire this up automatically — the package depends on clink and registers its cmd.exe autorun. From source, install clink yourself and re-run `onix --init`; `onix --sync` keeps the script fresh afterwards.
+
 ## Commands
 
 `onix --init` initialises `~/.onix` and installs the PowerShell snippet (re-run any time; it's idempotent). `onix --sync` regenerates the snippet and `.cmd` shims after you move the binary or edit `config.toml`. `onix --version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.

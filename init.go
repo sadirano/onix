@@ -82,6 +82,15 @@ func (c *InitCmd) Run(ctx context.Context, e *env) error {
 		return sourceFromBashLike(e, snippet.BashPath(e.Home))
 	}
 
+	// Clink integration: drop onix.lua into clink's profile dir so cmd.exe
+	// sessions get the wrapper PATH and alias tab-completion. Optional — a
+	// missing LOCALAPPDATA or a write failure must not block init.
+	if p, err := snippet.InstallClinkLua(e.Home); err != nil {
+		fmt.Fprintf(e.Stderr, "warning: clink integration: %v\n", err)
+	} else if p != "" {
+		fmt.Fprintf(e.Stderr, "clink integration: %s\n", p)
+	}
+
 	return sourceFromProfile(e, snippet.PwshPath(e.Home))
 }
 
