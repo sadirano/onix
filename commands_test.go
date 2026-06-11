@@ -11,6 +11,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/sadirano/onix/internal/store"
+	"github.com/sadirano/onix/internal/usage"
 )
 
 // testTarget returns an alias target inside a test-owned temp dir. AddCmd
@@ -396,6 +399,135 @@ func TestFastResolve_PrintsPath(t *testing.T) {
 	}
 	if !samePath(strings.TrimSpace(stdout), target) {
 		t.Errorf("got %q, want %q", stdout, target)
+	}
+}
+
+// stubFzf swaps the exec seams so PruneCmd's fzf invocation runs the given
+// command instead. Restored on cleanup.
+func stubFzf(t *testing.T, cmd func() *exec.Cmd) {
+	t.Helper()
+	prevLook, prevCtx := lookPath, execCommandContext
+	t.Cleanup(func() { lookPath, execCommandContext = prevLook, prevCtx })
+	lookPath = func(name string) (string, error) { return "C:/fake/" + name, nil }
+	execCommandContext = func(context.Context, string, ...string) *exec.Cmd { return cmd() }
+}
+
+// echoCmd returns a command that prints s — a fake fzf "selection".
+func echoCmd(s string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", "echo "+s)
+	}
+	return exec.Command("echo", s)
+}
+
+// exitCmd returns a command exiting with the given code — a fake fzf cancel.
+func exitCmd(code int) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", fmt.Sprintf("exit %d", code))
+	}
+	return exec.Command("sh", "-c", fmt.Sprintf("exit %d", code))
+}
+
+func TestPruneCmd_RemovesSelected(t *testing.T) {
+	home := t.TempDir()
+	e := &env{Home: home, Stdout: io.Discard, Stderr: io.Discard, Stdin: os.Stdin}
+	_ = (&AddCmd{Alias: "stale", Path: testTarget(t, "stale")}).Run(context.Background(), e)
+	_ = (&AddCmd{Alias: "keeper", Path: testTarget(t, "keeper")}).Run(context.Background(), e)
+
+	stubFzf(t, func() *exec.Cmd { return echoCmd("stale     never     0 uses  C:/whatever") })
+	if err := (&PruneCmd{}).Run(context.Background(), e); err != nil {
+		t.Fatalf("PruneCmd.Run: %v", err)
+	}
+
+	s, err := store.LoadStore(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Lookup("stale"); ok {
+		t.Error("stale still registered after prune")
+	}
+	if _, ok := s.Lookup("keeper"); !ok {
+		t.Error("keeper was pruned but not selected")
+	}
+	if _, ok := usage.Load(home)["stale"]; ok {
+		t.Error("usage entry for pruned alias not cleaned up")
+	}
+}
+
+func TestPruneCmd_CancelRemovesNothing(t *testing.T) {
+	home := t.TempDir()
+	e := &env{Home: home, Stdout: io.Discard, Stderr: io.Discard, Stdin: os.Stdin}
+	_ = (&AddCmd{Alias: "stale", Path: testTarget(t, "stale")}).Run(context.Background(), e)
+
+	stubFzf(t, func() *exec.Cmd { return exitCmd(130) })
+	if err := (&PruneCmd{}).Run(context.Background(), e); err != nil {
+		t.Fatalf("cancelled prune must not error: %v", err)
+	}
+
+	s, _ := store.LoadStore(home)
+	if _, ok := s.Lookup("stale"); !ok {
+		t.Error("cancelled prune removed an alias")
+	}
+}
+
+func TestPruneCmd_NoPromptPrintsRankingOnly(t *testing.T) {
+	home := t.TempDir()
+	var out bytes.Buffer
+	e := &env{Home: home, Stdout: &out, Stderr: io.Discard, Stdin: os.Stdin, NoPrompt: true}
+
+	// "gone" gets a dead target (registered, then directory deleted) so it
+	// must rank first with the [gone] marker; "alive" stays intact.
+	goneTarget := testTarget(t, "gone")
+	_ = (&AddCmd{Alias: "gone", Path: goneTarget}).Run(context.Background(), e)
+	_ = (&AddCmd{Alias: "alive", Path: testTarget(t, "alive")}).Run(context.Background(), e)
+	if err := os.RemoveAll(goneTarget); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	if err := (&PruneCmd{}).Run(context.Background(), e); err != nil {
+		t.Fatalf("PruneCmd.Run: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 ranking lines, got %q", out.String())
+	}
+	if !strings.HasPrefix(lines[0], "gone") || !strings.Contains(lines[0], "[gone]") {
+		t.Errorf("dead alias not ranked first with marker: %q", lines[0])
+	}
+
+	s, _ := store.LoadStore(home)
+	if len(s.Aliases) != 2 {
+		t.Errorf("--no-prompt prune deleted aliases: %v", s.Names())
+	}
+}
+
+func TestFastResolve_RecordsDebouncedUsage(t *testing.T) {
+	home := t.TempDir()
+	target := t.TempDir()
+	e := &env{Home: home, Stdout: io.Discard, Stderr: io.Discard, Stdin: os.Stdin, NoPrompt: true}
+	_ = (&AddCmd{Alias: "acme", Path: target}).Run(context.Background(), e)
+
+	// The add itself counts as the first use; immediate resolves fall
+	// inside the debounce window and must not bump the count again.
+	for range 2 {
+		if _, _, err := captureStdio(func() error {
+			return fastResolve(home, "acme", os.Stdout, os.Stderr, os.Stdin, nil)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	ent, ok := usage.Load(home)["acme"]
+	if !ok {
+		t.Fatal("no usage entry after add+resolves")
+	}
+	if ent.Count != 1 {
+		t.Errorf("debounce failed: count = %d, want 1", ent.Count)
+	}
+	if ent.Last == 0 {
+		t.Error("last-used stamp missing")
 	}
 }
 

@@ -68,6 +68,8 @@ path = "C:/Users/dev/projects/acme"
 
 You can hand-edit the file (`onix --list` and resolve will pick up changes immediately) or use `onix <name> <path>` to register and `onix <name> --remove` to forget. Alias lookups are case-insensitive.
 
+When the list grows crusty, `onix --prune` opens an fzf multi-select of every alias ranked prune-first: dead targets (directory gone), then never-used, then least-recently used. Tab marks, Enter removes the marked aliases, Esc cancels; `onix --prune --no-prompt` just prints the ranking. The ranking comes from `~/.onix/usage`, a small file the resolve paths maintain automatically (debounced to at most one write per alias per hour, so the hot path stays hot; delete it any time to start fresh).
+
 Editor is taken from `$EDITOR`, then `$VISUAL`, then the first of `nvim`, `vim`, `code`, `nano`, or `notepad` found on PATH. Override the onix home location with `$ONIX_HOME`.
 
 ## Configuring shortcuts and search
@@ -141,7 +143,7 @@ With [clink](https://chrisant996.github.io/clink/) installed, plain cmd.exe gets
 
 ## Commands
 
-`onix --init` initialises `~/.onix` and installs the PowerShell snippet (re-run any time; it's idempotent). `onix --sync` regenerates the snippet and `.cmd` shims after you move the binary or edit `config.toml`. `onix --version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.
+`onix --init` initialises `~/.onix` and installs the PowerShell snippet (re-run any time; it's idempotent). `onix --sync` regenerates the snippet and `.cmd` shims after you move the binary or edit `config.toml`. `onix --prune` interactively removes stale aliases. `onix --version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.
 
 ## Diagnostics
 

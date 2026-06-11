@@ -73,6 +73,7 @@ var systemActionFlags = map[string]string{
 	"-e":           "edit",
 	"--contexts":   "contexts",
 	"-c":           "contexts",
+	"--prune":      "prune",
 	"--init":       "init",
 	"-I":           "init",
 	"--sync":       "sync",
@@ -108,6 +109,7 @@ SYSTEM VERBS:
   --edit, -e [files]     open ~/.onix or files within
   --remove, --rm [files] delete files in ~/.onix (use --force on load-bearing)
   --contexts, -c         list segment contexts
+  --prune                pick stale aliases to remove (fzf; --no-prompt prints the ranking)
   --init, -I             create ~/.onix and install shell integration
   --sync, -S             regenerate shell snippets
   --version, -v          print version
@@ -172,6 +174,15 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string, std
 		return (&RemoveCmd{Files: files, Force: force, Recursive: recursive}).Run(ctx, e)
 	case "contexts":
 		return (&ContextListCmd{}).Run(ctx, e)
+	case "prune":
+		for _, a := range rest {
+			// Global flags were already parsed into env; anything else is
+			// a typo, not a file to act on.
+			if a != "--no-prompt" && a != "-q" && a != "--json" && a != "-j" {
+				return fmt.Errorf("unknown flag for --prune: %q", a)
+			}
+		}
+		return (&PruneCmd{}).Run(ctx, e)
 	case "init":
 		cmd := &InitCmd{}
 		for _, a := range rest {

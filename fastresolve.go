@@ -11,6 +11,7 @@ import (
 	"github.com/sadirano/onix/internal/resolver"
 	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/store"
+	"github.com/sadirano/onix/internal/usage"
 )
 
 // fastResolve is the hot-path implementation of `onix resolve <name>`.
@@ -38,6 +39,11 @@ func fastResolve(home, name string, stdout, stderr io.Writer, stdin io.Reader, t
 	}
 
 	fmt.Fprintln(stdout, p)
+
+	// Frecency bookkeeping, after the path is already on stdout: segments
+	// vary per invocation, so only the base alias is counted.
+	_, base := segments.ParseSegmentedAlias(name)
+	usage.Record(home, base)
 	return nil
 }
 

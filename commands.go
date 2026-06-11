@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/sadirano/onix/internal/segments"
 	"github.com/sadirano/onix/internal/snippet"
 	"github.com/sadirano/onix/internal/store"
+	"github.com/sadirano/onix/internal/usage"
 )
 
 // childExitError is returned by RunCmd and ExecCmd when the child process
@@ -93,6 +95,11 @@ func (c *AddCmd) Run(ctx context.Context, e *env) error {
 	// — same output contract as `onix resolve`.
 	fmt.Fprintf(e.Stderr, "registered %s -> %s\n", strings.ToLower(c.Alias), abs)
 	fmt.Fprintln(e.Stdout, abs)
+
+	// Registering navigates (the shell wrapper cds to stdout), so it
+	// counts as a first use — a fresh alias should not rank as
+	// never-used in --prune.
+	usage.Record(e.Home, c.Alias)
 	return nil
 }
 
@@ -149,6 +156,7 @@ func (c *RemoveCmd) removeAlias(e *env) error {
 	if err := store.SaveStore(e.Home, s); err != nil {
 		return err
 	}
+	usage.Remove(e.Home, []string{c.Alias})
 	fmt.Fprintf(e.Stderr, "removed %s\n", strings.ToLower(c.Alias))
 	return nil
 }
@@ -264,6 +272,122 @@ func (c *ListCmd) Run(ctx context.Context, e *env) error {
 		}
 	}
 	return w.Flush()
+}
+
+// -----------------------------------------------------------------------------
+// prune — interactively remove stale aliases.
+//
+// Candidates are every registered alias, ranked prime-victims-first: dead
+// targets (directory gone), then never-used, then least-recently used,
+// based on the usage file the resolve paths maintain. The fzf multi-select
+// IS the confirmation: Enter removes the marked rows, Esc removes nothing.
+// With --no-prompt the ranking is printed and nothing is deleted.
+// -----------------------------------------------------------------------------
+
+type PruneCmd struct{}
+
+func (c *PruneCmd) Run(ctx context.Context, e *env) error {
+	s, err := store.LoadStore(e.Home)
+	if err != nil {
+		return err
+	}
+	if len(s.Aliases) == 0 {
+		fmt.Fprintln(e.Stdout, "no aliases registered (run: onix <name> <path>)")
+		return nil
+	}
+	u := usage.Load(e.Home)
+
+	type candidate struct {
+		name, path string
+		ent        usage.Entry
+		dead       bool
+	}
+	cands := make([]candidate, 0, len(s.Aliases))
+	nameWidth := 0
+	for _, name := range s.Names() {
+		a, _ := s.Lookup(name)
+		_, statErr := os.Stat(store.ExpandTilde(a.Path))
+		cands = append(cands, candidate{name: name, path: a.Path, ent: u[name], dead: statErr != nil})
+		nameWidth = max(nameWidth, len(name))
+	}
+	sort.SliceStable(cands, func(i, j int) bool {
+		if cands[i].dead != cands[j].dead {
+			return cands[i].dead
+		}
+		return cands[i].ent.Last < cands[j].ent.Last // never-used (0) sorts first
+	})
+
+	nowUnix := time.Now().Unix()
+	var b strings.Builder
+	for _, cd := range cands {
+		marker := ""
+		if cd.dead {
+			marker = "  [gone]"
+		}
+		fmt.Fprintf(&b, "%-*s  %9s  %4d uses  %s%s\n",
+			nameWidth, cd.name, humanAge(cd.ent.Last, nowUnix), cd.ent.Count, cd.path, marker)
+	}
+
+	if e.NoPrompt {
+		fmt.Fprint(e.Stdout, b.String())
+		return nil
+	}
+	if _, err := lookPath("fzf"); err != nil {
+		return fmt.Errorf("fzf not found on PATH (use --no-prompt to just print the ranking)")
+	}
+
+	fzfCmd := execCommandContext(ctx, "fzf", "--multi", "--layout=reverse",
+		"--header", "prune: Tab marks, Enter removes marked aliases, Esc cancels")
+	fzfCmd.Stdin = strings.NewReader(b.String())
+	fzfCmd.Stderr = os.Stderr // fzf UI uses stderr when stdout is captured
+	applyDefaultFzfTheme(fzfCmd)
+
+	selected, err := fzfCmd.Output()
+	if err != nil {
+		// Same contract as the other fzf consumers: 130 is Esc, 1 is
+		// nothing-matched — both mean "remove nothing".
+		if _, ok := err.(*exec.ExitError); ok {
+			return nil
+		}
+		return fmt.Errorf("fzf: %w", err)
+	}
+
+	var removed []string
+	for _, line := range strings.Split(strings.TrimSpace(string(selected)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if s.Delete(fields[0]) {
+			removed = append(removed, fields[0])
+		}
+	}
+	if len(removed) == 0 {
+		fmt.Fprintln(e.Stderr, "nothing pruned")
+		return nil
+	}
+	if err := store.SaveStore(e.Home, s); err != nil {
+		return err
+	}
+	usage.Remove(e.Home, removed)
+	fmt.Fprintf(e.Stderr, "pruned %d: %s\n", len(removed), strings.Join(removed, ", "))
+	return nil
+}
+
+// humanAge renders a last-used unix stamp for the prune listing.
+func humanAge(last, now int64) string {
+	if last == 0 {
+		return "never"
+	}
+	days := (now - last) / 86400
+	switch {
+	case days <= 0:
+		return "today"
+	case days == 1:
+		return "1d ago"
+	default:
+		return fmt.Sprintf("%dd ago", days)
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -594,6 +718,12 @@ func resolveAliasPath(e *env, name string) (string, error) {
 	if err := os.MkdirAll(p, 0o755); err != nil {
 		return "", fmt.Errorf("create directory %q: %w", p, err)
 	}
+
+	// Frecency bookkeeping: every alias action (edit/run/grep/...) counts
+	// as a use of the base alias, so --prune ranks by real activity rather
+	// than just bare-resolve navigation.
+	_, base := segments.ParseSegmentedAlias(name)
+	usage.Record(e.Home, base)
 	return p, nil
 }
 
