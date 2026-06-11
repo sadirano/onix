@@ -11,9 +11,9 @@ func TestFastListNames_Alphabetical(t *testing.T) {
 	home := t.TempDir()
 
 	// Register three aliases in non-alphabetical order.
-	_ = (&AddCmd{Alias: "cherry", Path: "C:/cherry"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-	_ = (&AddCmd{Alias: "apple", Path: "C:/apple"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
-	_ = (&AddCmd{Alias: "banana", Path: "C:/banana"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	_ = (&AddCmd{Alias: "cherry", Path: testTarget(t, "cherry")}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	_ = (&AddCmd{Alias: "apple", Path: testTarget(t, "apple")}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
+	_ = (&AddCmd{Alias: "banana", Path: testTarget(t, "banana")}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 
 	stdout, _, _ := captureStdio(func() error {
 		return fastListNames(home, os.Stdout)

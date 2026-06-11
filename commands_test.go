@@ -13,6 +13,15 @@ import (
 	"testing"
 )
 
+// testTarget returns an alias target inside a test-owned temp dir. AddCmd
+// MkdirAlls its target, so fixture paths must never point at real locations
+// (a bare "C:/acme" or relative "a") — that litters the developer's drive
+// root and the repo working tree with stray directories.
+func testTarget(t *testing.T, name string) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), name)
+}
+
 // TestAddCmd_OutputContract locks the stdout/stderr split that the `o`
 // shell wrapper depends on:
 //
@@ -103,8 +112,8 @@ func TestListCmd(t *testing.T) {
 	}
 
 	// Register two aliases.
-	pathA, _ := filepath.Abs("a")
-	pathB, _ := filepath.Abs("b")
+	pathA := filepath.Join(dir, "a")
+	pathB := filepath.Join(dir, "b")
 	_ = (&AddCmd{Alias: "a", Path: pathA}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
 	_ = (&AddCmd{Alias: "b", Path: pathB}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
 
@@ -147,7 +156,7 @@ func TestRemoveCmd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_ = (&AddCmd{Alias: "acme", Path: "C:/acme"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
+	_ = (&AddCmd{Alias: "acme", Path: testTarget(t, "acme")}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
 
 	t.Run("remove existing", func(t *testing.T) {
 		_, _, err := captureStdio(func() error {
@@ -269,6 +278,9 @@ func TestEditCmd_PropagatesEditorError(t *testing.T) {
 }
 
 func TestSyncCmd(t *testing.T) {
+	// Isolate clink's profile dir: sync refreshes %LOCALAPPDATA%\clink\onix.lua
+	// when present, and the test must not touch the developer's real one.
+	t.Setenv("LOCALAPPDATA", t.TempDir())
 	home := t.TempDir()
 	// init sets up the directory tree and writes a base snippet.
 	if err := (&InitCmd{SkipProfile: true}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true}); err != nil {
@@ -353,8 +365,8 @@ func TestVersionCmd(t *testing.T) {
 func TestFastListNames(t *testing.T) {
 	home := t.TempDir()
 	// Register some aliases
-	_ = (&AddCmd{Alias: "a", Path: "C:/a"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
-	_ = (&AddCmd{Alias: "b", Path: "C:/b"}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
+	_ = (&AddCmd{Alias: "a", Path: testTarget(t, "a")}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
+	_ = (&AddCmd{Alias: "b", Path: testTarget(t, "b")}).Run(context.Background(), &env{Home: home, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, NoPrompt: true})
 
 	stdout, _, err := captureStdio(func() error {
 		return fastListNames(home, os.Stdout)
