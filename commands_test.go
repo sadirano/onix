@@ -531,6 +531,84 @@ func TestFastResolve_RecordsDebouncedUsage(t *testing.T) {
 	}
 }
 
+func TestPasteFiles_CopiesFileAndDirectory(t *testing.T) {
+	src := t.TempDir()
+	target := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "note.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(src, "proj", "nested")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "deep.txt"), []byte("deep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	e := &env{Stdout: &out, Stderr: io.Discard, Stdin: os.Stdin}
+	files := []string{filepath.Join(src, "note.txt"), filepath.Join(src, "proj")}
+	if err := pasteFiles(e, target, files, ""); err != nil {
+		t.Fatalf("pasteFiles: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(target, "note.txt"))
+	if err != nil || string(data) != "hello" {
+		t.Errorf("file copy failed: %q err=%v", data, err)
+	}
+	data, err = os.ReadFile(filepath.Join(target, "proj", "nested", "deep.txt"))
+	if err != nil || string(data) != "deep" {
+		t.Errorf("recursive dir copy failed: %q err=%v", data, err)
+	}
+	// Source must be untouched (copy, not move).
+	if _, err := os.Stat(filepath.Join(src, "note.txt")); err != nil {
+		t.Errorf("source file disturbed: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Errorf("want 2 destination lines on stdout, got %q", out.String())
+	}
+}
+
+func TestPasteFiles_NameOverrideAndCollision(t *testing.T) {
+	src := t.TempDir()
+	target := t.TempDir()
+	srcFile := filepath.Join(src, "shot.png")
+	if err := os.WriteFile(srcFile, []byte("img"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e := &env{Stdout: io.Discard, Stderr: io.Discard, Stdin: os.Stdin}
+	// Name without extension inherits the source's.
+	if err := pasteFiles(e, target, []string{srcFile}, "cool"); err != nil {
+		t.Fatalf("pasteFiles: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "cool.png")); err != nil {
+		t.Errorf("named paste missing: %v", err)
+	}
+	// Same paste again: collision auto-increments instead of clobbering.
+	if err := pasteFiles(e, target, []string{srcFile}, "cool"); err != nil {
+		t.Fatalf("pasteFiles repeat: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "cool-1.png")); err != nil {
+		t.Errorf("collision paste missing -1 variant: %v", err)
+	}
+}
+
+func TestPasteFiles_NameWithMultipleFilesErrors(t *testing.T) {
+	src := t.TempDir()
+	for _, n := range []string{"a.txt", "b.txt"} {
+		if err := os.WriteFile(filepath.Join(src, n), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e := &env{Stdout: io.Discard, Stderr: io.Discard, Stdin: os.Stdin}
+	err := pasteFiles(e, t.TempDir(), []string{filepath.Join(src, "a.txt"), filepath.Join(src, "b.txt")}, "renamed")
+	if err == nil {
+		t.Fatal("renaming a multi-file paste must error")
+	}
+}
+
 func TestYankCmd(t *testing.T) {
 	home := t.TempDir()
 	target := t.TempDir()

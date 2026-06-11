@@ -11,3 +11,10 @@ import "fmt"
 func readClipboardContent() (data []byte, defaultExt string, err error) {
 	return nil, "", fmt.Errorf("onix --paste: reading the clipboard is only supported on Windows")
 }
+
+// readClipboardFiles is Windows-only too: file drops (CF_HDROP) have no
+// portable equivalent here. Returning nil makes --paste fall through to
+// the content path and its platform error above.
+func readClipboardFiles() []string {
+	return nil
+}

@@ -98,7 +98,7 @@ ALIAS ACTIONS:
   --edit, -e [files]     open dir or files in $EDITOR
   --explore, -x [file]   open dir in file manager, or a file with its default app
   --yank, -y             print path and copy to clipboard
-  --paste, -p [name]     save clipboard content to alias dir, copy its path
+  --paste, -p [name]     paste clipboard files/image/text into alias dir, copy the path(s)
   --grep, -g <query>     ripgrep + fzf in alias dir
   --find, -f <query>     fuzzy-find a file (opens in editor; docs/media in default app)
   --run, -r <cmd...>     exec command in alias dir (prefix -o/--outside to run detached)

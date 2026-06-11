@@ -512,14 +512,19 @@ func (c *YankCmd) Run(ctx context.Context, e *env) error {
 // paste — save clipboard content into an alias dir, then copy the saved
 // file's path back to the clipboard.
 //
-// The round-trip exists so a screenshot (or copied text) can be parked in a
-// known location and the resulting path handed straight to an AI agent. The
-// path overwrites the clipboard image, which is non-destructive on Windows
-// because the image is still recoverable from clipboard history (Win+V).
+// Files copied in Explorer (CF_HDROP) win over image/text: `p <alias>` then
+// becomes "copy the clipboard's files into the alias dir" — cross-folder
+// file copy driven entirely from the command line. Directories copy
+// recursively. Otherwise the round-trip exists so a screenshot (or copied
+// text) can be parked in a known location and the resulting path handed
+// straight to an AI agent. The path overwrites the clipboard image, which is
+// non-destructive on Windows because the image is still recoverable from
+// clipboard history (Win+V).
 //
 // Content type drives the default extension: an image saves as .png, text as
-// .md. An explicit extension on the name is always honoured. With no name we
-// fall back to a timestamp. Collisions auto-increment (cool.png, cool-1.png).
+// .md, a clipboard file keeps its own. An explicit extension on the name is
+// always honoured. With no name we fall back to the source name (files) or a
+// timestamp (content). Collisions auto-increment (cool.png, cool-1.png).
 // -----------------------------------------------------------------------------
 
 type PasteCmd struct {
@@ -531,6 +536,9 @@ func (c *PasteCmd) Run(ctx context.Context, e *env) error {
 	target, err := resolveAliasPath(e, c.Alias)
 	if err != nil {
 		return err
+	}
+	if files := readClipboardFiles(); len(files) > 0 {
+		return pasteFiles(e, target, files, c.Name)
 	}
 	data, defaultExt, err := readClipboardContent()
 	if err != nil {
@@ -557,6 +565,74 @@ func (c *PasteCmd) Run(ctx context.Context, e *env) error {
 // readClipboardContent is implemented per-platform: clipboard_windows.go
 // reads images/text via golang.design/x/clipboard; the non-Windows build
 // returns an error because that library needs cgo + X11 on Linux.
+
+// pasteFiles copies clipboard-held files or directories (Explorer's Ctrl+C)
+// into target. name renames the destination, so it only makes sense when the
+// clipboard holds exactly one item. Collisions auto-increment like the
+// content paste path, every destination lands on stdout, and the set is
+// copied back to the clipboard — same contract as content paste.
+func pasteFiles(e *env, target string, files []string, name string) error {
+	if name != "" && len(files) > 1 {
+		return fmt.Errorf("--paste <name> needs a single copied file; the clipboard holds %d", len(files))
+	}
+	outs := make([]string, 0, len(files))
+	for _, src := range files {
+		info, err := os.Stat(src)
+		if err != nil {
+			return fmt.Errorf("clipboard file %q: %w", src, err)
+		}
+		base := filepath.Base(src)
+		if name != "" {
+			if info.IsDir() {
+				base = name
+			} else {
+				base = pasteFilename(name, filepath.Ext(src))
+			}
+		}
+		dest := uniquePath(filepath.Join(target, base))
+		if info.IsDir() {
+			err = os.CopyFS(dest, os.DirFS(src))
+		} else {
+			err = copyFile(src, dest, info.Mode())
+		}
+		if err != nil {
+			return fmt.Errorf("copy %q: %w", src, err)
+		}
+		abs, err := filepath.Abs(dest)
+		if err != nil {
+			abs = dest
+		}
+		outs = append(outs, filepath.ToSlash(abs))
+	}
+	for _, o := range outs {
+		fmt.Fprintln(e.Stdout, o)
+	}
+	if err := copyToClipboard(strings.Join(outs, "\n")); err != nil {
+		// Non-fatal — the copies landed and the paths are on stdout.
+		fmt.Fprintf(e.Stderr, "warning: clipboard copy failed: %v\n", err)
+	}
+	return nil
+}
+
+// copyFile copies one regular file. O_EXCL because the caller already
+// picked a collision-free destination via uniquePath — anything appearing
+// in between should fail loudly rather than be silently overwritten.
+func copyFile(src, dest string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
 
 // pasteFilename builds the destination filename. An explicit extension on the
 // name is honoured; otherwise defaultExt (from the clipboard content type) is

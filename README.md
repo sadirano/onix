@@ -55,7 +55,7 @@ Everything else (`e`, `s`, `y`, `p`, `r`) invokes `onix` directly, so those don'
 
 `s <alias> <file>` opens a single file with its registered default application instead of the file manager — a PDF in your viewer, a `.zip` in your archiver, and so on. The file is resolved against the alias directory and opened by the OS handler (`explorer.exe` / `xdg-open`).
 
-`p <alias> [name]` saves the current clipboard contents into the alias directory and copies the saved file's absolute path back to the clipboard — handy for parking a screenshot and pasting its path into an agent. An image saves as `.png`, text as `.md`; an explicit extension on `<name>` is honoured, otherwise the default follows the clipboard content type. With no name it uses a timestamp, and a name collision auto-increments (`shot.png`, `shot-1.png`).
+`p <alias> [name]` saves the current clipboard contents into the alias directory and copies the saved path(s) back to the clipboard. Files copied in Explorer (Ctrl+C) take priority: `p blish` copies them into the alias directory — directories recursively — turning the clipboard into a cross-folder copy channel from any prompt. Otherwise the content path applies, handy for parking a screenshot and pasting its path into an agent: an image saves as `.png`, text as `.md`; an explicit extension on `<name>` is honoured, otherwise the default follows the clipboard content (a clipboard file keeps its own). With no name files keep their source name and content uses a timestamp; collisions auto-increment (`shot.png`, `shot-1.png`) so nothing is ever clobbered.
 
 ## Configuration
 
