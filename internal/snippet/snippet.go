@@ -408,13 +408,16 @@ if not defined ONIX_PICK exit /b 1
 // esExcludeTerms renders picker exclusions as Everything query terms:
 // ` !path:frag` per fragment, quoted only when the fragment has spaces
 // (a quote directly after a trailing backslash would be eaten by es's
-// command-line parsing, so quoting stays the exception). This batch file
-// never enables delayed expansion, so the bare `!` is literal.
+// command-line parsing, so quoting stays the exception). Quotes are
+// added literally, NOT via %q — %q escapes backslashes, and es matches
+// the doubled backslash literally. Config validation already rejects
+// quotes inside fragments. This batch file never enables delayed
+// expansion, so the bare `!` is literal.
 func esExcludeTerms(excludes []string) string {
 	var b strings.Builder
 	for _, frag := range excludes {
 		if strings.ContainsAny(frag, " \t") {
-			fmt.Fprintf(&b, " !path:%q", frag)
+			fmt.Fprintf(&b, ` !path:"%s"`, frag)
 		} else {
 			fmt.Fprintf(&b, " !path:%s", frag)
 		}
@@ -535,7 +538,11 @@ func RegenerateShellSnippet(home string) error {
 	if err != nil {
 		return err
 	}
-	return WriteShellSnippet(home, cfg.Shortcuts, cfg.Picker.ExcludeOrDefault())
+	excludes, err := config.PickerExcludes(home, cfg)
+	if err != nil {
+		return err
+	}
+	return WriteShellSnippet(home, cfg.Shortcuts, excludes)
 }
 
 var OnixExeOverride string

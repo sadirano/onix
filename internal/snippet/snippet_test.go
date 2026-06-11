@@ -155,7 +155,7 @@ func TestWritePwshShellSnippet_RegisterWrapper(t *testing.T) {
 
 func TestWritePwshShellSnippet_RegisterWrapperExcludes(t *testing.T) {
 	dir := t.TempDir()
-	excludes := []string{`node_modules`, `\.git\`, `with space`}
+	excludes := []string{`node_modules`, `\.git\`, `with space`, `C:\Program Files`}
 	if err := WritePwshShellSnippet(dir, nil, excludes); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -166,10 +166,13 @@ func TestWritePwshShellSnippet_RegisterWrapperExcludes(t *testing.T) {
 	content := string(data)
 	// Bare fragments stay unquoted (a quote after a trailing backslash
 	// would be eaten by es's arg parsing); spaced ones get quotes.
+	// The quoted backslash term guards against %q-style quoting, which
+	// would double the backslashes and make es match them literally.
 	for _, want := range []string{
 		` !path:node_modules`,
 		` !path:\.git\ `,
 		` !path:"with space"`,
+		` !path:"C:\Program Files"`,
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("register.cmd missing exclusion term %q:\n%s", want, content)

@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -74,6 +75,7 @@ var systemActionFlags = map[string]string{
 	"--contexts":   "contexts",
 	"-c":           "contexts",
 	"--prune":      "prune",
+	"--sweep":      "sweep",
 	"--init":       "init",
 	"-I":           "init",
 	"--sync":       "sync",
@@ -110,6 +112,8 @@ SYSTEM VERBS:
   --remove, --rm [files] delete files in ~/.onix (use --force on load-bearing)
   --contexts, -c         list segment contexts
   --prune                pick stale aliases to remove (fzf; --no-prompt prints the ranking)
+  --sweep [--min N]      find dirs flooding the picker (N+ subfolders, default 100) and pick
+                         ones to hide (appends to ~/.onix/picker.swept; --no-prompt prints)
   --init, -I             create ~/.onix and install shell integration
   --sync, -S             regenerate shell snippets
   --version, -v          print version
@@ -183,6 +187,27 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string, std
 			}
 		}
 		return (&PruneCmd{}).Run(ctx, e)
+	case "sweep":
+		cmd := &SweepCmd{}
+		for i := 0; i < len(rest); i++ {
+			switch a := rest[i]; a {
+			case "--no-prompt", "-q", "--json", "-j":
+				// Global flags, already parsed into env.
+			case "--min":
+				if i+1 >= len(rest) {
+					return fmt.Errorf("--min needs a number")
+				}
+				i++
+				n, err := strconv.Atoi(rest[i])
+				if err != nil || n <= 0 {
+					return fmt.Errorf("--min needs a positive number, got %q", rest[i])
+				}
+				cmd.Min = n
+			default:
+				return fmt.Errorf("unknown flag for --sweep: %q", a)
+			}
+		}
+		return cmd.Run(ctx, e)
 	case "init":
 		cmd := &InitCmd{}
 		for _, a := range rest {

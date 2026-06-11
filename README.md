@@ -92,12 +92,16 @@ preview_window = "right:50%"
 rg_colors = ["match:fg:yellow", "path:fg:cyan"]
 ```
 
-`[picker]` filters the unknown-alias directory picker (Everything + fzf). By default the generated `register.cmd` excludes dependency and cache trees — `node_modules`, `\.git\`, `AppData\Local`, `go\pkg\mod`, `\.cargo\`, `site-packages`, `__pycache__`, `\.venv`, `\.vs\`, `__tests__` — so the result cap is spent on directories worth picking. Setting `exclude` replaces that list entirely (fragments are matched as substrings of the full path; `exclude = []` turns filtering off):
+`[picker]` filters the unknown-alias directory picker (Everything + fzf). By default the generated `register.cmd` excludes any path component starting with `.`, `_`, or `[` (`.git`, `__pycache__`, bracket-tagged folders, …), dependency/build/cache trees (`node_modules`, `go\pkg\mod`, `site-packages`, `cache(s)`, `temp`, `lib(s)`, `libraries`, `src`, `bin`, `obj`, `build`, `dist`, `x64`, `x86`, `Debug`, `Release`, `modules`, `intermediates`, `packages`, `versions`, `test*`, `share`, `locale`), the Windows system trees (`C:\Windows\`, `C:\ProgramData\`, `C:\Program Files`, `System Volume Information`, `$RECYCLE.BIN`, `AppData`, `User Data`), and store-owned install trees (`scoop\apps`, `steamapps`) — so the result cap is spent on directories worth picking. The authoritative list is `PickerExcludeDefaults` in `internal/config/config.go`.
+
+Fragments are matched as substrings of the full path. Setting `exclude` replaces the default list entirely (`exclude = []` turns filtering off); `exclude_extra` extends it — the place for machine-specific noise (TOML literal strings save the backslash-doubling):
 
 ```toml
 [picker]
-exclude = ["node_modules", "\\.git\\", "AppData\\Local", "\\test\\"]
+exclude_extra = ['\XboxGames\', '\Engine\']
 ```
+
+`onix --sweep` finds noise you didn't think of: it scans the whole Everything index for directories with 100+ unfiltered subfolders (`--min N` tunes the threshold) — the trees that flood the picker on any matching query — and offers the worst offenders in an fzf multi-select. Enter appends the marked subtrees to `~/.onix/picker.swept` (a third exclusion layer, one fragment per line) and regenerates the wrappers; `--no-prompt` just prints the ranking. Directories containing a registered alias target are never offered. `onix <alias> <path>` still registers any directory the picker filters out.
 
 After editing, run `onix --sync` and `. $PROFILE` (or restart PowerShell) to pick up renamed shortcuts or picker changes.
 
