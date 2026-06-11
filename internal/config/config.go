@@ -14,6 +14,44 @@ import (
 type Config struct {
 	Shortcuts map[string]string `toml:"shortcuts,omitempty"`
 	Grep      Grep              `toml:"grep"`
+	Picker    Picker            `toml:"picker"`
+}
+
+// Picker tunes the unknown-alias directory picker (register.cmd: Everything
+// `es` piped into fzf). Exclude lists path fragments filtered out of the es
+// results as `!path:<fragment>` query terms, so dependency/cache trees
+// don't drown the real candidates — and so the -n result cap is spent on
+// directories worth picking. A nil list (key absent) applies
+// PickerExcludeDefaults; an explicit `exclude = []` disables filtering.
+type Picker struct {
+	Exclude []string `toml:"exclude"`
+}
+
+// PickerExcludeDefaults returns a fresh copy of the default exclusion
+// fragments: package managers, VCS internals, language caches, and the
+// AppData\Local tree. Fragments are matched as substrings of the full path.
+func PickerExcludeDefaults() []string {
+	return []string{
+		`node_modules`,
+		`\.git\`,
+		`AppData\Local`,
+		`go\pkg\mod`,
+		`\.cargo\`,
+		`site-packages`,
+		`__pycache__`,
+		`\.venv`,
+		`\.vs\`,
+		`__tests__`,
+	}
+}
+
+// ExcludeOrDefault distinguishes "key absent" (nil → defaults) from an
+// explicit empty list (no filtering).
+func (p Picker) ExcludeOrDefault() []string {
+	if p.Exclude == nil {
+		return PickerExcludeDefaults()
+	}
+	return p.Exclude
 }
 
 // Grep tunes the `sg` (grep) command. Every field has a built-in
@@ -112,6 +150,16 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("shortcut %q: invalid built-in name (must be one of: o, e, s, y, p, r, sg, ff)", name)
 		}
 		seen[strings.ToLower(shortcut)] = struct{}{}
+	}
+	for _, frag := range c.Picker.Exclude {
+		// Fragments are spliced into the generated register.cmd as es
+		// query terms; a quote would break the batch line's tokenising.
+		if strings.ContainsAny(frag, `"`) {
+			return fmt.Errorf("picker exclude %q: fragments cannot contain double quotes", frag)
+		}
+		if strings.TrimSpace(frag) == "" {
+			return fmt.Errorf("picker exclude: empty fragment")
+		}
 	}
 	return nil
 }

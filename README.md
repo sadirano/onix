@@ -74,7 +74,7 @@ Editor is taken from `$EDITOR`, then `$VISUAL`, then the first of `nvim`, `vim`,
 
 ## Configuring shortcuts and search
 
-`~/.onix/config.toml` holds two optional sections.
+`~/.onix/config.toml` holds three optional sections.
 
 `[shortcuts]` renames the built-in command functions. The keys are the built-in names (`o`, `e`, `s`, `y`, `p`, `r`, `sg`, `ff`); the value is the name you'd rather type:
 
@@ -92,7 +92,14 @@ preview_window = "right:50%"
 rg_colors = ["match:fg:yellow", "path:fg:cyan"]
 ```
 
-After editing, run `onix --sync` and `. $PROFILE` (or restart PowerShell) to pick up renamed shortcuts.
+`[picker]` filters the unknown-alias directory picker (Everything + fzf). By default the generated `register.cmd` excludes dependency and cache trees — `node_modules`, `\.git\`, `AppData\Local`, `go\pkg\mod`, `\.cargo\`, `site-packages`, `__pycache__`, `\.venv`, `\.vs\`, `__tests__` — so the result cap is spent on directories worth picking. Setting `exclude` replaces that list entirely (fragments are matched as substrings of the full path; `exclude = []` turns filtering off):
+
+```toml
+[picker]
+exclude = ["node_modules", "\\.git\\", "AppData\\Local", "\\test\\"]
+```
+
+After editing, run `onix --sync` and `. $PROFILE` (or restart PowerShell) to pick up renamed shortcuts or picker changes.
 
 ## Sub-aliases (`@`-segments)
 

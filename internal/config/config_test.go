@@ -135,3 +135,34 @@ func TestBuiltinDefaults(t *testing.T) {
 		t.Errorf("builtin 'o' missing or wrong: %q", m["o"])
 	}
 }
+
+func TestPicker_ExcludeOrDefault(t *testing.T) {
+	// Absent key: built-in defaults apply.
+	if got := (Picker{}).ExcludeOrDefault(); len(got) == 0 {
+		t.Error("nil exclude list should fall back to defaults")
+	}
+	// Explicit empty list: filtering deliberately off.
+	if got := (Picker{Exclude: []string{}}).ExcludeOrDefault(); len(got) != 0 {
+		t.Errorf("explicit empty list must disable filtering, got %v", got)
+	}
+	// User list replaces the defaults entirely.
+	got := (Picker{Exclude: []string{`\test\`}}).ExcludeOrDefault()
+	if len(got) != 1 || got[0] != `\test\` {
+		t.Errorf("user list not honoured: %v", got)
+	}
+}
+
+func TestValidate_PickerExclude(t *testing.T) {
+	bad := &Config{Picker: Picker{Exclude: []string{`with"quote`}}}
+	if err := bad.Validate(); err == nil {
+		t.Error("quoted fragment must fail validation (breaks batch tokenising)")
+	}
+	empty := &Config{Picker: Picker{Exclude: []string{"  "}}}
+	if err := empty.Validate(); err == nil {
+		t.Error("blank fragment must fail validation")
+	}
+	ok := &Config{Picker: Picker{Exclude: []string{`node_modules`, `\.git\`}}}
+	if err := ok.Validate(); err != nil {
+		t.Errorf("valid fragments rejected: %v", err)
+	}
+}

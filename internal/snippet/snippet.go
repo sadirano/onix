@@ -197,14 +197,16 @@ fi
 `
 
 // WriteShellSnippet regenerates the host-platform shell snippet.
-func WriteShellSnippet(home string, shortcuts map[string]string) error {
+// pickerExcludes only matters on Windows, where it feeds the register.cmd
+// es query; the bash snippet has no picker.
+func WriteShellSnippet(home string, shortcuts map[string]string, pickerExcludes []string) error {
 	if runtime.GOOS == "windows" {
-		return WritePwshShellSnippet(home, shortcuts)
+		return WritePwshShellSnippet(home, shortcuts, pickerExcludes)
 	}
 	return WriteBashShellSnippet(home, shortcuts)
 }
 
-func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
+func WritePwshShellSnippet(home string, shortcuts map[string]string, pickerExcludes []string) error {
 	path := PwshPath(home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -248,7 +250,7 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
 	_ = os.MkdirAll(binDir, 0o755)
 
 	writeOCmdWrapper(binDir, exe, s["o"])
-	writeRegisterWrapper(binDir, exe)
+	writeRegisterWrapper(binDir, exe, pickerExcludes)
 	writeFindPreviewWrapper(binDir)
 	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
 	writeExploreWrapper(binDir, exe, s["r"], s["s"])
@@ -379,8 +381,9 @@ if "%%~0"=="%%~f0" cmd /k
 // writeRegisterWrapper emits register.cmd, the unknown-alias fallback the
 // navigation shim calls when an alias doesn't resolve. It picks a directory
 // with Everything (es) + fzf, cds there, and registers the alias to it.
-// Requires the Everything `es` CLI on PATH.
-func writeRegisterWrapper(binDir, exe string) {
+// Requires the Everything `es` CLI on PATH. excludes become !path: query
+// terms so dependency/cache trees never reach fzf (or eat the -n cap).
+func writeRegisterWrapper(binDir, exe string, excludes []string) {
 	path := filepath.Join(binDir, "register.cmd")
 	content := fmt.Sprintf(`@echo off
 :: onix unknown-alias picker (generated; run 'onix --sync' to regenerate).
@@ -393,13 +396,30 @@ where es >nul 2>&1 || (
   echo [o] Everything 'es' CLI not found on PATH 1>&2
   exit /b 1
 )
-es %%1 /ad -n 100 | fzf > "%%ONIX_LAST_FILE%%"
+es %%1 /ad -n 100%s | fzf > "%%ONIX_LAST_FILE%%"
 set "ONIX_PICK="
 set /p ONIX_PICK=<"%%ONIX_LAST_FILE%%"
 if not defined ONIX_PICK exit /b 1
 "%s" %%1 "%%ONIX_PICK%%" > "%%ONIX_LAST_FILE%%" 2>nul
-`, exe)
+`, esExcludeTerms(excludes), exe)
 	writeCmdFile(path, content)
+}
+
+// esExcludeTerms renders picker exclusions as Everything query terms:
+// ` !path:frag` per fragment, quoted only when the fragment has spaces
+// (a quote directly after a trailing backslash would be eaten by es's
+// command-line parsing, so quoting stays the exception). This batch file
+// never enables delayed expansion, so the bare `!` is literal.
+func esExcludeTerms(excludes []string) string {
+	var b strings.Builder
+	for _, frag := range excludes {
+		if strings.ContainsAny(frag, " \t") {
+			fmt.Fprintf(&b, " !path:%q", frag)
+		} else {
+			fmt.Fprintf(&b, " !path:%s", frag)
+		}
+	}
+	return b.String()
 }
 
 // writeExploreWrapper emits the explore shim. With no file argument it
@@ -515,7 +535,7 @@ func RegenerateShellSnippet(home string) error {
 	if err != nil {
 		return err
 	}
-	return WriteShellSnippet(home, cfg.Shortcuts)
+	return WriteShellSnippet(home, cfg.Shortcuts, cfg.Picker.ExcludeOrDefault())
 }
 
 var OnixExeOverride string

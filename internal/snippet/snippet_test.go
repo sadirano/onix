@@ -12,7 +12,7 @@ var updateGolden = flag.Bool("update", false, "update golden files")
 
 func TestWritePwshShellSnippet_NoActions(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, err := os.ReadFile(PwshPath(dir))
@@ -36,7 +36,7 @@ func TestWriteBashShellSnippet_NoActions(t *testing.T) {
 
 func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteShellSnippet(dir, nil); err != nil {
+	if err := WriteShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	pwshExists := fileExists(PwshPath(dir))
@@ -48,7 +48,7 @@ func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 
 func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	path := filepath.Join(dir, "bin", "o.cmd")
@@ -97,7 +97,7 @@ func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
 
 func TestWritePwshShellSnippet_CmdWrappersUseCRLF(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	matches, err := filepath.Glob(filepath.Join(dir, "bin", "*.cmd"))
@@ -122,7 +122,7 @@ func TestWritePwshShellSnippet_CmdWrappersUseCRLF(t *testing.T) {
 
 func TestWritePwshShellSnippet_RegisterWrapper(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	path := filepath.Join(dir, "bin", "register.cmd")
@@ -147,11 +147,55 @@ func TestWritePwshShellSnippet_RegisterWrapper(t *testing.T) {
 	if !strings.Contains(content, "if not defined ONIX_PICK") {
 		t.Errorf("register.cmd missing empty-pick cancel guard:\n%s", content)
 	}
+	// No excludes passed: the es line must carry no !path: terms.
+	if strings.Contains(content, "!path:") {
+		t.Errorf("register.cmd has exclusion terms without any excludes:\n%s", content)
+	}
+}
+
+func TestWritePwshShellSnippet_RegisterWrapperExcludes(t *testing.T) {
+	dir := t.TempDir()
+	excludes := []string{`node_modules`, `\.git\`, `with space`}
+	if err := WritePwshShellSnippet(dir, nil, excludes); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "bin", "register.cmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	// Bare fragments stay unquoted (a quote after a trailing backslash
+	// would be eaten by es's arg parsing); spaced ones get quotes.
+	for _, want := range []string{
+		` !path:node_modules`,
+		` !path:\.git\ `,
+		` !path:"with space"`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("register.cmd missing exclusion term %q:\n%s", want, content)
+		}
+	}
+	// The terms must land on the es line, before the fzf pipe.
+	esLine := ""
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, "es ") {
+			esLine = line
+			break
+		}
+	}
+	if !strings.Contains(esLine, "!path:node_modules") || !strings.Contains(esLine, "| fzf") {
+		t.Errorf("exclusions not on the es|fzf line: %q", esLine)
+	}
+	// register.cmd must never enable delayed expansion — it would turn the
+	// literal ! in !path: into variable expansion and erase the filters.
+	if strings.Contains(content, "enabledelayedexpansion") {
+		t.Errorf("register.cmd enables delayed expansion; !path: terms would break:\n%s", content)
+	}
 }
 
 func TestWritePwshShellSnippet_FindPreviewWrapper(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	path := filepath.Join(dir, "bin", FindPreviewWrapperName)
