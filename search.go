@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/sadirano/onix/internal/config"
-	"github.com/sadirano/onix/internal/snippet"
 )
 
 // -----------------------------------------------------------------------------
@@ -307,19 +307,77 @@ func openFindSelections(ctx context.Context, target string, selections []string)
 	return openSelectionsInEditor(ctx, target, editorSel, false)
 }
 
-// findPreviewCommand returns the fzf --preview command for `ff`. It
-// must handle both files (bat) and directories (listing) since es
-// returns directories alongside files and bat errors on a directory.
-// On Windows we delegate to a real .cmd shim (written by
-// writeFindPreviewWrapper); inline if/else inside fzf's --preview
-// trips cmd.exe's parser on Windows paths. POSIX shells parse the
-// inline form just fine.
+// findPreviewCommand returns the fzf --preview command for `ff`. It must
+// handle both files (bat) and directories (listing) since es returns
+// directories alongside files and bat errors on a directory. On Windows we
+// route the preview through `onix --preview`, a built-in that does the
+// dir-vs-file branching in Go — inline if/else inside fzf's --preview trips
+// cmd.exe's parser on Windows paths. POSIX shells parse the inline
+// bat-or-ls form fine.
 func findPreviewCommand(home string) string {
 	if runtime.GOOS == "windows" {
-		wrapper := filepath.Join(home, "bin", snippet.FindPreviewWrapperName)
-		return `"` + wrapper + `" "{}"`
+		exe := filepath.Join(home, "bin", "onix.exe")
+		return `"` + exe + `" --preview "{}"`
 	}
 	return `bat --style=numbers --color=always "{}" 2>/dev/null || ls -la "{}"`
+}
+
+// PreviewCmd renders a single fzf preview row for `ff`: a directory listing
+// for directories, syntax-highlighted contents (via bat when present) for
+// files. A preview must never fail the picker, so every error path degrades
+// to printing a short message and returning nil.
+type PreviewCmd struct {
+	Path string
+}
+
+func (c *PreviewCmd) Run(ctx context.Context, e *env) error {
+	p := c.Path
+	if runtime.GOOS == "windows" {
+		// fzf shell-escapes the substituted {} with carets on Windows; wrapped
+		// in our double quotes, cmd.exe keeps them literal so they reach us in
+		// argv. Strip them unconditionally (paths with literal carets never
+		// previewed).
+		p = strings.ReplaceAll(p, "^", "")
+	}
+
+	info, err := os.Stat(p)
+	if err != nil {
+		fmt.Fprintln(e.Stdout, err)
+		return nil
+	}
+
+	if info.IsDir() {
+		entries, err := os.ReadDir(p)
+		if err != nil {
+			fmt.Fprintln(e.Stdout, err)
+			return nil
+		}
+		for _, ent := range entries {
+			name := ent.Name()
+			if ent.IsDir() {
+				name += string(os.PathSeparator)
+			}
+			fmt.Fprintln(e.Stdout, name)
+		}
+		return nil
+	}
+
+	if _, err := lookPath("bat"); err == nil {
+		cmd := execCommandContext(ctx, "bat", "--style=numbers", "--color=always", p)
+		cmd.Stdout = e.Stdout
+		cmd.Stderr = e.Stderr
+		_ = cmd.Run()
+		return nil
+	}
+
+	f, err := os.Open(p)
+	if err != nil {
+		fmt.Fprintln(e.Stdout, err)
+		return nil
+	}
+	defer f.Close()
+	_, _ = io.Copy(e.Stdout, f)
+	return nil
 }
 
 // fzfTokyoNightTheme is the default --color set we hand fzf via
@@ -352,18 +410,21 @@ func openSelectionsInEditor(ctx context.Context, target string, selections []str
 	// are just the file path. On Windows, find can return drive-letter
 	// paths ("C:\..."), which themselves contain a colon — so we can't
 	// detect the format from the split alone. The caller tells us.
-	argv := []string{}
+	targets := make([]editTarget, 0, len(selections))
 	for _, s := range selections {
 		if hasLineNumbers {
 			parts := strings.SplitN(s, ":", 3)
 			if len(parts) >= 2 {
-				argv = append(argv, fmt.Sprintf("+%s", parts[1]), parts[0])
+				targets = append(targets, editTarget{file: parts[0], line: parts[1]})
 				continue
 			}
 		}
-		argv = append(argv, s)
+		targets = append(targets, editTarget{file: s})
 	}
 
+	// editorArgs formats the line jump in the resolved editor's dialect
+	// (vim's "+line", VS Code's "--goto file:line", etc.).
+	argv := editorArgs(ed, targets)
 	if len(argv) == 0 {
 		return nil
 	}

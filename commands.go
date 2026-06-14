@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -781,15 +780,26 @@ func resolveAliasPath(e *env, name string) (string, error) {
 	var segPrompter resolver.SegmentPrompter
 
 	if !e.NoPrompt {
-		reader := bufio.NewReader(e.Stdin)
 		segPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
-			return promptSegmentDefinition(e.Home, segmentName, inlineValue, e.Stderr, reader, aliasBase, aliasName)
+			return autoDefineSegment(e.Home, segmentName, inlineValue, e.Stderr, aliasName)
 		}
 	}
 
 	p, err := resolver.Resolve(e.Home, name, segPrompter, e.Timer)
 	if err != nil {
-		return "", err
+		// Unknown plain alias: offer the directory picker so every action
+		// (grep/edit/run/...) can register-on-the-fly, then use the pick.
+		// Segmented inputs (unknown segments are handled by segPrompter
+		// above), --no-prompt, and an already-cancelled prompt skip straight
+		// to the error.
+		if e.NoPrompt || strings.Contains(name, "@") || errors.Is(err, resolver.ErrCancelled) {
+			return "", err
+		}
+		picked, perr := pickDirectory(context.Background(), e, name)
+		if perr != nil {
+			return "", perr
+		}
+		p = picked
 	}
 	if err := os.MkdirAll(p, 0o755); err != nil {
 		return "", fmt.Errorf("create directory %q: %w", p, err)

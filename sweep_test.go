@@ -165,12 +165,25 @@ func TestSweepCmd_AppliesSelection(t *testing.T) {
 	if len(swept) != 1 || swept[0] != `C:\stuff\photos\` {
 		t.Errorf("swept file = %v, want [C:\\stuff\\photos\\]", swept)
 	}
-	reg, err := os.ReadFile(filepath.Join(e.Home, "bin", "register.cmd"))
+	// The picker reads exclusions from config + the swept file at runtime,
+	// so the swept term must surface through PickerExcludes.
+	cfg, err := config.LoadConfig(e.Home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(reg), `!path:C:\stuff\photos\`) {
-		t.Errorf("register.cmd not regenerated with swept term:\n%s", reg)
+	excludes, err := config.PickerExcludes(e.Home, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, x := range excludes {
+		if x == `C:\stuff\photos\` {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("swept term not in picker excludes: %v", excludes)
 	}
 }
 

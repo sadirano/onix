@@ -1,14 +1,18 @@
 // Command onix is a fast directory alias resolver.
 //
 // The hot path is `onix <alias>`: it reads ~/.onix/aliases.toml, looks up
-// the alias, and prints the resolved absolute path. Shell integration (a
-// PowerShell function named `o`) wraps that output in a Set-Location call
-// so `o acme` changes the current shell's directory with no new process
-// spawn.
+// the alias, and prints the resolved absolute path.
 //
-// Other built-in actions (--edit, --explore, --yank, --run, ...) are
-// invoked directly on the onix binary because they don't need to change
-// the calling shell's directory.
+// onix ships as a multi-call binary: it is installed into ~/.onix/bin under
+// each command name (o, e, r, ...), hardlinked to the same executable, and
+// recovers the intended action from argv[0] (see multicall.go). Navigation
+// (`o`) opens a fresh shell rooted at the resolved directory — a child process
+// can't relocate its parent shell, so it stacks a subshell instead. On
+// POSIX, `o` stays a shell function that cd's the calling shell in place.
+//
+// Other built-in actions (--edit, --explore, --yank, --run, ...) act on the
+// resolved directory directly because they don't need to change the calling
+// shell's directory.
 package main
 
 import (
@@ -93,19 +97,42 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) (exitCode int
 	}
 
 	t.mark("pre-dispatch")
-	if err := dispatchNewGrammar(sigCtx, e, processedArgs[1:], stdout, stderr); err != nil {
-		var cee *childExitError
-		if errors.As(err, &cee) {
-			return cee.Code
+
+	// Multi-call dispatch: when invoked under a wrapper name (o, e, r, ...),
+	// recover the action from argv[0] and either spawn a navigation subshell
+	// or desugar into the canonical grammar.
+	dispatchArgs := processedArgs[1:]
+	if action, ok := invokedAction(home, args[0]); ok {
+		rewritten, navAlias, isNav := desugarMultiCall(action, dispatchArgs)
+		if isNav {
+			return dispatchResult(navigateAndSubshell(sigCtx, e, navAlias, dispatchArgs), stderr)
 		}
-		if !errors.Is(err, resolver.ErrCancelled) {
-			fmt.Fprintf(stderr, "onix: %v\n", err)
-		}
-		return 1
+		dispatchArgs = rewritten
+	}
+
+	if err := dispatchNewGrammar(sigCtx, e, dispatchArgs, stdout, stderr); err != nil {
+		return dispatchResult(err, stderr)
 	}
 	t.mark("post-dispatch")
 
 	return 0
+}
+
+// dispatchResult maps a handler error to a process exit code, mirroring the
+// inline handling the grammar dispatch has always used: child exit codes pass
+// through verbatim, a cancelled prompt is silent, anything else prints.
+func dispatchResult(err error, stderr io.Writer) int {
+	if err == nil {
+		return 0
+	}
+	var cee *childExitError
+	if errors.As(err, &cee) {
+		return cee.Code
+	}
+	if !errors.Is(err, resolver.ErrCancelled) {
+		fmt.Fprintf(stderr, "onix: %v\n", err)
+	}
+	return 1
 }
 
 // startsWithDash is the cheap flag-vs-positional check used by the

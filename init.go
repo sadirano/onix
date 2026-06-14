@@ -91,7 +91,40 @@ func (c *InitCmd) Run(ctx context.Context, e *env) error {
 		fmt.Fprintf(e.Stderr, "clink integration: %s\n", p)
 	}
 
+	// Put the wrapper dir on the persistent user PATH so the o/e/r/... .exe
+	// wrappers resolve in every shell. Reached only past the --skip-profile
+	// guard above, so it shares the "opt into environment changes" gate.
+	ensureBinOnUserPath(e)
+
 	return sourceFromProfile(e, snippet.PwshPath(e.Home))
+}
+
+// ensureBinOnUserPath adds ~/.onix/bin to the persistent per-user PATH (the
+// Windows user environment block) so the multi-call .exe wrappers resolve in
+// every shell, not only ones that source the generated snippet. Idempotent: it
+// appends only when the entry is absent. Best-effort — a failure is a warning,
+// never fatal, since the snippet's session-level PATH line still covers the
+// current shell.
+func ensureBinOnUserPath(e *env) {
+	bin := filepath.Join(e.Home, "bin")
+	script := fmt.Sprintf(`$bin = '%s'
+$cur = [Environment]::GetEnvironmentVariable('Path','User'); if (-not $cur) { $cur = '' }
+$parts = @($cur -split ';' | Where-Object { $_ -ne '' })
+if ($parts -notcontains $bin) {
+  [Environment]::SetEnvironmentVariable('Path', (($parts + $bin) -join ';'), 'User')
+  Write-Output 'added'
+} else { Write-Output 'present' }`, strings.ReplaceAll(bin, "'", "''"))
+
+	out, err := exec.Command(pwshBin(), "-NoProfile", "-NonInteractive", "-Command", script).Output()
+	if err != nil {
+		fmt.Fprintf(e.Stderr, "warning: could not add %s to user PATH (add it manually): %v\n", bin, err)
+		return
+	}
+	if strings.TrimSpace(string(out)) == "added" {
+		fmt.Fprintf(e.Stderr, "added %s to your user PATH (restart shells to pick it up)\n", bin)
+	} else {
+		fmt.Fprintf(e.Stderr, "%s already on user PATH\n", bin)
+	}
 }
 
 // sourceFromBashLike appends a source line to .bashrc and/or .zshrc.

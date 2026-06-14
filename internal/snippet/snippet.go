@@ -2,6 +2,7 @@ package snippet
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,91 +22,16 @@ func BashPath(home string) string {
 	return filepath.Join(home, "shell", "onix.sh")
 }
 
-const pwshO = `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$false)][string]$Alias,
-        [Parameter(Position=1, Mandatory=$false, ValueFromRemainingArguments=$true)][string[]]$Path
-    )
-    if (-not $Alias) {
-        & $global:onixExe --edit
-        return
-    }
+// On Windows, onix ships as a multi-call binary: the same executable is
+// hardlinked into ~/.onix/bin under each command name (o, e, r, ...), and the
+// binary recovers the action from argv[0]. The PowerShell snippet therefore no
+// longer defines o/e/... functions — it only puts the wrapper dir on PATH for
+// the current session and registers alias tab-completion. POSIX keeps the
+// shell-function model below (cd-in-place, no files, no lock to fix).
 
-    $resolved = & $global:onixExe $Alias @Path
-    if ($LASTEXITCODE -eq 0) {
-        Set-Location -LiteralPath $resolved
-    }
-}
-`
-
-const pwshE = `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --edit @Rest
-}
-`
-
-const pwshS = `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --explore @Rest
-}
-`
-
-const pwshY = `function global:%s {
-    [CmdletBinding()]
-    param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe $Alias --yank
-}
-`
-
-const pwshP = `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --paste @Rest
-}
-`
-
-const pwshR = `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, Mandatory=$true, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --run @Rest
-}
-`
-
-const pwshSG = `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --grep @Rest
-}
-`
-
-const pwshFF = `function global:%s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --find @Rest
-}
-`
-
+// bashO and friends define the POSIX shell functions. These stay as functions
+// because a function can cd the calling shell in place — the cleaner UX on
+// POSIX.
 const bashO = `%s() {
     if [ -z "$1" ]; then
         "$ONIX_EXE" --edit
@@ -168,8 +94,14 @@ const bashFF = `%s() {
 const pwshQ = `function global:q { exit }
 `
 
+// pwshCompleter registers a NATIVE argument completer (the wrappers are real
+// executables now, not functions, so -ParameterName no longer applies). It
+// only suggests alias names for the first argument.
 const pwshCompleter = `$onixAliasCompleter = {
     param($wordToComplete, $commandAst, $cursorPosition)
+    # Only complete the first argument (the alias); leave a command's later
+    # arguments to the shell's own file/command completion.
+    if ($commandAst.CommandElements.Count -gt 2) { return }
     @(& $global:onixExe --list-names 2>$null) |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object {
@@ -196,17 +128,21 @@ elif [ -n "$ZSH_VERSION" ] && command -v compdef >/dev/null 2>&1; then
 fi
 `
 
-// WriteShellSnippet regenerates the host-platform shell snippet.
-// pickerExcludes only matters on Windows, where it feeds the register.cmd
-// es query; the bash snippet has no picker.
-func WriteShellSnippet(home string, shortcuts map[string]string, pickerExcludes []string) error {
+// WriteShellSnippet regenerates the host-platform shell snippet (and, on
+// Windows, installs the multi-call .exe wrappers).
+func WriteShellSnippet(home string, shortcuts map[string]string) error {
 	if runtime.GOOS == "windows" {
-		return WritePwshShellSnippet(home, shortcuts, pickerExcludes)
+		return WritePwshShellSnippet(home, shortcuts)
 	}
 	return WriteBashShellSnippet(home, shortcuts)
 }
 
-func WritePwshShellSnippet(home string, shortcuts map[string]string, pickerExcludes []string) error {
+// WritePwshShellSnippet writes the PowerShell integration (completer + session
+// PATH) and installs the multi-call wrappers into ~/.onix/bin. The wrappers
+// are what actually run o/e/r/...; the snippet only registers tab-completion
+// and front-loads the wrapper dir onto PATH so a freshly sourced session finds
+// them before the persistent user-PATH entry reaches new shells.
+func WritePwshShellSnippet(home string, shortcuts map[string]string) error {
 	path := PwshPath(home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -217,14 +153,6 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, pickerExclu
 		return err
 	}
 
-	var b strings.Builder
-	b.WriteString("# onix shell integration (generated; do not edit — run 'onix sync')\n")
-	fmt.Fprintf(&b, "# Source from $PROFILE: . '%s'\n\n", strings.ReplaceAll(path, `'`, `''`))
-	fmt.Fprintf(&b, "$global:onixExe = '%s'\n\n", strings.ReplaceAll(exe, `'`, `''`))
-
-	b.WriteString(pwshCompleter)
-	b.WriteString("\n")
-
 	s := config.BuiltinDefaults()
 	for k, v := range shortcuts {
 		if _, ok := s[k]; ok {
@@ -232,264 +160,128 @@ func WritePwshShellSnippet(home string, shortcuts map[string]string, pickerExclu
 		}
 	}
 
-	fmt.Fprintf(&b, pwshO, s["o"])
-	fmt.Fprintf(&b, pwshE, s["e"])
-	fmt.Fprintf(&b, pwshS, s["s"])
-	fmt.Fprintf(&b, pwshY, s["y"])
-	fmt.Fprintf(&b, pwshP, s["p"])
-	fmt.Fprintf(&b, pwshR, s["r"])
-	fmt.Fprintf(&b, pwshSG, s["sg"])
-	fmt.Fprintf(&b, pwshFF, s["ff"])
+	binDir := filepath.Join(home, "bin")
+
+	var b strings.Builder
+	b.WriteString("# onix shell integration (generated; do not edit — run 'onix sync')\n")
+	fmt.Fprintf(&b, "# Source from $PROFILE: . '%s'\n\n", strings.ReplaceAll(path, `'`, `''`))
+	fmt.Fprintf(&b, "$global:onixExe = '%s'\n\n", strings.ReplaceAll(exe, `'`, `''`))
+
+	// Prepend the wrapper dir to PATH for this session immediately; the
+	// persistent user-PATH entry (added by `onix --init`) only reaches shells
+	// started afterwards.
+	fmt.Fprintf(&b, "$onixBin = '%s'\n", strings.ReplaceAll(binDir, `'`, `''`))
+	b.WriteString("if (($env:PATH -split ';') -notcontains $onixBin) { $env:PATH = $onixBin + ';' + $env:PATH }\n\n")
+
+	b.WriteString(pwshCompleter)
+	b.WriteString("\n")
 	b.WriteString(pwshQ)
 	b.WriteString("\n")
 
-	// On Windows, we also drop .cmd wrappers into ~/.onix/bin for each
-	// shortcut and custom action. This makes them available via Windows
-	// Run (Win+R) or from cmd.exe without needing the PowerShell snippet.
-	binDir := filepath.Join(home, "bin")
-	_ = os.MkdirAll(binDir, 0o755)
-
-	writeOCmdWrapper(binDir, exe, s["o"])
-	writeRegisterWrapper(binDir, exe, pickerExcludes)
-	writeFindPreviewWrapper(binDir)
-	writeAliasFlagWrapper(binDir, exe, s["e"], "--edit")
-	writeExploreWrapper(binDir, exe, s["r"], s["s"])
-	writeAliasFlagWrapper(binDir, exe, s["y"], "--yank")
-	writeAliasFlagWrapper(binDir, exe, s["p"], "--paste")
-	writeAliasFlagWrapper(binDir, exe, s["r"], "--run")
-	writeAliasFlagWrapper(binDir, exe, s["sg"], "--grep")
-	writeAliasFlagWrapper(binDir, exe, s["ff"], "--find")
-
 	writeCompleterRegistration(&b, s)
 
-	return os.WriteFile(path, []byte(b.String()), 0o644)
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		return err
+	}
+
+	// Install the multi-call wrappers (o.exe, e.exe, ...) last so a snippet is
+	// still produced even if linking hits trouble.
+	return installExeWrappers(binDir, exe, s)
 }
 
-// FindPreviewWrapperName is the on-disk filename of the fzf preview
-// helper used by `onix find`. Exported so search.go can build its path
-// without re-encoding the string.
-const FindPreviewWrapperName = "onix-preview.cmd"
+// installExeWrappers makes the onix binary available under each command name
+// in binDir. The canonical binary is kept at binDir/onix.exe (copied in when
+// onix is being run from elsewhere, e.g. a build directory) so every per-name
+// wrapper can hardlink to it on the same volume; linking falls back to a copy
+// across volumes or on filesystems without hardlink support. Existing wrappers
+// are refreshed in place, so a `sync` after an upgrade re-points them at the
+// current binary.
+func installExeWrappers(binDir, exe string, shortcuts map[string]string) error {
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", binDir, err)
+	}
 
-// writeFindPreviewWrapper drops a tiny batch helper next to the other
-// shims. fzf calls it once per highlighted row: directories get a
-// `dir /b` listing, everything else goes through bat. Keeping the
-// branching logic in a real script (rather than inline in --preview)
-// sidesteps cmd.exe's parser quirks with parens and quoted paths.
-func writeFindPreviewWrapper(binDir string) {
-	// NB: fzf shell-escapes substituted {} values with carets on Windows,
-	// and because we wrap {} in double quotes (so paths with spaces stay
-	// one token) cmd.exe does NOT strip those carets — they survive into
-	// %~1. We scrub them via delayed-expansion substitution (the regular
-	// %p:^=% form is unreliable; cmd's parser treats `^=` as escaped `=`
-	// so the pattern collapses and nothing gets stripped).
-	//
-	// Directory test uses pushd, not `if exist "...\."` — the latter
-	// returns true for files on some cmd builds, which is exactly the
-	// regression that sent files through the `dir /b` branch.
-	const content = `@echo off
-setlocal enabledelayedexpansion
-set "p=%~1"
-set "p=!p:^=!"
-pushd "!p!" >nul 2>&1
-if errorlevel 1 (
-  bat --style=numbers --color=always "!p!"
-) else (
-  popd
-  dir /b "!p!"
-)
-`
-	writeCmdFile(filepath.Join(binDir, FindPreviewWrapperName), content)
-}
-
-// writeCmdFile writes a generated batch file with CRLF line endings.
-// cmd.exe tracks its position in a batch file by byte offset assuming
-// CRLF: an LF-only file parses correctly only until a line straddles the
-// interpreter's read-block boundary, after which execution resumes
-// mid-line and the script degenerates into garbage ('et' for 'set',
-// comment lines executed as commands). Normalising here keeps the
-// templates readable with plain \n.
-func writeCmdFile(path, content string) {
-	content = strings.ReplaceAll(strings.ReplaceAll(content, "\r\n", "\n"), "\n", "\r\n")
-	_ = os.WriteFile(path, []byte(content), 0o644)
-}
-
-// writeOCmdWrapper emits the navigation shim used from cmd.exe and Win+R.
-// With no argument it opens the config editor; a leading dash is a system
-// verb handed straight to onix; anything else is an alias to navigate to.
-//
-// The resolved path is captured by redirecting onix's stdout into the
-// ~/.onix/.last file, which the wrapper then reads to pushd into. A child
-// process can't relocate its parent shell, so this is how the .cmd flow cds
-// the calling shell. An unknown alias (and not an @-segment) falls back to
-// register.cmd, the Everything + fzf directory picker.
-func writeOCmdWrapper(binDir, exe, name string) {
-	path := filepath.Join(binDir, name+".cmd")
-	content := fmt.Sprintf(`@echo off
-:: onix navigation wrapper (generated; run 'onix --sync' to regenerate).
-:: Resolve an alias and cd the current shell into its directory; with no
-:: argument it opens the config editor instead.
-
-set "ONIX_EXE=%s"
-set "ONIX_LAST_FILE=%%~dp0\..\.last"
-
-:: No arguments: open the editor and stop.
-if "%%~1"=="" (
-  "%%ONIX_EXE%%" --edit
-  exit /b
-)
-
-:: A leading dash marks a system verb (-v, --version, ...). Pass it straight
-:: through to onix rather than treating it as a navigation alias.
-set "_arg=%%~1"
-if "%%_arg:~0,1%%"=="-" (
-  set "_arg="
-  "%%ONIX_EXE%%" %%*
-  exit /b
-)
-set "_arg="
-
-:: Resolve the alias and record the destination in .last. If it isn't known
-:: (and isn't an @-segment), fall back to the interactive picker.
-"%%ONIX_EXE%%" %%* > "%%ONIX_LAST_FILE%%" 2>nul
-if errorlevel 1 (
-  echo %%1 | findstr /c:"@" >nul
-  if errorlevel 1 call "%%~dp0register.cmd" %%1
-)
-
-:: Navigate the current shell to the resolved directory. set /p leaves the
-:: variable UNCHANGED on an empty file, so clear it first: an empty .last means
-:: the resolve failed or the user cancelled the picker/segment editor, and we
-:: must not navigate or open a window — just bail without creating anything.
-set "ONIX_LAST="
-set /p ONIX_LAST=<"%%ONIX_LAST_FILE%%"
-if not defined ONIX_LAST (
-  echo [o] nothing to navigate to ^(cancelled, or alias/segment not resolved^) 1>&2
-  exit /b 1
-)
-pushd "%%ONIX_LAST%%" || (
-  echo [o] cannot enter "%%ONIX_LAST%%" 1>&2
-  exit /b 1
-)
-
-:: When launched from Windows Run (Win+R) or by double-click, %%~0 equals the
-:: full path %%~f0. In that case open a persistent prompt so the window stays.
-if "%%~0"=="%%~f0" cmd /k
-`, exe)
-	writeCmdFile(path, content)
-}
-
-// writeRegisterWrapper emits register.cmd, the unknown-alias fallback the
-// navigation shim calls when an alias doesn't resolve. It picks a directory
-// with Everything (es) + fzf, cds there, and registers the alias to it.
-// Requires the Everything `es` CLI on PATH. excludes become !path: query
-// terms so dependency/cache trees never reach fzf (or eat the -n cap).
-func writeRegisterWrapper(binDir, exe string, excludes []string) {
-	path := filepath.Join(binDir, "register.cmd")
-	content := fmt.Sprintf(`@echo off
-:: onix unknown-alias picker (generated; run 'onix --sync' to regenerate).
-:: Pick a directory with Everything (es) + fzf and register the alias to it,
-:: writing the resolved path to .last for o.cmd to navigate into. Needs the
-:: `+"`es`"+` CLI on PATH. On cancel (empty pick) nothing is registered and we
-:: exit non-zero so o.cmd does not navigate or create anything.
-set "ONIX_LAST_FILE=%%~dp0\..\.last"
-where es >nul 2>&1 || (
-  echo [o] Everything 'es' CLI not found on PATH 1>&2
-  exit /b 1
-)
-es %%1 /ad -n 100%s | fzf > "%%ONIX_LAST_FILE%%"
-set "ONIX_PICK="
-set /p ONIX_PICK=<"%%ONIX_LAST_FILE%%"
-if not defined ONIX_PICK exit /b 1
-"%s" %%1 "%%ONIX_PICK%%" > "%%ONIX_LAST_FILE%%" 2>nul
-`, esExcludeTerms(excludes), exe)
-	writeCmdFile(path, content)
-}
-
-// esExcludeTerms renders picker exclusions as Everything query terms:
-// ` !path:frag` per fragment, quoted only when the fragment has spaces
-// (a quote directly after a trailing backslash would be eaten by es's
-// command-line parsing, so quoting stays the exception). Quotes are
-// added literally, NOT via %q — %q escapes backslashes, and es matches
-// the doubled backslash literally. Config validation already rejects
-// quotes inside fragments. This batch file never enables delayed
-// expansion, so the bare `!` is literal.
-func esExcludeTerms(excludes []string) string {
-	var b strings.Builder
-	for _, frag := range excludes {
-		if strings.ContainsAny(frag, " \t") {
-			fmt.Fprintf(&b, ` !path:"%s"`, frag)
-		} else {
-			fmt.Fprintf(&b, " !path:%s", frag)
+	canonical := filepath.Join(binDir, "onix"+exeExt())
+	if !samePath(canonical, exe) {
+		if err := copyFile(exe, canonical); err != nil {
+			return fmt.Errorf("install onix binary into %s: %w", binDir, err)
 		}
 	}
-	return b.String()
-}
 
-// writeExploreWrapper emits the explore shim. With no file argument it
-// opens the alias directory by delegating to the run wrapper (resolve the
-// dir, cd there, launch `explorer .`) — this avoids explorer.exe's awkward
-// cwd handling for the bare-directory case and matches the navigate shims.
-// With a file argument it hands off to `onix --explore <file>`, which
-// resolves the file to an absolute path and opens it with its default app;
-// explorer.exe does not reliably resolve a relative path against the cwd,
-// so the run-wrapper trick can't be reused here. runName is the run
-// shortcut's wrapper name; exe is the onix binary.
-func writeExploreWrapper(binDir, exe, runName, name string) {
-	path := filepath.Join(binDir, name+".cmd")
-	content := fmt.Sprintf("@echo off\r\n"+
-		"if \"%%~2\"==\"\" (\r\n"+
-		"  %s %%1 explorer .\r\n"+
-		") else (\r\n"+
-		"  \"%s\" %%1 --explore \"%%~2\"\r\n"+
-		")\r\n", runName, exe)
-	writeCmdFile(path, content)
-}
-
-// writeAliasFlagWrapper emits a .cmd shim that translates
-//
-//	<wrapperName> <alias> [args...]
-//
-// into the alias-flag invocation
-//
-//	<onixExe> <alias> <flag> [extras...] [args...]
-//
-// where `extras` is whatever fixed positionals the flag needs. The
-// passthrough walks all remaining args via shift/loop, re-quoting each
-// one, so there's no fixed cap and args containing spaces survive.
-//
-// Each arg is captured into _onix_arg via `set "var=%~1"` first, then
-// appended to the accumulator using only delayed expansion. Doing the
-// %~1 substitution outside outer quotes (as a one-step `set
-// "args=!args! "%~1""`) lets cmd see the substituted special chars
-// before redirection scanning — a value like `flag>=` would then be
-// parsed as a redirection. The two-step form keeps the literal `>` out
-// of the redirection-scanning pass entirely.
-func writeAliasFlagWrapper(binDir, exe, name, flag string, extras ...string) {
-	path := filepath.Join(binDir, name+".cmd")
-	extraStr := ""
-	if len(extras) > 0 {
-		extraStr = " " + strings.Join(extras, " ")
+	for _, name := range shortcuts {
+		dst := filepath.Join(binDir, name+exeExt())
+		if samePath(dst, canonical) {
+			continue
+		}
+		// Best-effort: a wrapper that's currently running can't be replaced on
+		// Windows (it shares the binary's image). Leave the old one in place and
+		// move on; the next sync, once it's no longer running, refreshes it.
+		_ = linkOrCopy(canonical, dst)
 	}
-	content := fmt.Sprintf(`@echo off
-setlocal enabledelayedexpansion
-set "_onix_alias=%%~1"
-shift
-set "_onix_args="
-:_onix_loop
-if "%%~1"=="" goto _onix_run
-set "_onix_arg=%%~1"
-if defined _onix_args (
-  set "_onix_args=!_onix_args! "!_onix_arg!""
-) else (
-  set _onix_args="!_onix_arg!"
-)
-shift
-goto _onix_loop
-:_onix_run
-"%s" "!_onix_alias!" %s%s !_onix_args!
-endlocal
-`, exe, flag, extraStr)
-	writeCmdFile(path, content)
+
+	return nil
+}
+
+// exeExt is the executable suffix for the host platform.
+func exeExt() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
+
+// linkOrCopy refreshes dst as a hardlink to src, falling back to a copy when
+// hardlinking isn't possible (cross-volume, unsupported filesystem).
+func linkOrCopy(src, dst string) error {
+	_ = os.Remove(dst) // drop any stale link/copy so the link can be recreated
+	if err := os.Link(src, dst); err == nil {
+		return nil
+	}
+	return copyFile(src, dst)
+}
+
+// copyFile copies src to dst atomically (write-temp-then-rename) with an
+// executable mode.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	tmp := dst + ".tmp"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
+}
+
+// samePath reports whether two paths point at the same location, comparing
+// case-insensitively on Windows.
+func samePath(a, b string) bool {
+	ca, err := filepath.Abs(a)
+	if err != nil {
+		ca = a
+	}
+	cb, err := filepath.Abs(b)
+	if err != nil {
+		cb = b
+	}
+	ca, cb = filepath.Clean(ca), filepath.Clean(cb)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(ca, cb)
+	}
+	return ca == cb
 }
 
 func WriteBashShellSnippet(home string, shortcuts map[string]string) error {
@@ -538,11 +330,7 @@ func RegenerateShellSnippet(home string) error {
 	if err != nil {
 		return err
 	}
-	excludes, err := config.PickerExcludes(home, cfg)
-	if err != nil {
-		return err
-	}
-	return WriteShellSnippet(home, cfg.Shortcuts, excludes)
+	return WriteShellSnippet(home, cfg.Shortcuts)
 }
 
 var OnixExeOverride string
@@ -570,7 +358,7 @@ func writeCompleterRegistration(b *strings.Builder, shortcuts map[string]string)
 		names = append(names, v)
 	}
 	slices.Sort(names)
-	fmt.Fprintf(b, "Register-ArgumentCompleter -CommandName %s -ParameterName Alias -ScriptBlock $onixAliasCompleter\n",
+	fmt.Fprintf(b, "Register-ArgumentCompleter -Native -CommandName %s -ScriptBlock $onixAliasCompleter\n",
 		strings.Join(names, ","))
 }
 

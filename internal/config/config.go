@@ -17,8 +17,8 @@ type Config struct {
 	Picker    Picker            `toml:"picker"`
 }
 
-// Picker tunes the unknown-alias directory picker (register.cmd: Everything
-// `es` piped into fzf). Exclude lists path fragments filtered out of the es
+// Picker tunes the unknown-alias directory picker (Everything `es` piped
+// into fzf). Exclude lists path fragments filtered out of the es
 // results as `!path:<fragment>` query terms, so dependency/cache trees
 // don't drown the real candidates — and so the -n result cap is spent on
 // directories worth picking. A nil list (key absent) applies
@@ -176,10 +176,9 @@ func AppendSwept(home string, frags []string) ([]string, error) {
 	return added, nil
 }
 
-// PickerExcludes composes the full exclusion list the generated
-// register.cmd should carry: exclude (or the defaults), plus
-// exclude_extra, plus the swept file, deduplicated case-insensitively
-// in that order.
+// PickerExcludes composes the full exclusion list the directory picker
+// applies: exclude (or the defaults), plus exclude_extra, plus the swept
+// file, deduplicated case-insensitively in that order.
 func PickerExcludes(home string, c *Config) ([]string, error) {
 	swept, err := LoadSwept(home)
 	if err != nil {
@@ -310,11 +309,10 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// validateExcludeFragment enforces the constraints the generated
-// register.cmd imposes on es query terms: a quote would break the batch
-// line's tokenising, and a spaced fragment is emitted quoted, where a
-// trailing backslash right before the closing quote is eaten by es's
-// arg parsing.
+// validateExcludeFragment enforces the constraints es query terms must
+// satisfy: a quote would break tokenising, and a spaced fragment is emitted
+// quoted, where a trailing backslash right before the closing quote is eaten
+// by es's arg parsing.
 func validateExcludeFragment(frag string) error {
 	if strings.ContainsAny(frag, `"`) {
 		return fmt.Errorf("fragment %q cannot contain double quotes", frag)

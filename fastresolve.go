@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -25,9 +24,8 @@ func fastResolve(home, name string, stdout, stderr io.Writer, stdin io.Reader, t
 	noPrompt := os.Getenv("ONIX_NO_PROMPT") == "1"
 
 	if !noPrompt {
-		reader := bufio.NewReader(stdin)
 		segPrompter = func(segmentName, inlineValue, aliasBase, aliasName string) (*segments.ContextDef, error) {
-			return promptSegmentDefinition(home, segmentName, inlineValue, stderr, reader, aliasBase, aliasName)
+			return autoDefineSegment(home, segmentName, inlineValue, stderr, aliasName)
 		}
 	}
 	p, err := resolver.Resolve(home, name, segPrompter, t)

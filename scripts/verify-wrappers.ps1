@@ -1,16 +1,15 @@
-# Behavioral verification of the generated o.cmd / register.cmd wrappers.
+# Behavioral verification of the generated .exe wrappers (o, e, r, ...).
 #
-# Unlike the unit tests, which string-match wrapper *content*, this script
-# executes the generated scripts under cmd.exe — the only way to catch
-# parse-level breakage (e.g. the LF-vs-CRLF read-block bug) and wiring
-# mistakes between o.cmd, register.cmd, and the binary.
+# Unlike the unit tests, which check installation and string-match the
+# snippet, this script executes the installed wrappers by bare name under
+# cmd.exe — the only way to catch argv[0] dispatch, PATH resolution, and the
+# navigation subshell wiring end to end.
 #
-# Runs against a throwaway $env:ONIX_HOME with stub es/fzf so every path is
-# deterministic and non-interactive. Wrappers are invoked by bare name with
-# the sandbox bin dir at the head of PATH: cmd.exe on hardened systems does
-# not resolve commands from the current directory, and bare-name invocation
-# keeps %~0 != %~f0 so o.cmd's Win+R `cmd /k` branch never fires. <nul on
-# every o.cmd call is a belt-and-braces hang guard regardless.
+# Runs against a throwaway $env:ONIX_HOME with the sandbox bin dir at the head
+# of PATH. Navigation opens a fresh shell rooted at the target, so ONIX_SHELL
+# points at a stub that prints "NAV:<cwd>" and exits — that makes navigation
+# observable and non-interactive (a real ComSpec subshell would hang). <nul on
+# every call is a belt-and-braces hang guard.
 #
 # Usage: pwsh -File scripts/verify-wrappers.ps1
 $ErrorActionPreference = 'Stop'
@@ -28,17 +27,28 @@ $exe = Join-Path $root 'onix.exe'
 
 $tmp = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP "onix-wrappers-$([guid]::NewGuid().Guid.Substring(0,8))")
 $env:ONIX_HOME = $tmp.FullName
-# Neutralise any editor launch: an "editor" that exits immediately.
-$env:EDITOR = 'cmd /c rem'
+# Neutralise any editor launch: a single-executable "editor" that exits
+# immediately (EDITOR is exec'd as one binary, so it can't carry arguments).
+$editStub = Join-Path $tmp 'editstub.cmd'
+Set-Content -Path $editStub -Value "@echo off`r`nexit /b 0" -NoNewline
+$env:EDITOR = $editStub
 
 & $exe --init --skip-profile | Out-Null
 $bin = Join-Path $tmp 'bin'
-$last = Join-Path $tmp '.last'
 
-# Stub toolchain: es prints a fake candidate; fzf-cancel prints nothing
-# (user pressed Esc); fzf-pick prints a real directory. The cancel stubs
-# always precede the real PATH so no test can ever reach the real
-# interactive fzf.
+# The wrappers are installed as .exe hardlinks/copies of onix.
+foreach ($w in 'o', 'e', 'r', 'p', 'y', 's', 'sg', 'ff') {
+    if (-not (Test-Path (Join-Path $bin "$w.exe"))) { throw "wrapper $w.exe not installed" }
+}
+
+# Navigation stub: print the working dir the subshell opened in, then exit.
+$navStub = Join-Path $tmp 'navstub.cmd'
+Set-Content -Path $navStub -Value "@echo off`r`necho NAV:%CD%" -NoNewline
+$env:ONIX_SHELL = $navStub
+
+# Picker toolchain stubs: es prints a fake candidate; fzf-cancel prints nothing
+# (Esc); fzf-pick prints a real directory. The cancel stubs always precede the
+# real PATH so no test can reach the real interactive fzf.
 $stubCancel = New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'stub-cancel')
 $stubPick   = New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'stub-pick')
 $picked     = New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'picked-dir')
@@ -53,61 +63,51 @@ function Check($label, $cond, $detail) {
     else { $script:fail = 1; Write-Host "FAIL  $label :: $detail" }
 }
 
-# --- A. o.cmd: empty .last (resolve cancelled, @-segment so no picker) must bail.
-$out = cmd /c "set PATH=$bin;$($stubCancel.FullName);%PATH%&& call o.cmd mystery@nopealias <nul 2>&1"
+# --- A. o known alias: resolves and opens the subshell rooted at the dir.
+& $exe demo $env:TEMP *> $null
+$out = cmd /c "set PATH=$bin;%PATH%&& o demo <nul 2>&1"
 $code = $LASTEXITCODE
-Check "A: o.cmd bails on empty .last (exit=$code)" `
-    ($code -eq 1 -and ($out -join ' ') -match 'nothing to navigate') ($out -join '|')
+$navDir = ($out | Where-Object { $_ -match '^NAV:' }) -replace '^NAV:', ''
+$wantDemo = (Get-Item $env:TEMP).FullName
+Check "A: o known alias navigates (exit=$code)" `
+    ($code -eq 0 -and $navDir -and ((Get-Item $navDir).FullName -ieq $wantDemo)) "nav='$navDir' want='$wantDemo' :: $($out -join '|')"
 
-# --- B. register.cmd: missing Everything es CLI must bail with a message.
-$out = cmd /c "set PATH=$bin;C:\Windows\System32&& call register.cmd aliasb 2>&1"
+# --- B. o unknown alias, es missing: picker bails, nothing registered.
+$out = cmd /c "set PATH=$bin;C:\Windows\System32&& o aliasb <nul 2>&1"
 $code = $LASTEXITCODE
-Check "B: register.cmd bails when es missing (exit=$code)" `
-    ($code -eq 1 -and ($out -join ' ') -match "Everything 'es' CLI not found") ($out -join '|')
 $names = & $exe --list-names
+Check "B: o unknown bails when es missing (exit=$code)" `
+    ($code -eq 1 -and ($out -join ' ') -match 'Everything') ($out -join '|')
 Check "B2: nothing registered after missing-es bail" ($names -notcontains 'aliasb') ($names -join ',')
 
-# --- C. register.cmd: fzf cancel (empty pick) must bail and register nothing.
-$out = cmd /c "set PATH=$bin;$($stubCancel.FullName);C:\Windows\System32&& call register.cmd aliasc 2>&1"
+# --- C. o unknown alias, fzf cancel: bails, registers nothing, no navigation.
+$out = cmd /c "set PATH=$bin;$($stubCancel.FullName);C:\Windows\System32&& o aliasc <nul 2>&1"
 $code = $LASTEXITCODE
 $names = & $exe --list-names
-Check "C: register.cmd bails on cancelled pick (exit=$code)" ($code -eq 1) ($out -join '|')
+Check "C: o unknown bails on cancelled pick (exit=$code)" `
+    ($code -eq 1 -and ($out -join ' ') -notmatch 'NAV:') ($out -join '|')
 Check "C2: nothing registered after cancelled pick" ($names -notcontains 'aliasc') ($names -join ',')
 
-# --- D. register.cmd: a real pick registers the alias and writes the path to .last.
-$out = cmd /c "set PATH=$bin;$($stubPick.FullName);C:\Windows\System32&& call register.cmd aliasd 2>&1"
+# --- D. o unknown alias, real pick: registers the alias and navigates into it.
+$out = cmd /c "set PATH=$bin;$($stubPick.FullName);C:\Windows\System32&& o aliasd <nul 2>&1"
 $code = $LASTEXITCODE
 $names = & $exe --list-names
-$lastContent = if (Test-Path $last) { (Get-Content $last -TotalCount 1) } else { '' }
-Check "D: register.cmd succeeds on real pick (exit=$code)" ($code -eq 0) ($out -join '|')
+$navDir = ($out | Where-Object { $_ -match '^NAV:' }) -replace '^NAV:', ''
+Check "D: o unknown registers + navigates on real pick (exit=$code)" `
+    ($code -eq 0 -and $navDir -and ((Get-Item $navDir).FullName -ieq $picked.FullName)) "nav='$navDir' want='$($picked.FullName)' :: $($out -join '|')"
 Check "D2: alias registered after pick" ($names -contains 'aliasd') ($names -join ',')
-Check "D3: .last holds picked path for o.cmd to pushd" ($lastContent -eq $picked.FullName) ".last='$lastContent' expected='$($picked.FullName)'"
 
-# --- E. o.cmd full cancel chain: unknown alias -> picker -> Esc -> bail, no registration.
-$out = cmd /c "set PATH=$bin;$($stubCancel.FullName);C:\Windows\System32&& call o.cmd aliase <nul 2>&1"
+# --- E. action wrappers desugar: e (edit) and r (run) exit cleanly.
+$out = cmd /c "set PATH=$bin;%PATH%&& e demo <nul 2>&1"
+Check "E: e (edit) wrapper runs (exit=$LASTEXITCODE)" ($LASTEXITCODE -eq 0) ($out -join '|')
+$out = cmd /c "set PATH=$bin;%PATH%&& r demo cmd /c ""echo ran"" <nul 2>&1"
 $code = $LASTEXITCODE
-$names = & $exe --list-names
-Check "E: o.cmd full chain bails on picker cancel (exit=$code)" `
-    ($code -eq 1 -and ($out -join ' ') -match 'nothing to navigate') ($out -join '|')
-Check "E2: cancelled picker registered nothing" ($names -notcontains 'aliase') ($names -join ',')
+Check "F: r (run) wrapper executes in alias dir (exit=$code)" `
+    ($code -eq 0 -and ($out -join ' ') -match 'ran') ($out -join '|')
 
-# --- F. o.cmd success path: known alias still navigates (exit 0, no bail message).
-& $exe demo $env:TEMP *> $null
-$out = cmd /c "set PATH=$bin;$($stubCancel.FullName);%PATH%&& call o.cmd demo <nul 2>&1"
-$code = $LASTEXITCODE
-Check "F: o.cmd known alias still works (exit=$code)" `
-    ($code -eq 0 -and ($out -join ' ') -notmatch 'nothing to navigate') ($out -join '|')
-
-# --- G. o.cmd: an unreachable destination (nonexistent drive, so MkdirAll
-# fails and .last stays empty) bails instead of pushd-ing nowhere. The
-# failed resolve falls through to register.cmd, which hits the cancel stubs.
-$usedDrives = (Get-PSDrive -PSProvider FileSystem).Name
-$ghostDrive = [char[]](90..72) | Where-Object { "$_" -notin $usedDrives } | Select-Object -First 1
-Set-Content -Path (Join-Path $tmp 'aliases.toml') -Value "[ghost]`npath = `"${ghostDrive}:/onix-ghost-test/x`"`n[demo]`npath = `"$($env:TEMP.Replace('\','/'))`""
-$out = cmd /c "set PATH=$bin;$($stubCancel.FullName);%PATH%&& call o.cmd ghost <nul 2>&1"
-$code = $LASTEXITCODE
-Check "G: o.cmd bails on unreachable destination (exit=$code)" `
-    ($code -eq 1 -and (($out -join ' ') -match 'cannot enter' -or ($out -join ' ') -match 'nothing to navigate')) ($out -join '|')
+# --- G. no .cmd wrappers should be generated any more.
+$cmds = Get-ChildItem -Path $bin -Filter '*.cmd' -ErrorAction SilentlyContinue
+Check "G: no .cmd wrappers remain" ($null -eq $cmds -or $cmds.Count -eq 0) (($cmds | ForEach-Object Name) -join ',')
 
 Remove-Item -Recurse -Force $tmp
 if ($script:fail) { Write-Host "`nRESULT: FAILURES"; exit 1 }

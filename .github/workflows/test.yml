@@ -32,9 +32,9 @@ jobs:
       - name: Test
         run: go test ./...
 
-      # Executes the generated o.cmd/register.cmd under cmd.exe — the only
-      # way to catch parse-level breakage (LF-vs-CRLF read-block bug) that
-      # content string-matching in unit tests cannot see.
-      - name: Verify generated cmd wrappers
+      # Executes the installed .exe wrappers by bare name under cmd.exe — the
+      # only way to catch argv[0] dispatch, PATH resolution, and the
+      # navigation-subshell wiring that unit tests cannot see end to end.
+      - name: Verify generated exe wrappers
         if: runner.os == 'Windows'
         run: pwsh -File scripts/verify-wrappers.ps1

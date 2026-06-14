@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -9,15 +8,31 @@ import (
 	"strings"
 
 	"github.com/sadirano/onix/internal/segments"
+	"github.com/sadirano/onix/internal/store"
 )
 
-// promptSegmentDefinition asks the user to define a [[contexts]] entry for
-// a segment that wasn't found in segments.toml by opening their editor with
-// a template and instructions.
-func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Writer, reader *bufio.Reader, aliasBase, aliasName string) (*segments.ContextDef, error) {
-	ed := resolveEditor()
-	if ed == "" {
-		return nil, fmt.Errorf("no editor found: set $EDITOR or ensure one of nvim, vim, code, nano, notepad is on PATH")
+// autoDefineSegment registers a [[contexts]] entry for a segment that wasn't
+// found — with no editor in the loop. The onix flow is "user types intent ->
+// user gets where they need to be -> onix executes intent", so an undefined
+// segment is created on the spot as a subdirectory rather than dumping the
+// user into a TOML editor:
+//
+//   - no inline value (e.g. `free@play`):   source-template = "/free/"   (literal)
+//   - inline value   (e.g. `task:42@play`): source-template = "/${task}/" — this
+//     run resolves to /42/, and the segment stays reusable with other values.
+//
+// The entry is appended to the central per-alias file so any hand-written
+// content and comments there are preserved; the resolver re-reads the file and
+// proceeds with the resolved fragment. The user can refine the template later
+// by editing that file (`onix --edit`), but never has to in order to navigate.
+func autoDefineSegment(home, segmentName, inlineValue string, stderr io.Writer, aliasName string) (*segments.ContextDef, error) {
+	if err := store.ValidateSegmentName(segmentName); err != nil {
+		return nil, err
+	}
+
+	template := "/" + segmentName + "/"
+	if inlineValue != "" {
+		template = "/${" + segmentName + "}/"
 	}
 
 	filePath := segments.CentralPath(home, aliasName)
@@ -29,60 +44,27 @@ func promptSegmentDefinition(home, segmentName, inlineValue string, stderr io.Wr
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", filePath, err)
 	}
-
 	var sb strings.Builder
 	sb.WriteString("\n[[contexts]]\n")
 	sb.WriteString("segment = \"" + segmentName + "\"\n")
-	if inlineValue != "" {
-		sb.WriteString("# (Current inline value: " + inlineValue + ")\n")
-	}
-	sb.WriteString("source-template = \"/" + "${" + segmentName + "}" + "\"\n")
-
+	sb.WriteString("source-template = \"" + template + "\"\n")
 	if _, err := f.WriteString(sb.String()); err != nil {
 		f.Close()
 		return nil, fmt.Errorf("write %s: %w", filePath, err)
 	}
-	f.Close()
-
-	parts := strings.Fields(ed)
-	binary := parts[0]
-	args := parts[1:]
-
-	lowerEd := strings.ToLower(binary)
-	isVim := strings.Contains(lowerEd, "vim") || strings.Contains(lowerEd, "nvim")
-
-	if strings.Contains(lowerEd, "code") || strings.Contains(lowerEd, "nano") || isVim {
-		// Jump to the end of the file.
-		args = append(args, "+9999")
-	}
-	args = append(args, filePath)
-
-	// Route the editor to the real console. This function is reached from the
-	// `o.cmd` flow, which runs `onix <alias> > .last 2>nul` — our stdout/stderr
-	// are redirected, so a terminal editor inheriting them would see a non-tty
-	// and fail to render. consoleIO falls back to the std handles when there's
-	// no console.
-	ttyIn, ttyOut, ttyClose := consoleIO()
-	defer ttyClose()
-
-	cmd := execCommand(binary, args...)
-	cmd.Stdin = ttyIn
-	cmd.Stdout = ttyOut
-	cmd.Stderr = ttyOut
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("editor %s: %w", ed, err)
+	if err := f.Close(); err != nil {
+		return nil, fmt.Errorf("close %s: %w", filePath, err)
 	}
 
 	sf, err := segments.LoadSegmentsFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("load segments: %w", err)
 	}
-
 	cd, ok := segments.LookupContext(sf, segmentName)
 	if !ok {
-		return nil, nil // User might have deleted it
+		return nil, fmt.Errorf("segment %q not found in %s after write (internal error)", segmentName, filePath)
 	}
 
-	fmt.Fprintf(stderr, "Saved [[contexts]] segment = %q in %s\n", segmentName, filePath)
+	fmt.Fprintf(stderr, "created segment %q -> %s in %s\n", segmentName, template, filePath)
 	return cd, nil
 }

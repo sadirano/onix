@@ -14,13 +14,17 @@ onix --init
 
 `--init` creates `~/.onix/`, writes a starter `config.toml` and `aliases.toml`,
 generates the shell snippet at `~/.onix/shell/onix.ps1` (and `onix.sh` on Linux),
-and sources it from your shell profile. On Windows it also writes `.cmd` wrappers
-into `~/.onix/bin/` so the same shortcuts work from cmd.exe and Win+R — you only
-need to add that directory to PATH if you use cmd.exe regularly.
+and sources it from your shell profile. On Windows it also installs the shortcut
+commands as `.exe` wrappers in `~/.onix/bin/` (the same `onix` binary, hardlinked
+under each name) and adds that directory to your user PATH, so `o`, `e`, `r`, …
+work the same from PowerShell, cmd.exe, and Win+R.
 
-Restart PowerShell (or run `. $PROFILE`) once to activate `o`, `e`, `s`, `y`,
-`p`, `r`, `sg`, and `ff`. Run `onix --sync` any time you move the onix binary or change
-`config.toml` to regenerate the snippet.
+On Windows, `o` is a real executable, so it opens a fresh shell already in the
+target directory (type `exit` to return); on Linux/macOS `o` is a shell function
+that changes the current shell's directory in place. Restart your shell once after
+`--init` so the new PATH entry is visible, then `o`, `e`, `s`, `y`, `p`, `r`,
+`sg`, and `ff` are available. Run `onix --sync` any time you move the onix binary
+or change `config.toml` to regenerate the snippet and refresh the wrappers.
 
 ---
 

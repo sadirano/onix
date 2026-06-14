@@ -12,7 +12,7 @@ var updateGolden = flag.Bool("update", false, "update golden files")
 
 func TestWritePwshShellSnippet_NoActions(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, err := os.ReadFile(PwshPath(dir))
@@ -36,7 +36,7 @@ func TestWriteBashShellSnippet_NoActions(t *testing.T) {
 
 func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteShellSnippet(dir, nil, nil); err != nil {
+	if err := WriteShellSnippet(dir, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	pwshExists := fileExists(PwshPath(dir))
@@ -46,178 +46,53 @@ func TestWriteShellSnippet_HostPlatformOnly(t *testing.T) {
 	}
 }
 
-func TestWritePwshShellSnippet_OCmdWrapper(t *testing.T) {
+// TestWritePwshShellSnippet_InstallsExeWrappers verifies the snippet writer
+// installs the multi-call wrappers into bin and that each carries the onix
+// binary's bytes (hardlink or copy).
+func TestWritePwshShellSnippet_InstallsExeWrappers(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, nil); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	path := filepath.Join(dir, "bin", "o.cmd")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	content := string(data)
-	if !strings.Contains(content, "--edit") {
-		t.Errorf("o.cmd missing '--edit' for no-arg invocation:\n%s", content)
-	}
-	// Win+R / double-click launches open a persistent prompt via cmd /k.
-	if !strings.Contains(content, "cmd /k") {
-		t.Errorf("o.cmd missing 'cmd /k' persistent prompt for Win+R launch:\n%s", content)
-	}
-	// Normal inline navigation resolves the alias and uses pushd to change directories.
-	if !strings.Contains(content, "pushd ") || !strings.Contains(content, "ONIX_LAST") {
-		t.Errorf("o.cmd missing in-place pushd navigation:\n%s", content)
-	}
-	// Regression guard: navigation must NOT capture onix's stdout. The
-	// 'for /f' capture redirected onix into a pipe, which hung the inline
-	// prompt when resolving a new segment. We now write the resolved path to
-	// a state file instead.
-	if strings.Contains(content, "for /f") {
-		t.Errorf("o.cmd must not capture onix stdout via 'for /f':\n%s", content)
-	}
-	// Cancel-safety: an empty .last (resolve failed, or the picker/segment
-	// editor was cancelled) must not pushd or open a window — bail instead.
-	if !strings.Contains(content, "if not defined ONIX_LAST") {
-		t.Errorf("o.cmd missing empty-.last cancel guard:\n%s", content)
-	}
-	// Regression guard: a leading-dash first arg ('-v', '--version', ...)
-	// must bypass alias navigation and go straight to onix.
-	if !strings.Contains(content, `if "%_arg:~0,1%"=="-"`) {
-		t.Errorf("o.cmd missing leading-dash bypass:\n%s", content)
-	}
-	// An unknown alias (and not an @-segment) falls back to register.cmd.
-	if !strings.Contains(content, `call "%~dp0register.cmd"`) {
-		t.Errorf("o.cmd missing register.cmd fallback for unknown alias:\n%s", content)
-	}
-	// Verify that the Win+R launch check exists.
-	if !strings.Contains(content, `if "%~0"=="%~f0"`) {
-		t.Errorf("o.cmd missing Win+R launch check:\n%s", content)
-	}
-}
+	bin := filepath.Join(dir, "bin")
 
-func TestWritePwshShellSnippet_CmdWrappersUseCRLF(t *testing.T) {
-	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
-		t.Fatalf("write: %v", err)
+	onixInfo, err := os.Stat(filepath.Join(bin, "onix"+exeExt()))
+	if err != nil {
+		t.Fatalf("canonical onix binary not installed into bin: %v", err)
 	}
-	matches, err := filepath.Glob(filepath.Join(dir, "bin", "*.cmd"))
-	if err != nil || len(matches) == 0 {
-		t.Fatalf("globbing bin/*.cmd: matches=%d err=%v", len(matches), err)
-	}
-	for _, p := range matches {
-		data, err := os.ReadFile(p)
+	for _, name := range []string{"o", "e", "s", "y", "p", "r", "sg", "ff"} {
+		info, err := os.Stat(filepath.Join(bin, name+exeExt()))
 		if err != nil {
-			t.Fatalf("read %s: %v", p, err)
+			t.Errorf("wrapper %q not installed: %v", name, err)
+			continue
 		}
-		// cmd.exe needs CRLF: an LF-only batch file misparses once any line
-		// straddles the interpreter's read-block boundary (o.cmd crossed
-		// that threshold when the cancel guards were added). Every \n must
-		// be preceded by \r.
-		bare := strings.Count(string(data), "\n") - strings.Count(string(data), "\r\n")
-		if bare != 0 {
-			t.Errorf("%s has %d bare-LF line endings; generated .cmd files must be CRLF", filepath.Base(p), bare)
+		if info.Size() != onixInfo.Size() {
+			t.Errorf("wrapper %q size %d != onix size %d", name, info.Size(), onixInfo.Size())
 		}
+	}
+
+	// Wrappers are executables, never batch shims.
+	if matches, _ := filepath.Glob(filepath.Join(bin, "*.cmd")); len(matches) != 0 {
+		t.Errorf("expected no .cmd wrappers, found %v", matches)
 	}
 }
 
-func TestWritePwshShellSnippet_RegisterWrapper(t *testing.T) {
+// TestWritePwshShellSnippet_RenamedShortcut confirms a [shortcuts] remap names
+// the installed wrapper and the completer registration accordingly.
+func TestWritePwshShellSnippet_RenamedShortcut(t *testing.T) {
 	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
+	if err := WritePwshShellSnippet(dir, map[string]string{"s": "show"}); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	path := filepath.Join(dir, "bin", "register.cmd")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
+	if _, err := os.Stat(filepath.Join(dir, "bin", "show"+exeExt())); err != nil {
+		t.Errorf("renamed wrapper 'show' not installed: %v", err)
 	}
-	content := string(data)
-	// The picker shells out to Everything (es) piped into fzf and registers the
-	// picked directory to the alias, writing the resolved path to .last for
-	// o.cmd to navigate into (register.cmd itself no longer pushd's).
-	for _, want := range []string{"es ", "fzf", "ONIX_LAST"} {
-		if !strings.Contains(content, want) {
-			t.Errorf("register.cmd missing %q:\n%s", want, content)
-		}
+	if _, err := os.Stat(filepath.Join(dir, "bin", "s"+exeExt())); err == nil {
+		t.Errorf("default wrapper 's' should not exist when remapped to 'show'")
 	}
-	// Cancel-safety: a missing Everything CLI and an empty pick must both bail
-	// without registering anything.
-	if !strings.Contains(content, "where es") {
-		t.Errorf("register.cmd missing 'where es' guard for missing Everything:\n%s", content)
-	}
-	if !strings.Contains(content, "if not defined ONIX_PICK") {
-		t.Errorf("register.cmd missing empty-pick cancel guard:\n%s", content)
-	}
-	// No excludes passed: the es line must carry no !path: terms.
-	if strings.Contains(content, "!path:") {
-		t.Errorf("register.cmd has exclusion terms without any excludes:\n%s", content)
-	}
-}
-
-func TestWritePwshShellSnippet_RegisterWrapperExcludes(t *testing.T) {
-	dir := t.TempDir()
-	excludes := []string{`node_modules`, `\.git\`, `with space`, `C:\Program Files`}
-	if err := WritePwshShellSnippet(dir, nil, excludes); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	data, err := os.ReadFile(filepath.Join(dir, "bin", "register.cmd"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	content := string(data)
-	// Bare fragments stay unquoted (a quote after a trailing backslash
-	// would be eaten by es's arg parsing); spaced ones get quotes.
-	// The quoted backslash term guards against %q-style quoting, which
-	// would double the backslashes and make es match them literally.
-	for _, want := range []string{
-		` !path:node_modules`,
-		` !path:\.git\ `,
-		` !path:"with space"`,
-		` !path:"C:\Program Files"`,
-	} {
-		if !strings.Contains(content, want) {
-			t.Errorf("register.cmd missing exclusion term %q:\n%s", want, content)
-		}
-	}
-	// The terms must land on the es line, before the fzf pipe.
-	esLine := ""
-	for _, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(line, "es ") {
-			esLine = line
-			break
-		}
-	}
-	if !strings.Contains(esLine, "!path:node_modules") || !strings.Contains(esLine, "| fzf") {
-		t.Errorf("exclusions not on the es|fzf line: %q", esLine)
-	}
-	// register.cmd must never enable delayed expansion — it would turn the
-	// literal ! in !path: into variable expansion and erase the filters.
-	if strings.Contains(content, "enabledelayedexpansion") {
-		t.Errorf("register.cmd enables delayed expansion; !path: terms would break:\n%s", content)
-	}
-}
-
-func TestWritePwshShellSnippet_FindPreviewWrapper(t *testing.T) {
-	dir := t.TempDir()
-	if err := WritePwshShellSnippet(dir, nil, nil); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	path := filepath.Join(dir, "bin", FindPreviewWrapperName)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	content := string(data)
-	if !strings.Contains(content, `pushd "!p!"`) {
-		t.Errorf("preview wrapper missing pushd directory test:\n%s", content)
-	}
-	if !strings.Contains(content, "dir /b") || !strings.Contains(content, "bat ") {
-		t.Errorf("preview wrapper missing dir/bat branches:\n%s", content)
-	}
-	if !strings.Contains(content, "setlocal enabledelayedexpansion") {
-		t.Errorf("preview wrapper missing delayed expansion:\n%s", content)
-	}
-	if !strings.Contains(content, "set \"p=!p:^=!\"") {
-		t.Errorf("preview wrapper missing caret strip:\n%s", content)
+	data, _ := os.ReadFile(PwshPath(dir))
+	if !strings.Contains(string(data), "show") {
+		t.Errorf("completer registration missing renamed command 'show':\n%s", data)
 	}
 }
 

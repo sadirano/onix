@@ -133,14 +133,27 @@ func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
 		t.Fatalf("add failed: %v\n%s", err, out)
 	}
 
-	// 3. Run a PowerShell script that dots the snippet and uses 'o'
+	// 3. The snippet no longer defines an `o` function — `o` is now the
+	// installed o.exe wrapper, resolved via the wrapper dir the snippet
+	// prepends to PATH. Navigation opens a fresh shell rooted at the target,
+	// so we point ONIX_SHELL at a stub that prints its working dir and exits;
+	// that lets us observe where `o demo` navigated without an interactive
+	// session. This exercises the full chain: PATH prepend -> o.exe ->
+	// argv[0] dispatch -> resolve -> subshell rooted at the alias dir.
 	snip := filepath.Join(home, "shell", "onix.ps1")
 	if _, err := os.Stat(snip); err != nil {
 		t.Fatalf("snippet missing at %s: %v", snip, err)
 	}
+	if _, err := os.Stat(filepath.Join(home, "bin", "o.exe")); err != nil {
+		t.Fatalf("o.exe wrapper not installed: %v", err)
+	}
 
-	script := fmt.Sprintf(`. '%s'; Write-Host "ONIX_HOME: $env:ONIX_HOME"; & $global:onixExe --version; $r = & $global:onixExe demo; Write-Host "onix demo -> [$r]"; o demo; Get-Location | Select-Object -ExpandProperty Path`, snip)
+	stub := filepath.Join(home, "navstub.cmd")
+	if err := os.WriteFile(stub, []byte("@echo off\r\necho NAV:%CD%\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
+	script := fmt.Sprintf(`. '%s'; $env:ONIX_SHELL = '%s'; o demo`, snip, stub)
 	cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-Command", script)
 	cmd.Env = append(os.Environ(), "ONIX_HOME="+home)
 
@@ -149,17 +162,21 @@ func TestE2E_ShellIntegration_PowerShell(t *testing.T) {
 		t.Fatalf("pwsh failed: %v\nOutput:\n%s", err, out)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	got := strings.TrimSpace(lines[len(lines)-1])
-	// On Windows CI, t.TempDir() can return an 8.3 short-name path (e.g.
-	// C:\Users\RUNNER~1\...) while Get-Location after `cd` returns the
-	// long form (C:\Users\runneradmin\...). Canonicalise both sides so we
-	// compare the same physical directory.
-	gotCanon := canonPath(t, got)
-	wantCanon := canonPath(t, demoDir)
-	if !strings.EqualFold(gotCanon, wantCanon) {
-		t.Errorf("pwsh 'o demo' changed to %q (canon %q), want %q (canon %q)\nFull Output:\n%s",
-			got, gotCanon, demoDir, wantCanon, out)
+	var nav string
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "NAV:") {
+			nav = strings.TrimSpace(strings.TrimPrefix(line, "NAV:"))
+		}
+	}
+	if nav == "" {
+		t.Fatalf("no NAV: line from the navigation subshell:\n%s", out)
+	}
+	// On Windows CI, t.TempDir() can return an 8.3 short-name path while the
+	// subshell's %CD% returns the long form. Canonicalise both sides.
+	if !strings.EqualFold(canonPath(t, nav), canonPath(t, demoDir)) {
+		t.Errorf("pwsh 'o demo' navigated to %q (canon %q), want %q (canon %q)\nFull Output:\n%s",
+			nav, canonPath(t, nav), demoDir, canonPath(t, demoDir), out)
 	}
 }
 

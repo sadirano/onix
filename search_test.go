@@ -23,6 +23,48 @@ func fakeLookPath(t *testing.T, found map[string]bool) {
 	}
 }
 
+// TestPreviewCmd covers the dir-listing and file-fallback branches of the
+// preview handler. bat is forced "missing" so the file branch exercises the
+// io.Copy fallback deterministically.
+func TestPreviewCmd(t *testing.T) {
+	fakeLookPath(t, map[string]bool{}) // bat not found -> fallback path
+
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/hello.txt", []byte("file-body-here"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("directory lists entries", func(t *testing.T) {
+		var out strings.Builder
+		err := (&PreviewCmd{Path: dir}).Run(context.Background(), &env{Stdout: &out, Stderr: os.Stderr})
+		if err != nil {
+			t.Fatalf("preview dir: %v", err)
+		}
+		if !strings.Contains(out.String(), "hello.txt") {
+			t.Errorf("dir preview missing entry: %q", out.String())
+		}
+	})
+
+	t.Run("file streams contents", func(t *testing.T) {
+		var out strings.Builder
+		err := (&PreviewCmd{Path: dir + "/hello.txt"}).Run(context.Background(), &env{Stdout: &out, Stderr: os.Stderr})
+		if err != nil {
+			t.Fatalf("preview file: %v", err)
+		}
+		if !strings.Contains(out.String(), "file-body-here") {
+			t.Errorf("file preview missing contents: %q", out.String())
+		}
+	})
+
+	t.Run("missing path degrades without error", func(t *testing.T) {
+		var out strings.Builder
+		err := (&PreviewCmd{Path: dir + "/nope"}).Run(context.Background(), &env{Stdout: &out, Stderr: os.Stderr})
+		if err != nil {
+			t.Errorf("missing path should not error, got %v", err)
+		}
+	})
+}
+
 func TestGrepCmd_TooFewArgs(t *testing.T) {
 	err := (&GrepCmd{Args: nil}).Run(context.Background(), &env{Home: t.TempDir(), Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin})
 	if err == nil || !strings.Contains(err.Error(), "usage") {
@@ -134,13 +176,13 @@ func TestRelaxNonASCII(t *testing.T) {
 	}
 }
 
-// TestFindPreviewCommand confirms the OS branches: Windows points fzf at
-// the onix-preview.cmd shim, POSIX uses an inline bat-or-ls fallback.
+// TestFindPreviewCommand confirms the OS branches: Windows routes fzf at the
+// built-in `onix --preview` handler, POSIX uses an inline bat-or-ls fallback.
 func TestFindPreviewCommand(t *testing.T) {
 	got := findPreviewCommand("/home/onix")
 	if runtime.GOOS == "windows" {
-		if !strings.Contains(got, "onix-preview.cmd") || !strings.Contains(got, "{}") {
-			t.Errorf("windows preview should invoke the shim: %q", got)
+		if !strings.Contains(got, "onix.exe") || !strings.Contains(got, "--preview") || !strings.Contains(got, "{}") {
+			t.Errorf("windows preview should invoke `onix --preview`: %q", got)
 		}
 	} else {
 		if !strings.Contains(got, "bat ") || !strings.Contains(got, "ls -la") {

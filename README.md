@@ -92,7 +92,7 @@ preview_window = "right:50%"
 rg_colors = ["match:fg:yellow", "path:fg:cyan"]
 ```
 
-`[picker]` filters the unknown-alias directory picker (Everything + fzf). By default the generated `register.cmd` excludes any path component starting with `.`, `_`, or `[` (`.git`, `__pycache__`, bracket-tagged folders, …), dependency/build/cache trees (`node_modules`, `go\pkg\mod`, `site-packages`, `cache(s)`, `temp`, `lib(s)`, `libraries`, `src`, `bin`, `obj`, `build`, `dist`, `x64`, `x86`, `Debug`, `Release`, `modules`, `intermediates`, `packages`, `versions`, `test*`, `share`, `locale`), the Windows system trees (`C:\Windows\`, `C:\ProgramData\`, `C:\Program Files`, `System Volume Information`, `$RECYCLE.BIN`, `AppData`, `User Data`), and store-owned install trees (`scoop\apps`, `steamapps`) — so the result cap is spent on directories worth picking. The authoritative list is `PickerExcludeDefaults` in `internal/config/config.go`.
+`[picker]` filters the unknown-alias directory picker (Everything + fzf), which `o` runs in-process when you navigate to a name that isn't an alias yet. By default it excludes any path component starting with `.`, `_`, or `[` (`.git`, `__pycache__`, bracket-tagged folders, …), dependency/build/cache trees (`node_modules`, `go\pkg\mod`, `site-packages`, `cache(s)`, `temp`, `lib(s)`, `libraries`, `src`, `bin`, `obj`, `build`, `dist`, `x64`, `x86`, `Debug`, `Release`, `modules`, `intermediates`, `packages`, `versions`, `test*`, `share`, `locale`), the Windows system trees (`C:\Windows\`, `C:\ProgramData\`, `C:\Program Files`, `System Volume Information`, `$RECYCLE.BIN`, `AppData`, `User Data`), and store-owned install trees (`scoop\apps`, `steamapps`) — so the result cap is spent on directories worth picking. The authoritative list is `PickerExcludeDefaults` in `internal/config/config.go`.
 
 Fragments are matched as substrings of the full path. Setting `exclude` replaces the default list entirely (`exclude = []` turns filtering off); `exclude_extra` extends it — the place for machine-specific noise (TOML literal strings save the backslash-doubling):
 
@@ -154,7 +154,7 @@ With [clink](https://chrisant996.github.io/clink/) installed, plain cmd.exe gets
 
 ## Commands
 
-`onix --init` initialises `~/.onix` and installs the PowerShell snippet (re-run any time; it's idempotent). `onix --sync` regenerates the snippet and `.cmd` shims after you move the binary or edit `config.toml`. `onix --prune` interactively removes stale aliases. `onix --version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.
+`onix --init` initialises `~/.onix`, installs the PowerShell snippet, and on Windows installs the `.exe` command wrappers into `~/.onix/bin` and adds it to your user PATH (re-run any time; it's idempotent). `onix --sync` regenerates the snippet and refreshes the wrappers after you move the binary or edit `config.toml`. `onix --prune` interactively removes stale aliases. `onix --version` prints the build version, Go runtime, and OS/arch. `onix --help` lists everything.
 
 ## Diagnostics
 

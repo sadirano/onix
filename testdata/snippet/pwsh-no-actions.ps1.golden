@@ -3,8 +3,14 @@
 
 $global:onixExe = '/ONIX_EXE'
 
+$onixBin = '/ONIX_HOME/bin'
+if (($env:PATH -split ';') -notcontains $onixBin) { $env:PATH = $onixBin + ';' + $env:PATH }
+
 $onixAliasCompleter = {
     param($wordToComplete, $commandAst, $cursorPosition)
+    # Only complete the first argument (the alias); leave a command's later
+    # arguments to the shell's own file/command completion.
+    if ($commandAst.CommandElements.Count -gt 2) { return }
     @(& $global:onixExe --list-names 2>$null) |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object {
@@ -12,75 +18,6 @@ $onixAliasCompleter = {
         }
 }
 
-function global:o {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$false)][string]$Alias,
-        [Parameter(Position=1, Mandatory=$false, ValueFromRemainingArguments=$true)][string[]]$Path
-    )
-    if (-not $Alias) {
-        & $global:onixExe --edit
-        return
-    }
-
-    $resolved = & $global:onixExe $Alias @Path
-    if ($LASTEXITCODE -eq 0) {
-        Set-Location -LiteralPath $resolved
-    }
-}
-function global:e {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --edit @Rest
-}
-function global:s {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --explore @Rest
-}
-function global:y {
-    [CmdletBinding()]
-    param([Parameter(Position=0, Mandatory=$true)][string]$Alias)
-    & $global:onixExe $Alias --yank
-}
-function global:p {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --paste @Rest
-}
-function global:r {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, Mandatory=$true, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --run @Rest
-}
-function global:sg {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --grep @Rest
-}
-function global:ff {
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0, Mandatory=$true)][string]$Alias,
-        [Parameter(Position=1, ValueFromRemainingArguments=$true)][string[]]$Rest
-    )
-    & $global:onixExe $Alias --find @Rest
-}
 function global:q { exit }
 
-Register-ArgumentCompleter -CommandName e,ff,o,p,r,s,sg,y -ParameterName Alias -ScriptBlock $onixAliasCompleter
+Register-ArgumentCompleter -Native -CommandName e,ff,o,p,r,s,sg,y -ScriptBlock $onixAliasCompleter

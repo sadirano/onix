@@ -145,8 +145,8 @@ Given `seg1[:v1]@seg2[:v2]@...@alias`:
    - Find a matching context, in precedence order: local → central → global
      (`scope = "global"` only). Matching is case-insensitive; within a file the
      first matching entry wins.
-   - If no context is found → invoke the **unknown-segment prompt** (below). With
-     `--no-prompt` / `-q` there is no prompt and this is a hard error.
+   - If no context is found → **auto-create** the segment (below). With
+     `--no-prompt` / `-q` nothing is created and this is a hard error.
    - Evaluate `source-template` to a **fragment** (an empty result contributes
      nothing and is skipped).
    - Run the **traversal guard** on the fragment (below).
@@ -188,30 +188,37 @@ that resolves to `../../etc/passwd` is caught.
 
 ---
 
-## Unknown-segment prompt
+## Unknown-segment auto-create
 
-When a segment matches no context (and prompting is enabled), onix seeds the
-**central per-alias file** (`~/.onix/segments/<alias>.toml`) with a skeleton and
-opens it in your editor:
+The onix flow is *type intent → get where you need to be → onix executes intent*,
+so an undefined segment is created on the spot — no editor, no interruption. When
+a segment matches no context (and prompting is enabled), onix appends a
+`[[contexts]]` entry to the **central per-alias file**
+(`~/.onix/segments/<alias>.toml`) mapping the segment to a subdirectory, then
+resumes resolution:
 
-```toml
-[[contexts]]
-segment = "task"
-# (Current inline value: 432)        # shown only if invoked as task:432
-source-template = "/${task}"
-```
+- **No inline value** (`free@play`) → a literal subdirectory:
 
-- The file is opened at its end (for editors that support `+<line>`), so you can
-  fill in or adjust the new block.
-- The inline value (`432` above) is recalled in a comment but is not itself
-  written to config — it is just the current invocation's value.
-- On save, onix reloads the file and resumes resolution with the new context. If
-  the block is gone (you deleted it / quit without saving), the invocation is
-  cancelled.
-- Needs an editor: `$EDITOR` → `$VISUAL` → first of `nvim`, `vim`, `code`,
-  `nano`, `notepad` on PATH.
+  ```toml
+  [[contexts]]
+  segment = "free"
+  source-template = "/free/"
+  ```
 
-Because the prompt writes to a per-alias file, the new context needs no `scope`.
+- **Inline value** (`task:432@play`) → a parameterised template, so the segment
+  stays reusable with other values; this run resolves to `/432/`:
+
+  ```toml
+  [[contexts]]
+  segment = "task"
+  source-template = "/${task}/"
+  ```
+
+The entry is appended (existing content and comments are preserved), and because
+it lives in a per-alias file it needs no `scope`. Refine the template later with
+`onix --edit` if you want something fancier than a subdirectory — but you never
+have to in order to navigate. With `--no-prompt` / `-q`, nothing is created and
+an undefined segment is a hard error.
 
 ---
 
@@ -321,4 +328,4 @@ To vary the value per call instead, drop `env` and pass an inline value —
 | Resolve segments                     | `internal/resolver/resolver.go` — `resolveSegmented`, `evalSegment` |
 | Template expansion                   | `internal/segments/template.go` — `ExpandTemplate`, `EvalTemplateSource` |
 | Traversal guard                      | `internal/segments/template.go` — `GuardFragment` |
-| Unknown-segment prompt               | `navigate.go` — `promptSegmentDefinition` |
+| Unknown-segment auto-create          | `navigate.go` — `autoDefineSegment` |

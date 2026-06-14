@@ -14,7 +14,7 @@
 - `internal/store`: alias database (`aliases.toml`).
 - `internal/segments`: `@`-segment registry and resolution (`segments.toml`).
 - `internal/config`: shortcut renames and `sg` search tuning (`config.toml`).
-- `internal/snippet`: shell snippet + `.cmd` shim generation.
+- `internal/snippet`: shell snippet generation + multi-call `.exe` wrapper install.
 - `internal/resolver`: shared alias-resolution helpers.
 - `commands.go`, `grammar.go`, `main.go`: CLI dispatch.
 

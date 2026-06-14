@@ -80,6 +80,7 @@ var systemActionFlags = map[string]string{
 	"-I":           "init",
 	"--sync":       "sync",
 	"-S":           "sync",
+	"--preview":    "preview",
 	"--version":    "version",
 	"-v":           "version",
 }
@@ -221,6 +222,11 @@ func dispatchSystem(ctx context.Context, e *env, verb string, rest []string, std
 		return cmd.Run(ctx, e)
 	case "sync":
 		return (&SyncCmd{}).Run(ctx, e)
+	case "preview":
+		if len(rest) != 1 {
+			return fmt.Errorf("usage: onix --preview <path>")
+		}
+		return (&PreviewCmd{Path: rest[0]}).Run(ctx, e)
 	case "version":
 		return (&VersionCmd{}).Run(ctx, e)
 	}
